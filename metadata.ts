@@ -8,7 +8,9 @@ export const PROJECT_NAME = "Vendary"
  * Specifies the Base URL of the project, can be changed later
  * @type[string]
  */
-process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+export const BASE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
 
 /**
  * Time in seconds after which the verification token expires
