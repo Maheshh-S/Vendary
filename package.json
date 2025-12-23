@@ -5,7 +5,7 @@
   "author": {
     "email": "dev3mahesh@gmail.com",
     "name": "Mahesh S",
-    "url": "https://mahesh-s.in"
+    "url": "https://vendary.vercel.app/"
   },
   "scripts": {
     "dev": "next dev",
