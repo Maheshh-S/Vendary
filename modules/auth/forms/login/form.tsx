@@ -1,18 +1,24 @@
 "use client";
 import React from "react";
-import { IconBrandGithub, IconBrandGoogle, IconLoader } from "@tabler/icons-react";
+import { IconLoader } from "@tabler/icons-react";
 import { Field, Label } from "@/components/ui/fieldset";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { PROJECT_NAME } from "@/metadata";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import toast from "react-hot-toast";
 import { useMutation } from "@tanstack/react-query";
 import {Login} from "@/actions/auth";
 import { LoginSchema, LoginSchemaType } from "@/schemas/auth/login-schema";
 import { Logo } from "@/components/global/logo";
+import GoogleSignInButton from "@/modules/auth/components/google-sign-in-button";
 
-export default function FormSignIn() {
+type Props = {
+  onSuccess?: () => void;
+};
+
+export default function FormSignIn({ onSuccess }: Props) {
   const {
     handleSubmit,
     formState: { errors },
@@ -26,10 +32,15 @@ export default function FormSignIn() {
     mutate: login,
     isPending
   } = useMutation({
-    mutationKey: ['register'],
+    mutationKey: ['login'],
     mutationFn: Login,
-    onSuccess: () => {
+    onSuccess: (data) => {
       reset();
+      toast.success(data.success);
+      onSuccess?.();
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Something went wrong");
     }
   })
 
@@ -37,7 +48,7 @@ export default function FormSignIn() {
     login(data);
   };
   return (
-    <div className="shadow-input mx-auto w-full max-w-md rounded-none p-4 md:p-8">
+    <div className="mx-auto w-full max-w-md rounded-none p-4 md:p-8">
       <h2 className="text-xl font-bold">Welcome back to <Logo /></h2>
       <p className="mt-2 max-w-sm text-sm">
         Login to your precious {PROJECT_NAME.toLocaleLowerCase()} account and start your journey.
@@ -77,16 +88,7 @@ export default function FormSignIn() {
 
         <div className="my-8 h-[1px] w-full bg-gradient-to-r from-transparent via-neutral-300 to-transparent dark:via-neutral-700" />
 
-        <div className="flex w-full items-center justify-between space-x-4">
-          <Button disabled={isPending} className="w-full cursor-pointer" outline>
-            {" "}
-            <IconBrandGoogle size={22} />{" "}
-          </Button>
-          <Button disabled={isPending} className="w-full cursor-pointer" outline>
-            {" "}
-            <IconBrandGithub size={22} />{" "}
-          </Button>
-        </div>
+        <GoogleSignInButton disabled={isPending} />
       </form>
     </div>
   );
