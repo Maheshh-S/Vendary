@@ -5,12 +5,8 @@ import { Logo } from "@/components/global/logo"
 import { PROJECT_NAME } from "@/metadata"
 
 const navigation = {
-  support: [
-    { name: 'Submit ticket', href: '/site/help' },
-  ],
   company: [
-    { name: 'About', href: '/terms-of-service' },
-    { name: 'Contact Us', href: '/site/help' },
+    { name: 'Browse Products', href: '/products' },
   ],
   legal: [
     { name: 'Terms of service', href: '/terms-of-service' },
