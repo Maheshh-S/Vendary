@@ -13,6 +13,7 @@ export default auth((req) => {
 
     const isApiAuthRoute = path.startsWith(apiAuthPrefix);
     const isAuthRoute = authRoutes.includes(path);
+    const isApiRoute = path.startsWith('/api');
     
     // Check if path matches any public route pattern
     const isPublicRoute = publicRoutes.some(route => {
@@ -24,7 +25,7 @@ export default auth((req) => {
         return route === path;
     });
 
-    if (isApiAuthRoute) {
+    if (isApiAuthRoute || isApiRoute) {
         return NextResponse.next();
     }
 

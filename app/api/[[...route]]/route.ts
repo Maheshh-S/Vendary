@@ -11,5 +11,13 @@ app.get('/hello', (c) => {
   })
 })
 
+app.get('/status', (c) => {
+  return c.json({
+    status: 'ok',
+    environment: process.env.NODE_ENV ?? 'development',
+    timestamp: new Date().toISOString(),
+  })
+})
+
 export const GET = handle(app)
 export const POST = handle(app)
