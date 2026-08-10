@@ -17,7 +17,7 @@ const ProductPage = async ({ params }: Props) => {
 
   const product = await prisma.product.findUnique({
     where: {
-        id
+        id,
     },
     include: {
         images: true,
@@ -32,22 +32,27 @@ const ProductPage = async ({ params }: Props) => {
                         id: true,
                         name: true,
                         profilePic: true,
-                    }
-                }
-            }
-        }
-    }
-  })
-  if(!product){
+                    },
+                },
+            },
+        },
+    },
+  });
+
+  if (!product || !basicDetails) {
     notFound();
   }
+
   const session = await auth();
+  const serializedProduct = serializePrismaObject(product);
+  const serializedBasicDetails = serializePrismaObject(basicDetails);
+
   return (
     <div className="w-full">
-        <ProductDescription basicDetails={serializePrismaObject(basicDetails)} product={serializePrismaObject(product)} images={product.images} />
-        <Reviews productId={product.id} session={session} reviews={product.reviews ?? []} />
+        <ProductDescription basicDetails={serializedBasicDetails} product={serializedProduct} images={serializePrismaObject(product.images)} />
+        <Reviews productId={product.id} session={session} reviews={serializePrismaObject(product.reviews ?? [])} />
     </div>
-  )
+  );
 };
 
 export default ProductPage;

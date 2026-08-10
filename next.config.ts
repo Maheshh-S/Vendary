@@ -30,11 +30,25 @@ const nextConfig = {
         protocol: "https" as const,
         hostname: "lh3.googleusercontent.com"
       },
-      { 
-        protocol: "https" as const, 
-        hostname: "images.pexels.com" }
+      {
+        protocol: "https" as const,
+        hostname: "images.pexels.com"
+      },
+      {
+        protocol: "https" as const,
+        hostname: "images.unsplash.com"
+      },
+      {
+        protocol: "https" as const,
+        hostname: "pixabay.com"
+      },
+      {
+        protocol: "http" as const,
+        hostname: "localhost",
+        port: "3000",
+      }
     ]
   }
-}
+} 
 
 export default withMDX(nextConfig)
