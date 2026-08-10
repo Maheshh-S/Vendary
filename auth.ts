@@ -33,10 +33,10 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
 			const existingUser = await GetUserById(token.sub);
 			if(!existingUser) return token;
 			token.role = existingUser.role;
-			token.name = existingUser.name;
 			token.email = existingUser.email;
 			token.name = existingUser.firstName + " " + existingUser.lastName;
-			
+			token.picture = existingUser.image ?? existingUser.profilePic ?? null;
+
 			return token;
 		},
 		async session({session, token}){
@@ -45,6 +45,9 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
 			}
 			if(token.role && session.user){
 				session.user.role = token.role;
+			}
+			if(token.picture && session.user){
+				session.user.image = token.picture;
 			}
 			if(session.user && token.email){
 				session.user.name = token.name;
