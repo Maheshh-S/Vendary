@@ -14,10 +14,15 @@ export default function GoogleSignInButton({ disabled }: Props) {
 
   const handleGoogleSignIn = async () => {
     setIsPending(true);
-    const result = await signInProvider("google");
-    setIsPending(false);
-    if (result && "error" in result) {
-      toast.error(result.error);
+    try {
+      const result = await signInProvider("google");
+      if (result && "error" in result) {
+        toast.error(result.error);
+      }
+    } catch (error) {
+      toast.error("Something Went Wrong!");
+    } finally {
+      setIsPending(false);
     }
   };
 
