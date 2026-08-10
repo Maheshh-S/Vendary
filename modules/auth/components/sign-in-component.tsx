@@ -35,7 +35,7 @@ const SignInForm = ({ type, modalLabel }: Props) => {
           }
         </Button>
         <Dialog className="mt-14" open={isOpen} onClose={setIsOpen}>
-          <FormSignIn />
+          <FormSignIn onSuccess={() => setIsOpen(false)} />
         </Dialog>
       </>
     );

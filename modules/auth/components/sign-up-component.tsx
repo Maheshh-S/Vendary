@@ -34,7 +34,7 @@ const SignUpForm = ({ type, modalLabel }: Props) => {
           }
         </Button>
         <Dialog className="mt-8" open={isOpen} onClose={setIsOpen}>
-          <FormSignUp />
+          <FormSignUp onSuccess={() => setIsOpen(false)} />
         </Dialog>
       </>
     );
