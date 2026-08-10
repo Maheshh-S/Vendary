@@ -26,8 +26,6 @@ const UserButton = ({ session }: Props) => {
         <ChevronDownIcon />
       </DropdownButton>
       <DropdownMenu>
-        <DropdownItem href="/users/1">View</DropdownItem>
-        <DropdownItem href="/users/1/edit">Edit</DropdownItem>
         <DropdownItem
           onClick={
             () => {

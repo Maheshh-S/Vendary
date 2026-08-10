@@ -6,7 +6,7 @@ import { Dialog, DialogTitle, DialogDescription, DialogBody, DialogActions } fro
 import { Button } from '@/components/ui/button';
 import { Divider } from '@/components/ui/divider';
 import useCart from '@/hooks/use-cart';
-import { SearchIcon, ShoppingBagIcon, UserIcon } from '../../constants/icons';
+import { SearchIcon, ShoppingBagIcon } from '../../constants/icons';
 import { Logo } from '@/components/global/logo';
 import { MenuIcon, XIcon } from 'lucide-react';
 import Link from 'next/link';
@@ -48,7 +48,7 @@ const EcommerceNavbar = ({ session } : {session : Session | null}) => {
             {/* Categories - Hidden on mobile */}
             <NavbarSection className="hidden md:flex">
               {categories.map((category, index) => (
-                <NavbarItem key={index} href={`/category/${category.toLowerCase().replace(/\s+/g, '-')}`}>
+                <NavbarItem key={index} href={`/products?category=${category}`}>
                   <NavbarLabel>{category}</NavbarLabel>
                 </NavbarItem>
               ))}
@@ -65,8 +65,12 @@ const EcommerceNavbar = ({ session } : {session : Session | null}) => {
             <SearchDialog />
             
             {/* User Account */}
-            { session ? <UserButton session={session} /> : <SignInForm type='modal' modalLabel='both' />}
-            { session ? <SignUpForm type='modal' modalLabel='icon' /> : <SignUpForm type='modal' modalLabel='both' />}
+            { session ? <UserButton session={session} /> : (
+              <>
+                <SignInForm type='modal' modalLabel='both' />
+                <SignUpForm type='modal' modalLabel='text' />
+              </>
+            )}
             
             {/* Cart Button */}
             <Link href={"/cart"}>
@@ -97,7 +101,7 @@ const EcommerceNavbar = ({ session } : {session : Session | null}) => {
               {categories.map((category, index) => (
                 <li key={index}>
                   <Link 
-                    href={`/category/${category.toLowerCase().replace(/\s+/g, '-')}`}
+                    href={`/products?category=${category}`}
                     className="block py-2 text-lg font-medium"
                   >
                     {category}
@@ -105,15 +109,9 @@ const EcommerceNavbar = ({ session } : {session : Session | null}) => {
                 </li>
               ))}
               <li>
-                <Link href="/search" className="flex items-center py-2 text-lg font-medium">
+                <Link href="/products" className="flex items-center py-2 text-lg font-medium">
                   <SearchIcon className="mr-2 h-5 w-5" />
-                  Search
-                </Link>
-              </li>
-              <li>
-                <Link href="/account" className="flex items-center py-2 text-lg font-medium">
-                  <UserIcon className="mr-2 h-5 w-5" />
-                  My Account
+                  Browse all products
                 </Link>
               </li>
             </ul>

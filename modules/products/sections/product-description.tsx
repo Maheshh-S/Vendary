@@ -223,7 +223,7 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
           <div className="mb-6">
             <div className="flex flex-wrap items-center gap-2 mb-2">
               <TextLink
-                href={`/products?category=${product.category.id}`}
+                href={`/products?category=${product.category.name}`}
                 className="text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400"
               >
                 {product.category.name}

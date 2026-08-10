@@ -36,6 +36,7 @@ export const publicRoutes = [
     '/new-verification',
     '/password/reset',
     '/changelog',
+    '/products',
     '/products/(.*)',
     '/licence',
     '/privacy',

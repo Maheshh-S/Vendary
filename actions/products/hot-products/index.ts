@@ -25,7 +25,7 @@ export const GetFeaturedPrpducts = async ({
             name: product.name,
             tag: product.tag,
             imageSrc: product.thumbnail,
-            price: product.price,
+            price: typeof product.price === 'object' && typeof product.price.toNumber === 'function' ? product.price.toNumber() : Number(product.price),
             imageAlt: product.shortDescription
         }))
         await redis.set("featured-products", JSON.stringify(products))
