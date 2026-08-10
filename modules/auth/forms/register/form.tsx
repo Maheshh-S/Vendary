@@ -50,8 +50,7 @@ export default function FormSignUp() {
     <div className="shadow-input mx-auto w-full max-w-md rounded-none p-4 md:p-8">
       <h2 className="text-xl font-bold">Welcome to {PROJECT_NAME}</h2>
       <p className="mt-2 max-w-sm text-sm">
-        Sign Up to {PROJECT_NAME.toLocaleLowerCase()} if you can because we
-        don&apos;t have a login flow yet
+        Sign Up to {PROJECT_NAME.toLocaleLowerCase()} and start browsing our curated collection.
       </p>
       <form className="mt-8" onSubmit={handleSubmit(onSubmit)}>
         <div className="flex flex-col space-y-2 md:flex-row md:space-y-0 md:space-x-2">
