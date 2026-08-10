@@ -21,13 +21,15 @@ export const signOutUser = async () => {
     }
 }
 
-export const signInProvider = async (provider: 'google' | 'github' | 'twitter' | 'linkedin') => {
-    try {
-        if(provider === 'twitter'){
-            await signIn("twitter");
-            return;
+export const signInProvider = async (provider: 'google') => {
+    if (!process.env.AUTH_GOOGLE_ID || !process.env.AUTH_GOOGLE_SECRET) {
+        return {
+            "error": "Google sign-in is not configured.",
+            success_status: false
         }
-        await signIn(provider);
+    }
+    try {
+        await signIn(provider, { redirectTo: DEFAULT_LOGIN_REDIRECT });
     } catch (error) {
         if(error instanceof AuthError){
             switch (error.type) {
@@ -47,7 +49,7 @@ export const signInProvider = async (provider: 'google' | 'github' | 'twitter' |
                             "error" : "Please Verify Your Email to Login.",
                             success_status: false
                         }
-            
+
                 default:
                     return {
                         "error" : "Something Went Wrong!",
@@ -57,7 +59,6 @@ export const signInProvider = async (provider: 'google' | 'github' | 'twitter' |
         }
         throw error;
     }
-    return {success: "Succeccfully Logged In"}
 };
 
 export const Login = async (credentials : z.infer<typeof LoginSchema>) => {
@@ -65,9 +66,9 @@ export const Login = async (credentials : z.infer<typeof LoginSchema>) => {
         data,
         success
     } = LoginSchema.safeParse(credentials)
-    
+
     if(!success){
-        throw new Error("Invalid Data")
+        throw new Error("Invalid email or password")
     }
 
     const {
@@ -77,19 +78,22 @@ export const Login = async (credentials : z.infer<typeof LoginSchema>) => {
 
     const existingUser = await GetUserByEmail(email);
 
-    if(!existingUser || !existingUser.email){
-        throw new Error("User not found.")
-    }
-
-    if(!existingUser.password){
-        throw new Error("Password is not set for this user.")
+    if(!existingUser || !existingUser.email || !existingUser.password){
+        throw new Error("Invalid email or password")
     }
 
     if(!existingUser.emailVerified){
         const verificationToken = await generateVerificationToken(existingUser.email);
-        sendVerificationEmail(verificationToken.email, verificationToken.token)
+
+        try {
+            await sendVerificationEmail(verificationToken.email, verificationToken.token)
+        } catch (error) {
+            console.error("Failed to send verification email:", error)
+            throw new Error("Could not send the verification email. Please try again.")
+        }
+
         return {
-            "success" : "Verification Email Sent.",
+            "success" : "Verification Email Sent. Check your inbox.",
             success_status: true
         }
     }
@@ -104,13 +108,13 @@ export const Login = async (credentials : z.infer<typeof LoginSchema>) => {
         if(error instanceof AuthError){
             switch (error.type) {
                 case "CredentialsSignin":
-                    throw new Error("Incorrect Username or Password!")
+                    throw new Error("Invalid email or password")
 
                     case "UntrustedHost":
                         throw new Error("Untrusted host")
                     case "AccessDenied":
                         throw new Error("Please Verify Your Email to Login.")
-            
+
                 default:
                     throw new Error("Something Went Wrong!")
             }
@@ -119,7 +123,7 @@ export const Login = async (credentials : z.infer<typeof LoginSchema>) => {
     }
 
     return {
-        "success" : "Email Sent!",
+        "success" : "Signed in successfully.",
         success_status:true
     }
 }
@@ -169,7 +173,7 @@ export const Register = async (credentials : RegisterSchemaType) => {
     await sendVerificationEmail(verificationToken.email, verificationToken.token)
 
     return {
-        'success' : 'Confirmation Email Sent!.'
+        'success' : 'Confirmation Email Sent!'
     }
 }
 
