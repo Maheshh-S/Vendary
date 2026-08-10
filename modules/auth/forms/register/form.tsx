@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { IconBrandGithub, IconBrandGoogle, IconLoader } from "@tabler/icons-react";
+import { IconLoader } from "@tabler/icons-react";
 import { Field, Label } from "@/components/ui/fieldset";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,8 +14,13 @@ import {
 } from "@/schemas/auth/register-schema";
 import { useMutation } from "@tanstack/react-query";
 import {Register} from "@/actions/auth";
+import GoogleSignInButton from "@/modules/auth/components/google-sign-in-button";
 
-export default function FormSignUp() {
+type Props = {
+  onSuccess?: () => void;
+};
+
+export default function FormSignUp({ onSuccess }: Props) {
   const {
     handleSubmit,
     formState: { errors },
@@ -37,9 +42,13 @@ export default function FormSignUp() {
     onSuccess: (data) => {
       toast.success(data.success, { id: "register" });
       reset();
+      onSuccess?.();
     },
-    onError: () => {
-      toast.error("Something went wrong", { id: "register" });
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Something went wrong",
+        { id: "register" }
+      );
     }
   })
 
@@ -47,7 +56,7 @@ export default function FormSignUp() {
     registerUser(data);
   };
   return (
-    <div className="shadow-input mx-auto w-full max-w-md rounded-none p-4 md:p-8">
+    <div className="mx-auto w-full max-w-md rounded-none p-4 md:p-8">
       <h2 className="text-xl font-bold">Welcome to {PROJECT_NAME}</h2>
       <p className="mt-2 max-w-sm text-sm">
         Sign Up to {PROJECT_NAME.toLocaleLowerCase()} and start browsing our curated collection.
@@ -117,16 +126,7 @@ export default function FormSignUp() {
 
         <div className="my-8 h-[1px] w-full bg-gradient-to-r from-transparent via-neutral-300 to-transparent dark:via-neutral-700" />
 
-        <div className="flex w-full items-center justify-between space-x-4">
-          <Button disabled={isPending} className="w-full cursor-pointer" outline>
-            {" "}
-            <IconBrandGoogle size={22} />{" "}
-          </Button>
-          <Button disabled={isPending} className="w-full cursor-pointer" outline>
-            {" "}
-            <IconBrandGithub size={22} />{" "}
-          </Button>
-        </div>
+        <GoogleSignInButton disabled={isPending} />
       </form>
     </div>
   );
