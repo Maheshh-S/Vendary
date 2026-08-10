@@ -24,6 +24,10 @@
 .DS_Store
 *.pem
 
+# tooling artifacts (must stay ignored so Next's dev file-watcher skips them)
+.playwright-mcp/
+.vscode/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
