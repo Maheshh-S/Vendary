@@ -4,7 +4,6 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import type { Prisma } from "@prisma/client"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import Image from "next/image"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
@@ -136,11 +135,10 @@ const AddImageForm = ({ product }: Props) => {
                       </div>
                       {form.watch(`images.${index}.url`) && (
                         <div className="relative aspect-square w-full max-w-[200px] rounded-lg overflow-hidden border">
-                          <Image
+                          <img
                             src={form.watch(`images.${index}.url`) || "/placeholder.svg"}
                             alt={`Preview ${index + 1}`}
-                            fill
-                            className="object-cover"
+                            className="h-full w-full object-cover"
                             onError={() => {
                               form.setError(`images.${index}.url`, {
                                 type: "manual",
@@ -194,11 +192,10 @@ const AddImageForm = ({ product }: Props) => {
                         isMain ? "ring-2 ring-primary ring-offset-2" : "border border-border",
                       )}
                     >
-                      <Image
+                      <img
                         src={imageUrl || "/placeholder.svg"}
                         alt={`Product image ${index + 1}`}
-                        fill
-                        className="object-cover"
+                        className="h-full w-full object-cover"
                       />
                       {isMain && (
                         <Badge className="absolute top-2 left-2 z-10">

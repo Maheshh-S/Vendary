@@ -17,7 +17,7 @@ export const createProduct = async (product: ProductFormValues) => {
             shippingTime: product.shippingTime,
             categoryId: product.categoryId,
             userId: session.user.id,
-            avaiavility: "OUT_OF_STOCK",
+            avaiavility: "IN_STOCK",
             thumbnail: product.thumbnail,
             shortDescription: product.shortDescription,
             tag: product.tag,

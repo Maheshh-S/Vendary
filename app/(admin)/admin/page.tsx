@@ -111,13 +111,13 @@ export default async function AdminPage() {
                         {product.category?.name || "N/A"}
                       </td>
                       <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
-                        {product.images.length === 0 ? <AddImages product={serializePrismaObject(product)} /> : product.images.length}
+                        {product.images.length === 0 ? <AddImages product={product} /> : product.images.length}
                       </td>
                       <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
                         <DescriptionForm productId={product.id} description={product.description} shortDescription={product.shortDescription} />
                       </td>
                       <td className="px-3 py-4 text-sm text-right whitespace-nowrap">
-                        <TakeOfflineSwitch product={serializePrismaObject(product)} />
+                        <TakeOfflineSwitch product={product} />
                       </td>
                       <td className="px-3 py-4 text-sm text-right whitespace-nowrap">
                         <DeleteProductButton productId={product.id} />
