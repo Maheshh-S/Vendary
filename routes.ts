@@ -22,8 +22,6 @@ export const authRoutes = [
     '/login',
     '/register',
     '/error',
-    '/onboarding',
-    '/password/reset/form'
 ]
 
 /** 
@@ -40,7 +38,7 @@ export const publicRoutes = [
     '/products/(.*)',
     '/licence',
     '/privacy',
-    'returns',
+    '/returns',
     '/terms-of-service',
     '/api/checkout',
     '/success',

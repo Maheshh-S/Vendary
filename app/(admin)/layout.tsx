@@ -12,7 +12,7 @@ type Props = {
 const AdminLayout = async ({ children }: Props) => {
     const session = await auth()
     if (session?.user.role !== "ADMIN") {
-        redirect("/home")
+        redirect("/")
     }
     return (
         <div className="grainy" suppressHydrationWarning>

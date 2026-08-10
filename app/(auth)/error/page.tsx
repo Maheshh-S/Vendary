@@ -22,7 +22,7 @@ function ErrorContent() {
   return (
     <div className="grid h-full place-items-center p-4 text-center">
       <div className="w-full max-w-md">
-        <h1 className="text-2xl font-semibold text-white">Unable to sign in</h1>
+        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-white">Unable to sign in</h1>
         <p className="mt-3 text-zinc-400">{message}</p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Button href="/login">Try again</Button>
