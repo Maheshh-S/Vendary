@@ -4,16 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs"
 import { LoginSchema } from "./schemas/auth/login-schema"
 import { GetUserByEmail } from "./actions/user"
-
-const DUMMY_PASSWORD = "dummy-password-for-timing"
-let dummyHash: string | undefined
-
-async function getDummyHash(): Promise<string> {
-    if (!dummyHash) {
-        dummyHash = await bcrypt.hash(DUMMY_PASSWORD, 10)
-    }
-    return dummyHash
-}
+import { getDummyHash } from "@/lib/dummy-hash"
 
 export default {
     providers: [
