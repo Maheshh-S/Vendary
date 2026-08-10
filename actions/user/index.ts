@@ -12,10 +12,11 @@ export const GetUserByEmail = async (email: string | undefined) => {
     if(!email) {
         return null;
     }
+    const normalizedEmail = email.trim().toLowerCase();
     try {
         const user = await prisma.user.findFirst({
             where: {
-                email
+                email: normalizedEmail
             }
         });
         
