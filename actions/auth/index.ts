@@ -34,12 +34,6 @@ export const signInProvider = async (provider: 'google') => {
     } catch (error) {
         if(error instanceof AuthError){
             switch (error.type) {
-                case "CredentialsSignin":
-                    return {
-                        "error" : "Incorrect Username or Password!",
-                        success_status: false
-                    }
-
                     case "UntrustedHost":
                         return {
                             "error" : "Untrusted host",
@@ -124,10 +118,7 @@ export const Login = async (credentials : z.infer<typeof LoginSchema>) => {
         throw error;
     }
 
-    return {
-        "success" : "Signed in successfully.",
-        success_status:true
-    }
+    throw new Error("Unreachable")
 }
 
 
@@ -206,7 +197,7 @@ export const newVerification = async(token: string) => {
     const user = await GetUserByEmail(existing_token.email);
 
     if(!user){
-        throw new Error("User not found")
+        throw new Error("Invalid Token")
     }
 
     await db.user.update({
