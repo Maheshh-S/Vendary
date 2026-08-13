@@ -19,7 +19,7 @@ export default function GoogleSignInButton({ disabled }: Props) {
       if (result && "error" in result) {
         toast.error(result.error);
       }
-    } catch (error) {
+    } catch {
       toast.error("Something Went Wrong!");
     } finally {
       setIsPending(false);

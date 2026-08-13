@@ -40,8 +40,8 @@ export default function FormSignUp({ onSuccess }: Props) {
       toast.loading("Creating your account", { id: "register" });
     },
     onSuccess: (data) => {
-      toast.success(data.success, { id: "register" });
       reset();
+      toast.success(data.success, { id: "register" });
       onSuccess?.();
     },
     onError: (error) => {
