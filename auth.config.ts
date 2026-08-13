@@ -11,6 +11,14 @@ export default {
         Google({
             clientId: process.env.AUTH_GOOGLE_ID,
             clientSecret: process.env.AUTH_GOOGLE_SECRET,
+            profile(profile) {
+                return {
+                    id: profile.sub,
+                    name: profile.name,
+                    email: profile.email?.toLowerCase(),
+                    image: profile.picture,
+                }
+            }
         }),
         CredentialsProvider({
             name: "credentials",
