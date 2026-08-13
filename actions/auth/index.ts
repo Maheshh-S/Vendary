@@ -74,7 +74,7 @@ export const Login = async (credentials : z.infer<typeof LoginSchema>) => {
     const existingUser = await GetUserByEmail(email);
 
     if(!existingUser || !existingUser.email || !existingUser.password){
-        await bcrypt.compare(password, await getDummyHash());
+        void await bcrypt.compare(password, await getDummyHash());
         throw new Error("Invalid email or password")
     }
 
