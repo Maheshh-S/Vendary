@@ -149,7 +149,13 @@ export const Register = async (credentials : RegisterSchemaType) => {
             }
         })
         const verificationToken = await generateVerificationToken(data.email)
-        await sendVerificationEmail(verificationToken.email, verificationToken.token)
+
+        try {
+            await sendVerificationEmail(verificationToken.email, verificationToken.token)
+        } catch (error) {
+            console.error("Failed to send verification email:", error)
+            throw new Error("Could not send the verification email. Please try again.")
+        }
 
         return {
             success: "Verification Email Sent.",
@@ -172,7 +178,12 @@ export const Register = async (credentials : RegisterSchemaType) => {
 
     const verificationToken = await generateVerificationToken(data.email)
 
-    await sendVerificationEmail(verificationToken.email, verificationToken.token)
+    try {
+        await sendVerificationEmail(verificationToken.email, verificationToken.token)
+    } catch (error) {
+        console.error("Failed to send verification email:", error)
+        throw new Error("Could not send the verification email. Please try again.")
+    }
 
     return {
         'success' : 'Confirmation Email Sent!'
