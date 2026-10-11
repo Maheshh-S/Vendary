@@ -19,8 +19,12 @@ import { PhoneInput } from "@/components/ui/phone-input";
 import LocationSelector from "@/components/ui/location-selector";
 import { placeOrderSchema, PlaceOrderSchema } from "@/schemas/checkout/place-order-schema";
 import { useMutation } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import useCart from "@/hooks/use-cart";
 import { CheckoutSession } from "@/modules/products/types/checkout";
 import { PlaceOrder, createRazorpayOrder } from "@/actions/orders";
+import { useLocale } from "@/providers/locale-provider";
+import type { Country } from "react-phone-number-input";
 
 // Add Razorpay types
 declare global {
@@ -33,6 +37,9 @@ export default function CheckoutForm({ checkoutSession } : { checkoutSession : C
   const [, setCountryName] = useState<string>('');
   const [stateName, setStateName] = useState<string>('');
   const [isRazorpayLoaded, setIsRazorpayLoaded] = useState(false);
+  const { clearCart } = useCart();
+  const { countryCode } = useLocale();
+  const router = useRouter();
 
   // Load Razorpay script
   useEffect(() => {
@@ -71,7 +78,9 @@ export default function CheckoutForm({ checkoutSession } : { checkoutSession : C
       toast.loading("Placing your order", { id: "place-order" });
     },
     onSuccess: () => {
+      clearCart();
       toast.success("Order placed successfully", { id: "place-order" });
+      router.push('/my-orders');
     },
     onError: (error) => {
       toast.error("Failed to place order", { id: "place-order" });
@@ -203,7 +212,7 @@ export default function CheckoutForm({ checkoutSession } : { checkoutSession : C
                   placeholder="Enter your phone number"
                   className="bg-transparent"
                   {...field}
-                  defaultCountry="US"
+                  defaultCountry={countryCode as Country}
                 />
               </FormControl>
               <FormMessage />

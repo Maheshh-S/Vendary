@@ -7,6 +7,7 @@ import "@/styles/tailwind.css";
 import { Providers } from "@/components/providers/theme-providers";
 import { QueryClientProvider } from "@/components/providers/query-client-provider";
 import CartProvider from "@/providers/cart-provider";
+import LocaleProvider from "@/providers/locale-provider";
 import NetworkIndicator from "@/components/global/network-indicator";
 import { Suspense } from "react";
 
@@ -40,12 +41,14 @@ export default function RootLayout({
       <QueryClientProvider>
         <body className="flex min-h-full flex-col dark:bg-gray-950">
           <Providers>
+            <LocaleProvider>
             <CartProvider>
               <Suspense fallback={null}>
                 <NetworkIndicator />
               </Suspense>
               {children}
             </CartProvider>
+            </LocaleProvider>
           </Providers>
           <Toaster position="top-center" reverseOrder={false} />
         </body>

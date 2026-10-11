@@ -1,5 +1,9 @@
+"use client";
+
 import USDToINRConverter from '@/components/global/currency-converter';
 import { Divider } from '@/components/ui/divider';
+import { formatPrice } from '@/lib/locales';
+import { useLocale } from '@/providers/locale-provider';
 import { CheckoutSession } from '@/modules/products/types/checkout';
 import React from 'react';
 
@@ -8,6 +12,7 @@ type Props = {
 }
 
 const ItemsSummary = ({ checkoutSession }: Props) => {
+  const { locale } = useLocale();
   // Default to empty array if line_items is undefined
   const lineItems = checkoutSession?.line_items || [];
 
@@ -21,16 +26,9 @@ const ItemsSummary = ({ checkoutSession }: Props) => {
     return total + (item.price_data.unit_amount * item.quantity);
   }, 0);
   
-  // Get currency or default to USD
-  const currency = lineItems[0]?.price_data.currency || 'usd';
-  
-  // Format currency based on locale
+  // unit_amount values are paise; convert to rupees before formatting.
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency.toUpperCase(),
-      minimumFractionDigits: 2
-    }).format(amount / 100);
+    return formatPrice(amount / 100, locale);
   };
 
   // Show loading or empty state if no checkout session is available

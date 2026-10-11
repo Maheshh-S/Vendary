@@ -1,4 +1,8 @@
+"use client";
+
 import { Badge } from "@/components/ui/badge";
+import { formatPrice } from "@/lib/locales";
+import { useLocale } from "@/providers/locale-provider";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -19,6 +23,7 @@ function truncateText(text: string | null, maxLength: number = 20) {
 }
 
 export default function ProductCard({ product }: { product: ProductCardData }) {
+  const { locale } = useLocale();
   return (
     <div className="group relative">
       <div className="h-42 w-full overflow-hidden rounded-md group-hover:opacity-75 lg:h-52 xl:h-64">
@@ -39,7 +44,7 @@ export default function ProductCard({ product }: { product: ProductCardData }) {
       </h3>
       <div className="w-full flex justify-between">
         <p className="mt-1 text-sm font-medium text-gray-900">
-          $ {product.price.toString()}
+          {formatPrice(product.price, locale)}
         </p>
         {product.tag && <Badge>{product.tag}</Badge>}
       </div>

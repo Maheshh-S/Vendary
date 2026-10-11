@@ -23,9 +23,13 @@ import SignInForm from "@/modules/auth/components/sign-in-component";
 import { Trash2Icon } from "lucide-react";
 import Checkout from "@/modules/products/components/checkout";
 import { CheckoutSession } from "@/modules/products/types/checkout";
+import { formatPrice } from "@/lib/locales";
+import { useLocale } from "@/providers/locale-provider";
 
 export default function CartPage() {
   const { items: cartItems, updateQuantity, removeItem, cartTotal } = useCart();
+  const { locale } = useLocale();
+  const fmt = (amount: number | string) => formatPrice(amount, locale);
   const [checkoutConfirm, setCheckoutConfirm] = useState(false);
   const taxRate = 0.08;
   const taxAmount = cartTotal * taxRate;
@@ -34,6 +38,7 @@ export default function CartPage() {
 
   const checkoutSession : CheckoutSession = {
     line_items: cartItems.map((item) => ({
+      productId: item.id,
       price_data: {
         currency: "usd",
         product_data: {
@@ -132,11 +137,11 @@ export default function CartPage() {
                               </Link>
                             </h3>
                             <p className="ml-4">
-                              ${(item.price * item.quantity).toFixed(2)}
+                              {fmt(item.price * item.quantity)}
                             </p>
                           </div>
                           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                            ${item.price} each
+                            {fmt(item.price)} each
                           </p>
                         </div>
                         <div className="flex flex-1 items-end justify-between text-sm">
@@ -200,7 +205,7 @@ export default function CartPage() {
                 <DescriptionList className="mt-6">
                   <DescriptionTerm>Subtotal</DescriptionTerm>
                   <DescriptionDetails>
-                    ${cartTotal.toFixed(2)}
+                    {fmt(cartTotal)}
                   </DescriptionDetails>
 
                   <DescriptionTerm>Shipping</DescriptionTerm>
@@ -208,14 +213,14 @@ export default function CartPage() {
 
                   <DescriptionTerm>Tax ({(taxRate * 100).toFixed(0)}%)</DescriptionTerm>
                   <DescriptionDetails>
-                    ${taxAmount.toFixed(2)}
+                    {fmt(taxAmount)}
                   </DescriptionDetails>
 
                   <DescriptionTerm className="!border-t-2 pt-4 font-medium text-zinc-900 dark:text-white">
                     Total
                   </DescriptionTerm>
                   <DescriptionDetails className="!border-t-2 pt-4 font-medium text-zinc-900 dark:text-white">
-                    ${totalAmount.toFixed(2)}
+                    {fmt(totalAmount)}
                   </DescriptionDetails>
                 </DescriptionList>
 
@@ -266,15 +271,15 @@ export default function CartPage() {
                 <h3 className="font-medium text-blue-800 dark:text-blue-300">Order Summary</h3>
                 <div className="mt-2 flex justify-between text-sm">
                   <span>Items ({cartItems.length}):</span>
-                  <span className="font-medium">${cartTotal.toFixed(2)}</span>
+                  <span className="font-medium">{fmt(cartTotal)}</span>
                 </div>
                 <div className="mt-1 flex justify-between text-sm">
                   <span>Tax:</span>
-                  <span className="font-medium">${taxAmount.toFixed(2)}</span>
+                  <span className="font-medium">{fmt(taxAmount)}</span>
                 </div>
                 <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700 flex justify-between font-medium">
                   <span>Total:</span>
-                  <span className="text-lg">${totalAmount.toFixed(2)}</span>
+                  <span className="text-lg">{fmt(totalAmount)}</span>
                 </div>
               </div>
               

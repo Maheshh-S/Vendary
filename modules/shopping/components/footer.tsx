@@ -3,6 +3,7 @@ import type { SVGProps } from "react"
 import Link from "next/link"
 import { Logo } from "@/components/global/logo"
 import { PROJECT_NAME } from "@/metadata"
+import { useLocale } from "@/providers/locale-provider"
 
 const navigation = {
   company: [
@@ -67,6 +68,7 @@ const navigation = {
 }
 
 export default function Footer() {
+  const { countryCode, currency, locales, setLocale } = useLocale()
   return (
     <footer className="grainy hidden md:block">
       <div className="mx-auto max-w-7xl py-8 border-t border-gray-300 mt-28">
@@ -114,8 +116,29 @@ export default function Footer() {
             </div>
           </div>
         </div>
-        <div className="mt-16 border-t border-gray-900/10 pt-8 sm:mt-20 lg:mt-24">
+        <div className="mt-16 border-t border-gray-900/10 pt-8 sm:mt-20 lg:mt-24 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm/6 text-gray-600">&copy; { new Date().getFullYear() } {PROJECT_NAME}. All rights reserved.</p>
+          <label className="flex items-center gap-2 text-sm/6 text-gray-600">
+            <span className="sr-only">Select country and currency</span>
+            <select
+              aria-label="Select country and currency"
+              value={countryCode}
+              onChange={(e) => {
+                const next = locales.find((l) => l.countryCode === e.target.value)
+                if (next) {
+                  setLocale({ countryCode: next.countryCode, currency: next.currency, phonePrefix: next.phonePrefix })
+                }
+              }}
+              className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900"
+            >
+              {locales.map((l) => (
+                <option key={l.countryCode} value={l.countryCode}>
+                  {l.flag} {l.name} ({l.currency})
+                </option>
+              ))}
+            </select>
+            <span aria-hidden="true">{currency}</span>
+          </label>
         </div>
       </div>
     </footer>

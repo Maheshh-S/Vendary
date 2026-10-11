@@ -8,6 +8,7 @@ import type React from "react"
 import { useState } from "react"
 import { Loader2 } from 'lucide-react'
 import Link from "next/link"
+import { formatINR } from "@/lib/format-inr"
 
 const SearchForm = ({ setIsOpen } : {setIsOpen : (arg0: boolean) => void}) => {
   const placeholders = [
@@ -115,7 +116,7 @@ const SearchForm = ({ setIsOpen } : {setIsOpen : (arg0: boolean) => void}) => {
                         <span className="text-xs text-muted-foreground">Handcrafted artisan product</span>
                       </div>
                     </div>
-                    <span className="font-semibold text-primary">$ {result.price}</span>
+                    <span className="font-semibold text-primary">{formatINR(result.price)}</span>
                   </div>
                 </Link>
               ))}

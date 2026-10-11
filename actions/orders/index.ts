@@ -2,8 +2,10 @@
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db/prisma";
+import { serializePrismaObject } from "@/lib/db/serializer";
 import { CheckoutSession } from "@/modules/products/types/checkout";
 import { placeOrderSchema, PlaceOrderSchema } from "@/schemas/checkout/place-order-schema";
+import { revalidatePath } from "next/cache";
 import Razorpay from "razorpay";
 import crypto from "crypto";
 
@@ -34,10 +36,10 @@ export const createRazorpayOrder = async ({
       0
     );
 
-    // Create Razorpay order
+    // Create Razorpay order (amount is in the smallest currency unit — paise for INR)
     const order = await razorpay.orders.create({
       amount,
-      currency: "USD",
+      currency: "INR",
       receipt: `receipt_${Date.now()}`,
       notes: {
         customerName: `${data.fName} ${data.lName || ''}`,
@@ -83,6 +85,9 @@ export const PlaceOrder = async ({
   }
 }) => {
     const session = await auth();
+    if (!session?.user?.id) {
+        throw new Error("Unauthorized");
+    }
 
     const {
         data,
@@ -131,7 +136,7 @@ export const PlaceOrder = async ({
         const order = await prisma.order.create({
             data: {
                 total,
-                userId: session?.user?.id ?? "cm9gtcj6l00000r2k1pi0inen", // fallback ID
+                userId: session.user.id,
                 addressId: address.id,
                 paymentMethod: "RAZORPAY",
                 paymentId: paymentDetails?.razorpayPaymentId || "",
@@ -141,14 +146,24 @@ export const PlaceOrder = async ({
 
         // Create OrderItems
         for (const item of checkoutSession.line_items) {
-            const product = await prisma.product.findFirst({
-                where: {
-                    name: item.price_data.product_data.name
-                }
-            });
+            let product = item.productId
+                ? await prisma.product.findUnique({
+                    where: { id: item.productId }
+                })
+                : null;
+
+            // Fallback for checkout sessions created before product ids were
+            // carried through line_items (sessions persist in localStorage).
+            if (!product) {
+                product = await prisma.product.findFirst({
+                    where: {
+                        name: item.price_data.product_data.name
+                    }
+                });
+            }
 
             if (!product) {
-                throw new Error(`Product not found: ${item.price_data.product_data.name}`);
+                throw new Error(`Product not found: ${item.productId ?? item.price_data.product_data.name}`);
             }
 
             await prisma.orderItem.create({
@@ -156,7 +171,7 @@ export const PlaceOrder = async ({
                     orderId: order.id,
                     productId: product.id,
                     quantity: item.quantity,
-                    price: item.price_data.unit_amount / 100, // converting from cents
+                    price: item.price_data.unit_amount / 100, // unit_amount is paise; converting to rupees
                 }
             });
         }
@@ -167,4 +182,29 @@ export const PlaceOrder = async ({
         console.error("Failed to place order:", error);
         throw new Error("Something went wrong while placing the order");
     }
+};
+
+export type OrderStatus = "pending" | "confirmed" | "shipped" | "delivered" | "cancelled";
+
+// NOTE: kept module-private (not exported) — "use server" modules may only
+// export async functions.
+const ORDER_STATUSES: OrderStatus[] = ["pending", "confirmed", "shipped", "delivered", "cancelled"];
+
+export const updateOrderStatus = async (orderId: string, status: string) => {
+    const session = await auth();
+    if (!session?.user?.id || session.user.role !== "ADMIN") {
+        throw new Error("Unauthorized");
+    }
+
+    if (!ORDER_STATUSES.includes(status as OrderStatus)) {
+        throw new Error("Invalid order status");
+    }
+
+    const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: { status },
+    });
+
+    revalidatePath("/admin");
+    return serializePrismaObject(updated);
 };

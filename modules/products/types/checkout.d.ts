@@ -1,5 +1,6 @@
 export type CheckoutSession = {
     line_items: {
+      productId: string;
       price_data: {
         currency: string;
         product_data: {

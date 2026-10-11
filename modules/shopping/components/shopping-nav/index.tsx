@@ -15,6 +15,7 @@ import { SearchDialog } from './search-input';
 import { Session } from 'next-auth';
 import UserButton from './user-button';
 import SignUpForm from '@/modules/auth/components/sign-up-component';
+import { formatINR } from '@/lib/format-inr';
 
 const EcommerceNavbar = ({ session } : {session : Session | null}) => {
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -133,7 +134,7 @@ const EcommerceNavbar = ({ session } : {session : Session | null}) => {
                     <h3 className="font-medium">{item.name}</h3>
                     <p className="text-sm text-zinc-500">Qty: {item.quantity}</p>
                   </div>
-                  <p className="font-medium">${(item.price * item.quantity).toFixed(2)}</p>
+                  <p className="font-medium">{formatINR(item.price * item.quantity)}</p>
                 </div>
               ))
             ) : (
@@ -146,7 +147,7 @@ const EcommerceNavbar = ({ session } : {session : Session | null}) => {
                 
                 <div className="flex items-center justify-between">
                   <p className="font-medium">Total</p>
-                  <p className="font-bold">${totalPrice.toFixed(2)}</p>
+                  <p className="font-bold">{formatINR(totalPrice)}</p>
                 </div>
               </>
             )}

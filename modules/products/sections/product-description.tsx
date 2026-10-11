@@ -10,6 +10,7 @@ import { Image, Product } from "@prisma/client";
 import useCart from "@/hooks/use-cart";
 import ImageSlider from "../components/image-grid";
 import toast from "react-hot-toast";
+import { formatINR } from "@/lib/format-inr";
 import { ExtendedProduct } from "../types/product";
 import { notFound } from "next/navigation";
 
@@ -20,10 +21,7 @@ type Props = {
 };
 
 const formatPrice = (price: number) => {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(price);
+  return formatINR(price);
 };
 
 const ProductDescription = ({ product, images, basicDetails }: Props) => {

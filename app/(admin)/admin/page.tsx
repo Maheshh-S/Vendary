@@ -8,7 +8,9 @@ import { cn } from "@/lib/utils";
 import TakeOfflineSwitch from "@/modules/admin/components/take-offline-switch";
 import AddImages from "@/modules/admin/components/add-image";
 import { serializePrismaObject } from "@/lib/db/serializer";
+import { formatINR } from "@/lib/format-inr";
 import DeleteProductButton from "@/modules/admin/components/delete-product-button";
+import OrderStatusSelect from "@/modules/admin/components/order-status-select";
 import PriceEdit from "@/modules/admin/edit/price";
 import DescriptionForm from "@/modules/admin/edit/description-form";
 
@@ -22,6 +24,9 @@ export default async function AdminPage() {
   if (!session) {
     redirect("/");
   }
+  if (session.user.role !== "ADMIN") {
+    redirect("/");
+  }
 
   // Fetch all products without pagination or search filters
  const products = (await prisma.product.findMany({
@@ -33,8 +38,29 @@ export default async function AdminPage() {
   where: {
     userId: session.user.id,
   },
-  orderBy: { name: 'asc' },
-})).map(serializePrismaObject);
+   orderBy: { name: 'asc' },
+ })).map(serializePrismaObject);
+
+ const orders = (await prisma.order.findMany({
+  include: {
+    user: {
+      select: {
+        email: true,
+      },
+    },
+    items: {
+      include: {
+        product: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    },
+    address: true,
+  },
+  orderBy: { createdAt: 'desc' },
+ })).map(serializePrismaObject);
 
 
   return (
@@ -102,7 +128,7 @@ export default async function AdminPage() {
                         <Link href={`/products/${product.id}`} className="text-blue-700 hover:text-blue-900 hover:underline">{truncateText(product.name, 30)}</Link>
                       </td>
                       <td className="py-4 text-sm whitespace-nowrap flex items-center justify-center space-x-2 text-gray-500">
-                        $ <PriceEdit productId={product.id} price={Number(product.price)} />
+                        ₹ <PriceEdit productId={product.id} price={Number(product.price)} />
                       </td>
                       <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
                         {product.shippingTime}
@@ -121,6 +147,78 @@ export default async function AdminPage() {
                       </td>
                       <td className="px-3 py-4 text-sm text-right whitespace-nowrap">
                         <DeleteProductButton productId={product.id} />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div className="mt-12 sm:flex sm:items-center">
+        <div className="sm:flex-auto">
+          <h1 className="text-xl font-semibold text-gray-900">Orders</h1>
+          <p className="mt-2 text-sm text-gray-700">
+            A list of all orders placed by customers.
+          </p>
+        </div>
+      </div>
+      <div className="mt-8 flow-root overflow-x-auto">
+        <div className="inline-block min-w-full py-2 align-middle">
+          <div className="overflow-hidden ring-1 shadow-sm ring-black/5 sm:rounded-lg">
+            <table className="min-w-full">
+              <thead>
+                <tr>
+                  <th className="py-3.5 pr-3 pl-4 text-left text-sm font-semibold text-gray-900 sm:pl-6">
+                    Customer
+                  </th>
+                  <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                    Items
+                  </th>
+                  <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                    Total
+                  </th>
+                  <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                    Payment ID
+                  </th>
+                  <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.length === 0 ? (
+                  <tr className="">
+                    <td colSpan={5} className="py-4 px-3 text-sm text-center text-gray-500">
+                      No orders yet
+                    </td>
+                  </tr>
+                ) : (
+                  orders.map((order) => (
+                    <tr key={order.id}>
+                      <td className="py-4 pr-3 pl-4 text-sm font-medium whitespace-nowrap text-gray-900 sm:pl-6">
+                        {order.user?.email ?? "N/A"}
+                      </td>
+                      <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
+                        {order.items.map((item: { product?: { name?: string } | null; quantity: number }, index: number) => (
+                          <span key={index}>
+                            {index > 0 && ", "}
+                            {item.product?.name ?? "Unknown product"} x {item.quantity}
+                          </span>
+                        ))}
+                      </td>
+                      <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
+                        {formatINR(Number(order.total))}
+                      </td>
+                      <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
+                        {order.paymentId || "N/A"}
+                      </td>
+                      <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
+                        <div className="flex items-center gap-2">
+                          <span>{order.status}</span>
+                          <OrderStatusSelect orderId={order.id} status={order.status} />
+                        </div>
                       </td>
                     </tr>
                   ))
