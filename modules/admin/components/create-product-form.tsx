@@ -191,6 +191,7 @@ const CreateProductForm = ({ categories }: Props) => {
                                     {...register("shippingTime")}
                                     defaultChecked={plan.id === 'fast'}
                                     id={plan.id}
+                                    value={plan.description}
                                     name="plan"
                                     type="radio"
                                     aria-describedby={`${plan.id}-description`}
@@ -223,6 +224,7 @@ const CreateProductForm = ({ categories }: Props) => {
                                     {...register("categoryId")}
                                     defaultChecked={index === 0}
                                     id={category.id}
+                                    value={category.id}
                                     name="category"
                                     type="radio"
                                     aria-describedby={`${category.id}-description`}
