@@ -19,7 +19,10 @@ export default function GoogleSignInButton({ disabled }: Props) {
       if (result && "error" in result) {
         toast.error(result.error);
       }
-    } catch {
+    } catch (error) {
+      // Successful OAuth sign-in redirects via NEXT_REDIRECT — Next performs
+      // the navigation itself, so there is nothing to toast.
+      if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) return;
       toast.error("Something Went Wrong!");
     } finally {
       setIsPending(false);

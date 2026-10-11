@@ -8,7 +8,13 @@ export const GetFeaturedPrpducts = async ({
     skip = 0,
 }) => {
     try {
-        const cachedProducts = await redis.get("featured-products")
+        let cachedProducts: string | null = null;
+        try {
+            cachedProducts = await redis.get("featured-products")
+        } catch (cacheError) {
+            // Cache outage must never take down the page — fall through to DB.
+            console.error("Featured products cache read failed:", cacheError)
+        }
         if(cachedProducts) {
             return JSON.parse(cachedProducts)
         }
@@ -28,7 +34,11 @@ export const GetFeaturedPrpducts = async ({
             price: typeof product.price === 'object' && typeof product.price.toNumber === 'function' ? product.price.toNumber() : Number(product.price),
             imageAlt: product.shortDescription
         }))
-        await redis.set("featured-products", JSON.stringify(products))
+        try {
+            await redis.set("featured-products", JSON.stringify(products))
+        } catch (cacheError) {
+            console.error("Featured products cache write failed:", cacheError)
+        }
         return products;
     } catch (error) {
         console.error("Error fetching featured products:", error)

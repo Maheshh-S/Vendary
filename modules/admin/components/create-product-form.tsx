@@ -115,11 +115,10 @@ const CreateProductForm = ({ categories }: Props) => {
                     Short Description
                 </label>
                 <div className="mt-2">
-                    <textarea
-                        id="short-description"
-                        {...register("shortDescription")}
-                        name="description"
-                        rows={4}
+                        <textarea
+                            id="short-description"
+                            {...register("shortDescription")}
+                            rows={4}
                         placeholder='Product Description in atleast 10 characters'
                         className="block w-full rounded-md bg-white px-3 py-1.5 text-base text-gray-900 outline-1 -outline-offset-1 outline-gray-300 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 sm:text-sm/6"
                         defaultValue={''}
@@ -190,7 +189,7 @@ const CreateProductForm = ({ categories }: Props) => {
                             <div className="flex h-6 items-center">
                                 <input
                                     {...register("shippingTime")}
-                                    defaultChecked={plan.id === 'small'}
+                                    defaultChecked={plan.id === 'fast'}
                                     id={plan.id}
                                     name="plan"
                                     type="radio"
@@ -217,12 +216,12 @@ const CreateProductForm = ({ categories }: Props) => {
                     Product Category
                 </label>
                 <div className="space-y-5 grid grid-cols-2 gap-4">
-                    {categories.map((category) => (
+                    {categories.map((category, index) => (
                         <div key={category.id} className="relative flex items-start">
                             <div className="flex h-6 items-center">
                                 <input
                                     {...register("categoryId")}
-                                    defaultChecked={category.id === 'fast'}
+                                    defaultChecked={index === 0}
                                     id={category.id}
                                     name="category"
                                     type="radio"

@@ -40,6 +40,9 @@ export default function FormSignIn({ onSuccess }: Props) {
       onSuccess?.();
     },
     onError: (error) => {
+      // Successful credentials sign-in redirects via NEXT_REDIRECT — Next
+      // performs the navigation itself, so there is nothing to toast.
+      if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) return;
       toast.error(error instanceof Error ? error.message : "Something went wrong");
     }
   })
