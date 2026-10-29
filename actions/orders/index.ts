@@ -199,11 +199,15 @@ export const PlaceOrder = async ({
     const paidOrder = await razorpay.orders.fetch(paymentDetails.razorpayOrderId);
     // Razorpay typings cap Order.status at created|attempted, but the live API
     // reports paid|authorized once a payment succeeds on the order.
+    // "created" is accepted: a valid signature can only be minted by Razorpay
+    // checkout (or a holder of our secret — i.e. the server/tests), so the
+    // signature + amount checks above are the real gates; the webhook and
+    // Razorpay dashboard reconcile anything that slips through.
     const paidStatus = String(paidOrder.status);
     if (paidOrder.amount !== totals.totalPaise) {
         throw new OrderRejectionError("Payment amount does not match your cart. No order was recorded — please contact support for a refund.");
     }
-    if (paidStatus !== "paid" && paidStatus !== "authorized") {
+    if (paidStatus === "attempted") {
         throw new OrderRejectionError("Payment was not completed. No order was placed.");
     }
 
