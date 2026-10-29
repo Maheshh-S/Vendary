@@ -1,5 +1,7 @@
 # Vendary
 
+[![CI](https://github.com/Maheshh-S/Vendary/actions/workflows/ci.yml/badge.svg)](https://github.com/Maheshh-S/Vendary/actions/workflows/ci.yml)
+
 Vendary is a full-stack ecommerce web application built with Next.js, Prisma, and PostgreSQL.
 
 It supports product management, shopping cart functionality, checkout flows, authentication, and payment integration.
@@ -21,6 +23,10 @@ It supports product management, shopping cart functionality, checkout flows, aut
 - Tailwind CSS
 - Razorpay (payments)
 - Bun (package manager)
+
+## Roadmap
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for the prioritized feature backlog and its current status.
 
 ## Status
 
