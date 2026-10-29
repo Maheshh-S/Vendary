@@ -15,6 +15,8 @@ const withMDX = nextMDX({
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Self-contained server bundle for the hardened Docker runner.
+  output: 'standalone' as const,
   pageExtensions: ['js', 'jsx', 'ts', 'tsx', 'mdx'],
   images: {
     remotePatterns: [
@@ -48,7 +50,30 @@ const nextConfig = {
         port: "3000",
       }
     ]
-  }
-} 
+  },
+  async headers() {
+    return [
+      {
+        // Pragmatic baseline — deliberately no CSP yet (Razorpay checkout
+        // needs careful frame/script allowances; separate task).
+        source: "/(.*)",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            // geolocation=self: the checkout autofill flow uses it.
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=(self)",
+          },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains",
+          },
+        ],
+      },
+    ]
+  },
+}
 
 export default withMDX(nextConfig)

@@ -25,12 +25,12 @@ Status markers: `[ ]` planned · `[~]` in progress · `[x]` shipped.
 | # | Feature | Priority | Effort | ★ | Outcome |
 |---|---------|----------|--------|---|---------|
 | [x] 8 | GitHub Actions CI | P1 | S | ★★★ | Lint + typecheck + build + tests on every push/PR; badge in README. |
-| 9 | Test suite | P1 | M–L | ★★★ | Vitest units for money paths (totals, GST, signature verification, webhook, schemas) + Playwright e2e (browse → cart → checkout with mocked Razorpay → my-orders; admin status change). |
+| [~] 9 | Test suite | P1 | M–L | ★★★ | Vitest units shipped for the money paths (27 tests: totals, schemas, signature verification, webhook handler) and wired into CI; Playwright e2e still pending. |
 | [~] 10 | Env validation | P1 | S | ★★ | Zod env schema, fail-fast at boot; `.env.example` matches reality. *Partial: fail-fast checks live in the money paths (Razorpay client, webhook) and `.env.example` is complete; a dedicated zod env layer is still pending.* |
-| 11 | Hardened Docker + compose | P2 | M | ★★ | Standalone output, non-root user, pruned deps, HEALTHCHECK; docker-compose for Postgres + Redis local dev. |
-| 12 | Security posture | P1 | M | ★★★ | Rate limiting on auth/verification/checkout; security headers + CSP in `next.config`. |
+| [x] 11 | Hardened Docker + compose | P2 | M | ★★ | Standalone output, non-root user, pruned deps, HEALTHCHECK; docker-compose for Postgres + Redis local dev. |
+| [~] 12 | Security posture | P1 | M | ★★★ | *Partial: security headers shipped (X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy, HSTS); rate limiting and CSP still pending.* |
 | 13 | Observability | P2 | M | ★★ | Sentry, structured logging, deep `/api/status` (DB + Redis checks); resolve dead `Analytics` model. |
-| 14 | Seed + db scripts | P1 | S | ★★ | `prisma/seed.ts` with a realistic artisan catalog; `db:seed` / `db:migrate` scripts. Clone → run → demo. |
+| [x] 14 | Seed + db scripts | P1 | S | ★★ | `prisma/seed.ts` with a realistic artisan catalog; `db:seed` / `db:migrate` scripts. Clone → run → demo. |
 | 15 | Repo polish | P2 | S | ★ | README overhaul (architecture diagram, setup, screenshots, badges), Prettier + husky pre-commit, `engines`/`.nvmrc`, `.mailmap`. |
 
 ## Phase 3 — Product depth (P1; what users feel)
