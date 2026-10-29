@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
+import { verifyRazorpayWebhookSignature } from "@/lib/razorpay";
 import { revalidatePath } from "next/cache";
-import crypto from "crypto";
 import { NextResponse } from "next/server";
 
 /**
@@ -13,17 +13,6 @@ import { NextResponse } from "next/server";
  * idempotent. See docs/superpowers/specs/2026-10-29-money-trust-fixes.md.
  */
 
-const verifyWebhookSignature = (rawBody: string, signature: string | null) => {
-  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-  if (!secret || !signature) {
-    return false;
-  }
-  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
-  const a = Buffer.from(expected, "hex");
-  const b = Buffer.from(signature, "hex");
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-};
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const extractEvent = (body: any) => {
   const event = body?.event as string | undefined;
@@ -35,7 +24,8 @@ const extractEvent = (body: any) => {
 };
 
 export async function POST(req: Request) {
-  if (!process.env.RAZORPAY_WEBHOOK_SECRET) {
+  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (!webhookSecret) {
     return NextResponse.json(
       { error: "Webhook is not configured (RAZORPAY_WEBHOOK_SECRET missing)" },
       { status: 501 }
@@ -43,7 +33,7 @@ export async function POST(req: Request) {
   }
 
   const rawBody = await req.text();
-  if (!verifyWebhookSignature(rawBody, req.headers.get("x-razorpay-signature"))) {
+  if (!verifyRazorpayWebhookSignature(rawBody, req.headers.get("x-razorpay-signature"), webhookSecret)) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 

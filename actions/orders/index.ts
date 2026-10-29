@@ -10,10 +10,10 @@ import {
 } from "@/schemas/checkout/place-order-schema";
 import { CheckoutSession } from "@/modules/products/types/checkout";
 import { computeOrderTotals } from "@/lib/money";
+import { verifyRazorpayPaymentSignature } from "@/lib/razorpay";
 import { invalidateProductCache } from "@/lib/product-cache";
 import { revalidatePath } from "next/cache";
 import Razorpay from "razorpay";
-import crypto from "crypto";
 
 // Razorpay rejects order amounts below 100 paise (₹1).
 const MIN_RAZORPAY_AMOUNT_PAISE = 100;
@@ -134,26 +134,7 @@ export const createRazorpayOrder = async ({
 };
 
 // Function to verify Razorpay payment
-const verifyRazorpayPayment = (
-  razorpayOrderId: string,
-  razorpayPaymentId: string,
-  razorpaySignature: string
-) => {
-  const secret = process.env.RAZORPAY_KEY_SECRET;
-  // Fail closed: without the secret no signature can be trusted.
-  if (!secret) {
-    return false;
-  }
-  const text = `${razorpayOrderId}|${razorpayPaymentId}`;
-  const expected = crypto
-    .createHmac("sha256", secret)
-    .update(text)
-    .digest("hex");
-
-  const a = Buffer.from(expected, "hex");
-  const b = Buffer.from(razorpaySignature, "hex");
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-};
+// (signature verification lives in lib/razorpay.ts — see tests/razorpay-signature.test.ts)
 
 // Main order placement function
 export const PlaceOrder = async ({
@@ -199,10 +180,11 @@ export const PlaceOrder = async ({
     // Verify the payment signature, then confirm the paid amount equals the
     // server-computed total (protects against paying for a cheap session and
     // replaying its signature against an expensive cart).
-    if (!verifyRazorpayPayment(
+    if (!verifyRazorpayPaymentSignature(
       paymentDetails.razorpayOrderId,
       paymentDetails.razorpayPaymentId,
-      paymentDetails.razorpaySignature
+      paymentDetails.razorpaySignature,
+      process.env.RAZORPAY_KEY_SECRET
     )) {
       throw new Error("Payment verification failed");
     }
