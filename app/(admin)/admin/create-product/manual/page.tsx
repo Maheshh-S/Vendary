@@ -1,4 +1,3 @@
-"use server"
 import { prisma } from '@/lib/db/prisma'
 import { serializePrismaObject } from '@/lib/db/serializer';
 import CreateProductForm from '@/modules/admin/components/create-product-form';

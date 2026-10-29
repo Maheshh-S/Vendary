@@ -1,4 +1,3 @@
-"use server"
 import { AiOutlineAlibaba } from "react-icons/ai";
 import { FaAmazon } from "react-icons/fa";
 import { PlusIcon } from 'lucide-react'

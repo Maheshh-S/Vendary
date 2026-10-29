@@ -20,11 +20,6 @@ export const metadata: Metadata = {
   title: "Vendary - A shopping experience like no other",
   description:
     "Vendary is a shopping platform that offers a unique and personalized shopping experience, combining the best of online and offline shopping.",
-  alternates: {
-    types: {
-      "application/rss+xml": `${process.env.NEXT_PUBLIC_SITE_URL}/feed.xml`,
-    },
-  },
 };
 
 export default function RootLayout({

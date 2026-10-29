@@ -1,4 +1,3 @@
-"use server"
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import React from 'react'
