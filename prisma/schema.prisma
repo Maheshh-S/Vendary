@@ -96,7 +96,8 @@ model Product {
   options          Option[]
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
-  avaiavility      Avaiavility  @default(OUT_OF_STOCK)
+  availability     Availability @default(OUT_OF_STOCK)
+  stockQty         Int          @default(25)
   shippingTime     String       @default("7-10 business days")
   isFeatured       Boolean      @default(false)
   reviews          Review[]
@@ -104,7 +105,7 @@ model Product {
   user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-enum Avaiavility {
+enum Availability {
   IN_STOCK
   OUT_OF_STOCK
   PRE_ORDER
@@ -152,6 +153,7 @@ model Order {
   userId    String
   status    String      @default("pending")
   total     Decimal     @db.Decimal(10, 2)
+  taxAmount Decimal     @default(0) @db.Decimal(10, 2)
   items     OrderItem[]
   address   Address?     @relation(fields: [addressId], references: [id])
   addressId String      @unique

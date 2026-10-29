@@ -2,6 +2,7 @@
 
 import { auth } from "@/auth"
 import { prisma } from "@/lib/db/prisma";
+import { invalidateProductCache } from "@/lib/product-cache";
 
 export const editShortDescription = async ( {
     productId,
@@ -15,7 +16,7 @@ export const editShortDescription = async ( {
         if(!session?.user.id) {
             throw new Error("User not authenticated");
         }
-    
+
         await prisma.product.update({
             where: {
                 id: productId,
@@ -25,6 +26,7 @@ export const editShortDescription = async ( {
                 shortDescription
             }
         })
+        await invalidateProductCache(productId);
     } catch (error) {
         console.error("Error updating short description:", error);
         throw error;
@@ -43,7 +45,7 @@ export const editLongDescription = async ( {
         if(!session?.user.id) {
             throw new Error("User not authenticated");
         }
-    
+
         await prisma.product.update({
             where: {
                 id: productId,
@@ -53,8 +55,9 @@ export const editLongDescription = async ( {
                 description: longDescription
             }
         })
+        await invalidateProductCache(productId);
     } catch (error) {
-        console.error("Error updating short description:", error);
+        console.error("Error updating long description:", error);
         throw error;
     }
 }

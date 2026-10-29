@@ -4,6 +4,7 @@ import USDToINRConverter from '@/components/global/currency-converter';
 import { Divider } from '@/components/ui/divider';
 import { formatPrice } from '@/lib/locales';
 import { useLocale } from '@/providers/locale-provider';
+import { computeOrderTotals, GST_RATE } from '@/lib/money';
 import { CheckoutSession } from '@/modules/products/types/checkout';
 import React from 'react';
 
@@ -20,12 +21,16 @@ const ItemsSummary = ({ checkoutSession }: Props) => {
     if (!text) return '';
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
   }
-  
-  // Calculate totals with null checks
-  const subtotal = lineItems.reduce((total, item) => {
-    return total + (item.price_data.unit_amount * item.quantity);
-  }, 0);
-  
+
+  // Same math the server charges with (lib/money.ts) — display can never
+  // drift from the charged amount.
+  const { subtotalPaise, taxPaise, totalPaise } = computeOrderTotals(
+    lineItems.map((item) => ({
+      unitPaise: Math.round(item.price_data.unit_amount),
+      quantity: item.quantity,
+    }))
+  );
+
   // unit_amount values are paise; convert to rupees before formatting.
   const formatCurrency = (amount: number) => {
     return formatPrice(amount / 100, locale);
@@ -92,12 +97,20 @@ const ItemsSummary = ({ checkoutSession }: Props) => {
           
           {/* Order totals */}
           <div className="space-y-3">
+            <div className="flex justify-between">
+              <span>Subtotal</span>
+              <span>{formatCurrency(subtotalPaise)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Tax ({(GST_RATE * 100).toFixed(0)}% GST)</span>
+              <span>{formatCurrency(taxPaise)}</span>
+            </div>
             <div className="flex justify-between font-medium">
               <span>Total</span>
-              <span>{formatCurrency(subtotal)}</span>
+              <span>{formatCurrency(totalPaise)}</span>
             </div>
             <Divider />
-            
+
             <USDToINRConverter />
           </div>
         </div>

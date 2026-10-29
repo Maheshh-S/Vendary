@@ -15,7 +15,7 @@ export const GetProducts = async ({
 }: GetProductsParams) => {
     const products = await prisma.product.findMany({
         where: {
-            avaiavility: "IN_STOCK",
+            availability: "IN_STOCK",
             ...(category
                 ? {
                     category: {

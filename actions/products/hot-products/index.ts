@@ -2,15 +2,16 @@
 
 import { prisma } from "@/lib/db/prisma"
 import { redis } from "@/lib/redis"
+import { CACHE_TTL_SECONDS, FEATURED_PRODUCTS_KEY } from "@/lib/product-cache"
 
-export const GetFeaturedPrpducts = async ({
+export const GetFeaturedProducts = async ({
     take = 4,
     skip = 0,
 }) => {
     try {
         let cachedProducts: string | null = null;
         try {
-            cachedProducts = await redis.get("featured-products")
+            cachedProducts = await redis.get(FEATURED_PRODUCTS_KEY)
         } catch (cacheError) {
             // Cache outage must never take down the page — fall through to DB.
             console.error("Featured products cache read failed:", cacheError)
@@ -20,7 +21,7 @@ export const GetFeaturedPrpducts = async ({
         }
         const featuredProducts = await prisma.product.findMany({
             where: {
-                avaiavility: "IN_STOCK"
+                availability: "IN_STOCK"
             },
             skip,
             take,
@@ -35,7 +36,7 @@ export const GetFeaturedPrpducts = async ({
             imageAlt: product.shortDescription
         }))
         try {
-            await redis.set("featured-products", JSON.stringify(products))
+            await redis.setWithTtl(FEATURED_PRODUCTS_KEY, JSON.stringify(products), CACHE_TTL_SECONDS.featured)
         } catch (cacheError) {
             console.error("Featured products cache write failed:", cacheError)
         }

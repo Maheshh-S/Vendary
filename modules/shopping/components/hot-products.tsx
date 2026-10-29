@@ -1,7 +1,7 @@
-"use server"
-import { GetFeaturedPrpducts } from "@/actions/products/hot-products";
+import { GetFeaturedProducts } from "@/actions/products/hot-products";
 import { Badge } from "@/components/ui/badge";
 import ProductCard from "@/modules/products/components/product-card";
+import { formatINR } from "@/lib/format-inr";
 
 export default async function HotProducts() {
   const products: {
@@ -11,7 +11,7 @@ export default async function HotProducts() {
     imageSrc: string | null;
     price: number;
     imageAlt: string | null;
-  }[] = await GetFeaturedPrpducts({
+  }[] = await GetFeaturedProducts({
     take: 4,
     skip: 0
   });
@@ -37,7 +37,7 @@ export default async function HotProducts() {
               </h3>
               <div className="w-full flex justify-between">
                 <p className="mt-1 text-sm font-medium text-gray-500">
-                  $ 0.00
+                  {formatINR(0)}
                 </p>
                 <Badge className="text-gray-400">
                   Tag

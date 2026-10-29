@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import React from "react";
 import { useMutation } from "@tanstack/react-query";
-import { deletePorduct } from "@/actions/(admin)/product/delete-product";
+import { deleteProduct } from "@/actions/(admin)/product/delete-product";
 import toast from "react-hot-toast";
 
 type Props = {
@@ -29,7 +29,7 @@ const DeleteProductButton = ({ productId }: Props) => {
     mutate
   } = useMutation({
     mutationKey: ["delete-product"],
-    mutationFn: deletePorduct,
+    mutationFn: deleteProduct,
     onMutate: () => {
         toast.loading("Deleting product", { id: "delete-product" });
     },

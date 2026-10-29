@@ -1,5 +1,14 @@
 import { z } from "zod";
 
+export const checkoutLineItemSchema = z.object({
+    productId: z.string().min(1),
+    quantity: z.number().int().min(1, "Quantity must be at least 1").max(99, "Quantity cannot exceed 99"),
+});
+
+export const checkoutSessionSchema = z.object({
+    line_items: z.array(checkoutLineItemSchema).min(1, "Cart is empty"),
+});
+
 export const placeOrderSchema = z.object({
     fName: z.string().min(1, "First name is required"),
     lName: z.string().optional(),

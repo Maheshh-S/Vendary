@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { auth } from "@/auth"
 import {prisma} from "@/lib/db/prisma"
 import { imageFormSchema } from '@/schemas/admin/products/add-image-schema'
+import { invalidateProductCache } from '@/lib/product-cache'
 import { revalidatePath } from 'next/cache'
 
 export const addImagesToProduct = async (productId: string, imageData: z.infer<typeof imageFormSchema>) => {
@@ -29,7 +30,7 @@ export const addImagesToProduct = async (productId: string, imageData: z.infer<t
     }
     
     const createdImages = await Promise.all(
-        data.images.map((image) => 
+        data.images.map((image) =>
             prisma.image.create({
                 data: {
                     url: image.url,
@@ -39,6 +40,7 @@ export const addImagesToProduct = async (productId: string, imageData: z.infer<t
             })
         )
     )
+    await invalidateProductCache(productId);
     revalidatePath(`/products/${productId}`)
 
     return createdImages

@@ -100,7 +100,7 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
   };
 
   const handleAddToCart = () => {
-    if (product.avaiavility === "OUT_OF_STOCK") return;
+    if (product.availability === "OUT_OF_STOCK") return;
 
     setAddingToCart(true);
     toast.loading("Adding to cart", { id: "add-to-cart" });
@@ -137,7 +137,7 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
   };
 
   const getAvailabilityBadge = () => {
-    switch (basicDetails.avaiavility) {
+    switch (basicDetails.availability) {
       case "IN_STOCK":
         return (
           <Badge className="bg-green-500 text-white hover:bg-green-600">
@@ -161,11 +161,6 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
     }
   };
 
-  // Calculate discount percentage
-  const discountPercentage = basicDetails.isFeatured
-    ? Math.round((1 - product.price / (product.price * 1.15)) * 100)
-    : 0;
-
   return (
     <div className="max-w-6xl mx-auto">
       {/* Mobile bottom sticky button - ONE single add to cart button */}
@@ -184,10 +179,10 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
           <Button
             color="rose"
             className={`py-2 px-5 rounded-xl transition-all ${addingToCart ? "opacity-70" : ""} ${addedToCart ? "bg-green-600 hover:bg-green-700" : ""}`}
-            disabled={basicDetails.avaiavility === "OUT_OF_STOCK" || addingToCart}
-            onClick={handleAddToCart}
-          >
-            {addedToCart ? (
+                disabled={basicDetails.availability === "OUT_OF_STOCK" || addingToCart}
+                onClick={handleAddToCart}
+              >
+                {addedToCart ? (
               <span className="flex items-center">
                 <Check className="w-4 h-4 mr-1" />
                 Added
@@ -228,7 +223,7 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
               </TextLink>
               {basicDetails.isFeatured && (
                 <Badge className="bg-rose-500 text-white hover:bg-rose-600">
-                  {discountPercentage}% OFF
+                  Featured
                 </Badge>
               )}
             </div>
@@ -250,15 +245,10 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
               <span className="text-3xl font-bold text-zinc-900 dark:text-white">
                 {formatPrice(product.price)}
               </span>
-              {product.isFeatured && (
-                <span className="text-base line-through text-zinc-500">
-                  {formatPrice(product.price * 1.15)}
-                </span>
-              )}
             </div>
             <div className="flex items-center gap-2 mb-4">
               {getAvailabilityBadge()}
-              {product.avaiavility === "IN_STOCK" && (
+              {product.availability === "IN_STOCK" && (
                 <Text className="text-sm">
                   <Strong>Ships in:</Strong> {basicDetails.shippingTime}
                 </Text>
@@ -318,7 +308,7 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
               </div>
               <Button
                 className="w-full py-3 font-medium text-base flex items-center justify-center rounded-full transition-all"
-                disabled={basicDetails.avaiavility === "OUT_OF_STOCK" || addingToCart}
+                disabled={basicDetails.availability === "OUT_OF_STOCK" || addingToCart}
                 onClick={handleAddToCart}
                 color="sky"
               >
@@ -348,7 +338,7 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
                 </button>
               </div>
               <span className="ml-3 text-sm text-zinc-500">
-                {basicDetails.avaiavility === "IN_STOCK" ? "In Stock" : "Out of Stock"}
+                {basicDetails.availability === "IN_STOCK" ? "In Stock" : "Out of Stock"}
               </span>
             </div>
           )}
@@ -423,19 +413,15 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
               {expandedSection === "shipping" && (
                 <div className="mt-3 space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-zinc-600 dark:text-zinc-400">Standard Shipping:</span>
-                    <Strong>Free</Strong>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-zinc-600 dark:text-zinc-400">Express Shipping:</span>
-                    <Strong>$12.99</Strong>
+                    <span className="text-zinc-600 dark:text-zinc-400">Shipping:</span>
+                    <Strong>Free across India</Strong>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-zinc-600 dark:text-zinc-400">Estimated Delivery:</span>
                     <Strong>{basicDetails.shippingTime}</Strong>
                   </div>
                   <Text className="text-xs text-zinc-500 mt-2">
-                    Free shipping on all orders over $50. Orders are processed within 1-2 business days. Shipping times are estimates and are not guaranteed.
+                    All orders ship free. Orders are processed within 1-2 business days. Shipping times are estimates and are not guaranteed.
                   </Text>
                 </div>
               )}

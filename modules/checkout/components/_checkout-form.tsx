@@ -115,7 +115,7 @@ export default function CheckoutForm({ checkoutSession } : { checkoutSession : C
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: razorpayOrderData.amount,
         currency: razorpayOrderData.currency,
-        name: "Your Store Name",
+        name: "Vendary",
         description: "Order Payment",
         order_id: razorpayOrderData.id,
         prefill: {

@@ -24,10 +24,11 @@ export const authRoutes = [
     '/error',
 ]
 
-/** 
+/**
  * Thes routes dont require authentication
  * The routes are accessible to public
- * @type {string}
+ * NOTE: /checkout is deliberately NOT public — guests must sign in before
+ * payment (PlaceOrder requires a session; paying first would dead-end).
 */
 export const publicRoutes = [
     '/',
@@ -40,8 +41,6 @@ export const publicRoutes = [
     '/privacy',
     '/returns',
     '/terms-of-service',
-    '/api/checkout',
     '/success',
-    '/cart',
-    '/checkout'
+    '/cart'
 ]

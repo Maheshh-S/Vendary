@@ -3,11 +3,13 @@
 import { prisma } from "@/lib/db/prisma";
 import { redis } from "@/lib/redis";
 import { serializePrismaObject } from "@/lib/db/serializer";
+import { CACHE_TTL_SECONDS, productBasicDetailsKey } from "@/lib/product-cache";
 
 export const getBasicProductDetails = async (id: string) => {
+    const cacheKey = productBasicDetailsKey(id);
     let basicDetails: string | null = null;
     try {
-        basicDetails = await redis.get(`product-basic-details:${id}`);
+        basicDetails = await redis.get(cacheKey);
     } catch (cacheError) {
         // Cache outage must never take down the page — fall through to DB.
         console.error("Product details cache read failed:", cacheError);
@@ -27,7 +29,7 @@ export const getBasicProductDetails = async (id: string) => {
 
     const serializedProduct = serializePrismaObject(product);
     try {
-        await redis.set(`product-basic-details:${id}`, JSON.stringify(serializedProduct));
+        await redis.setWithTtl(cacheKey, JSON.stringify(serializedProduct), CACHE_TTL_SECONDS.basicDetails);
     } catch (cacheError) {
         console.error("Product details cache write failed:", cacheError);
     }

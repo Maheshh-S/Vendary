@@ -25,22 +25,28 @@ import Checkout from "@/modules/products/components/checkout";
 import { CheckoutSession } from "@/modules/products/types/checkout";
 import { formatPrice } from "@/lib/locales";
 import { useLocale } from "@/providers/locale-provider";
+import { computeOrderTotals, GST_RATE } from "@/lib/money";
 
 export default function CartPage() {
   const { items: cartItems, updateQuantity, removeItem, cartTotal } = useCart();
   const { locale } = useLocale();
   const fmt = (amount: number | string) => formatPrice(amount, locale);
   const [checkoutConfirm, setCheckoutConfirm] = useState(false);
-  const taxRate = 0.08;
-  const taxAmount = cartTotal * taxRate;
-  const totalAmount = cartTotal + taxAmount;
-  const [promoError, setPromoError] = useState("");
+  const { taxPaise, totalPaise } = computeOrderTotals(
+    cartItems.map((item) => ({
+      unitPaise: Math.round(item.price * 100),
+      quantity: item.quantity,
+    }))
+  );
+  const taxRate = GST_RATE;
+  const taxAmount = taxPaise / 100;
+  const totalAmount = totalPaise / 100;
 
   const checkoutSession : CheckoutSession = {
     line_items: cartItems.map((item) => ({
       productId: item.id,
       price_data: {
-        currency: "usd",
+        currency: "inr",
         product_data: {
           name: item.name,
           images: [item.images[0].src],
@@ -49,9 +55,6 @@ export default function CartPage() {
       },
       quantity: item.quantity,
     })),
-    mode: "payment",
-    success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/success`,
-    cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/cart`,
   }
 
   return (
@@ -233,27 +236,8 @@ export default function CartPage() {
                 </Button>
 
                 <div className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                  <p>We accept all major credit cards and PayPal</p>
+                  <p>Payments powered by Razorpay — UPI, cards and netbanking</p>
                 </div>
-              </div>
-
-              <div className="mt-6 rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/10 dark:bg-zinc-800 dark:ring-white/10">
-                <h3 className="text-base font-medium text-zinc-900 dark:text-white">
-                  Promotional Code
-                </h3>
-                <div className="mt-4 flex space-x-2">
-                  <input
-                    type="text"
-                    className="block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-500 dark:border-zinc-600 dark:bg-zinc-700 dark:text-white dark:placeholder-zinc-400"
-                    placeholder="Enter code"
-                  />
-                  <Button onClick={() => setPromoError("Promo code is not valid")} className="flex items-center justify-center" >Apply</Button>
-                </div>
-                  { promoError && (
-                    <p className="text-red-500 text-sm mt-2 ml-6">
-                      {promoError}
-                    </p>
-                  )}
               </div>
             </div>
           </div>
@@ -297,8 +281,6 @@ export default function CartPage() {
           </DialogBody>
           <DialogActions className="border-t flex items-center justify-center border-zinc-200 dark:border-zinc-700 pt-4">
             <div className="flex items-center justify-center space-x-4">
-              {/* <StripeCheckout /> */}
-              {/* <RazorpayCheckout /> */}
               <Checkout checkoutSession={checkoutSession} />
             </div>
           </DialogActions>

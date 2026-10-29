@@ -2,6 +2,7 @@
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db/prisma";
+import { invalidateProductCache } from "@/lib/product-cache";
 
 export const editPrice = async ({ price, productId }: { price: number; productId: string }) => {
     const session = await auth();
@@ -10,10 +11,11 @@ export const editPrice = async ({ price, productId }: { price: number; productId
     }
 
     await prisma.product.update({
-        where: { 
+        where: {
             id: productId,
             userId: session.user.id,
         },
         data: { price },
     })
+    await invalidateProductCache(productId);
 }

@@ -18,11 +18,11 @@ type Props = {
 }
 
 export default function TakeOfflineSwitch({ product }: Props) {
-  const [enabled, setEnabled] = useState<$Enums.Avaiavility>(product.avaiavility)
+  const [enabled, setEnabled] = useState<$Enums.Availability>(product.availability)
 
   const mutation = useMutation({
     mutationKey: ["take-product-offline", product.id],
-    mutationFn: (newAvailability: $Enums.Avaiavility) => takeProductOffline(product.id, newAvailability),
+    mutationFn: (newAvailability: $Enums.Availability) => takeProductOffline(product.id, newAvailability),
     
     // Optimistic UI Update
     onMutate: async (newAvailability) => {
@@ -40,7 +40,7 @@ export default function TakeOfflineSwitch({ product }: Props) {
     // Rollback on Error
     onError: (error, _, context) => {
         console.error(error)
-        setEnabled(context?.previousState || product.avaiavility)
+        setEnabled(context?.previousState || product.availability)
         toast.error("Failed to update availability", { id: "take-product-offline" })
     }
   })
