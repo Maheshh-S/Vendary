@@ -54,8 +54,8 @@ const nextConfig = {
   async headers() {
     return [
       {
-        // Pragmatic baseline — deliberately no CSP yet (Razorpay checkout
-        // needs careful frame/script allowances; separate task).
+        // Pragmatic baseline — deliberately no enforcing CSP yet (Razorpay
+        // checkout needs careful frame/script allowances; separate task).
         source: "/(.*)",
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
@@ -69,6 +69,24 @@ const nextConfig = {
           {
             key: "Strict-Transport-Security",
             value: "max-age=63072000; includeSubDomains",
+          },
+          {
+            // Report-Only so nothing can break checkout while the policy is
+            // validated against real traffic (Razorpay checkout posts to
+            // lumberjack.razorpay.com; the FX widget calls exchangerate-api).
+            key: "Content-Security-Policy-Report-Only",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: blob: https://images.unsplash.com https://images.pexels.com https://m.media-amazon.com https://lh3.googleusercontent.com https://pixabay.com https://tailwindcss.com https://*.razorpay.com",
+              "font-src 'self' data:",
+              "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com https://api.exchangerate-api.com https://exchangerate-api.com",
+              "frame-src https://api.razorpay.com https://checkout.razorpay.com",
+              "frame-ancestors 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+            ].join("; "),
           },
         ],
       },
