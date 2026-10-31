@@ -407,6 +407,28 @@ describe("PlaceOrder (confirm with payment proof only)", () => {
     expect(refundMock).not.toHaveBeenCalled();
   });
 
+  it("refuses to confirm when a concurrent refund already recorded the proof", async () => {
+    // The refund path wrote the proof first, so the confirm claim matches
+    // nothing and the in-transaction read exposes the refund-owned row.
+    txMock.order.updateMany.mockResolvedValueOnce({ count: 0 });
+    txMock.order.findUniqueOrThrow.mockResolvedValueOnce({
+      status: "pending",
+      paymentId: RAZORPAY_PAYMENT_ID,
+    });
+
+    const result = await PlaceOrder(signedProof());
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe("PAYMENT_FAILED");
+    expect(result.message).toMatch(/support/i);
+    // The loser must not decrement stock or refund a capture it never owned.
+    expect(txMock.product.updateMany).not.toHaveBeenCalled();
+    expect(refundMock).not.toHaveBeenCalled();
+    // Nothing was written: the order still belongs to the refund.
+    expect(orderState).toEqual({ status: "pending", paymentId: "" });
+  });
+
   it("refunds the capture and returns PRICE_CHANGED when current prices drift", async () => {
     prismaMock.product.findMany.mockResolvedValue([{ id: PRODUCT.id, price: "300.00" }]);
 
@@ -439,6 +461,27 @@ describe("PlaceOrder (confirm with payment proof only)", () => {
     expect(result).toEqual({ ok: true, data: { orderId: "order_1" } });
     expect(refundMock).not.toHaveBeenCalled();
     expect(txMock.product.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("returns PAYMENT_FAILED when the refund claim loses to a recorded proof", async () => {
+    // Price drift enters the refund path, but the claim matches nothing: a
+    // concurrent refund already recorded the proof, so refunding again would
+    // return the capture twice.
+    prismaMock.product.findMany.mockResolvedValue([{ id: PRODUCT.id, price: "300.00" }]);
+    prismaMock.order.updateMany.mockResolvedValueOnce({ count: 0 });
+    prismaMock.order.findUnique
+      .mockResolvedValueOnce({ ...makeOrder(), status: "pending", paymentId: "" })
+      .mockResolvedValueOnce({ status: "pending", paymentId: RAZORPAY_PAYMENT_ID });
+
+    const result = await PlaceOrder(signedProof());
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe("PAYMENT_FAILED");
+    expect(result.message).toMatch(/support/i);
+    expect(refundMock).not.toHaveBeenCalled();
+    expect(txMock.product.updateMany).not.toHaveBeenCalled();
+    expect(orderState).toEqual({ status: "pending", paymentId: "" });
   });
 
   it("refunds the capture and returns AMOUNT_MISMATCH when Razorpay reports a different amount", async () => {
