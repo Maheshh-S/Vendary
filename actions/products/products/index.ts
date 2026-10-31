@@ -1,20 +1,58 @@
 "use server"
 
+import type { Prisma } from "@prisma/client"
+
+import type { ActionResult } from "@/lib/action-result"
 import { prisma } from "@/lib/db/prisma"
+import { runAction } from "@/lib/run-action"
+import { parseInput } from "@/lib/validation"
+import {
+    productsQuerySchema,
+    type ProductSort,
+} from "@/schemas/products/products-query-schema"
 
 export type GetProductsParams = {
-    take?: number
-    skip?: number
+    page?: number | string
+    pageSize?: number | string
     category?: string
+    sort?: string
 }
 
-export const GetProducts = async ({
-    take = 24,
-    skip = 0,
-    category,
-}: GetProductsParams) => {
-    const products = await prisma.product.findMany({
-        where: {
+export type ProductSummary = {
+    id: string
+    name: string
+    tag: string | null
+    imageSrc: string | null
+    price: number
+    imageAlt: string | null
+}
+
+export type ProductsPage = {
+    items: ProductSummary[]
+    total: number
+    page: number
+    pageSize: number
+    totalPages: number
+}
+
+const ORDER_BY: Record<ProductSort, Prisma.ProductOrderByWithRelationInput> = {
+    newest: { createdAt: "desc" },
+    price_asc: { price: "asc" },
+    price_desc: { price: "desc" },
+    name_asc: { name: "asc" },
+}
+
+/**
+ * Public catalog listing. The where clause is built once and shared by the
+ * page query and the count so the total always describes the same result set.
+ */
+export const GetProducts = async (
+    params: GetProductsParams = {}
+): Promise<ActionResult<ProductsPage>> =>
+    runAction("products.list", async () => {
+        const { page, pageSize, category, sort } = parseInput(productsQuerySchema, params)
+
+        const where: Prisma.ProductWhereInput = {
             availability: "IN_STOCK",
             ...(category
                 ? {
@@ -26,23 +64,33 @@ export const GetProducts = async ({
                     },
                 }
                 : {}),
-        },
-        include: {
-            category: true,
-        },
-        orderBy: {
-            createdAt: "desc",
-        },
-        skip,
-        take,
-    })
+        }
 
-    return products.map((product) => ({
-        id: product.id,
-        name: product.name,
-        tag: product.tag,
-        imageSrc: product.thumbnail,
-        price: typeof product.price === "object" && typeof product.price.toNumber === "function" ? product.price.toNumber() : Number(product.price),
-        imageAlt: product.shortDescription,
-    }))
-}
+        const [products, total] = await Promise.all([
+            prisma.product.findMany({
+                where,
+                include: {
+                    category: true,
+                },
+                orderBy: ORDER_BY[sort],
+                skip: (page - 1) * pageSize,
+                take: pageSize,
+            }),
+            prisma.product.count({ where }),
+        ])
+
+        return {
+            items: products.map((product) => ({
+                id: product.id,
+                name: product.name,
+                tag: product.tag,
+                imageSrc: product.thumbnail,
+                price: typeof product.price === "object" && typeof product.price.toNumber === "function" ? product.price.toNumber() : Number(product.price),
+                imageAlt: product.shortDescription,
+            })),
+            total,
+            page,
+            pageSize,
+            totalPages: Math.ceil(total / pageSize),
+        }
+    })

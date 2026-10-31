@@ -37,18 +37,22 @@ export default function AddReviewForm({
     onMutate: () => {
       toast.loading("Adding review", { id: "add-review" });
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
+      if (!res.ok) {
+        toast.error(res.message, { id: "add-review" });
+        return;
+      }
       toast.success("Review added successfully", { id: "add-review" });
+      setIsOpen(false);
     },
-    onError: (e) => {
-      console.error(e);
+    onError: () => {
       toast.error("Failed to add review", { id: "add-review" });
     },
   });
 
   const onSubmit = (data: AddReviewInput) => {
+    // Close only after the action succeeds; failures keep the form open.
     addReviewMutation.mutate(data);
-    setIsOpen(false);
   };
 
   return (

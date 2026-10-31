@@ -6,10 +6,10 @@ export const CACHE_TTL_SECONDS = {
 }
 
 /**
- * Cache keys for product-derived data. v2: bumped when the Product shape
- * changed (availability rename) so pre-rename entries can never be served.
+ * Cache keys for product-derived data. v3: the featured list now filters on
+ * `isFeatured`, so entries cached before that filter can never be served.
  */
-export const FEATURED_PRODUCTS_KEY = "featured-products:v2"
+export const FEATURED_PRODUCTS_KEY = "featured-products:v3"
 export const productBasicDetailsKey = (productId: string) =>
   `product-basic-details:v2:${productId}`
 

@@ -20,18 +20,23 @@ const SearchForm = ({ setIsOpen } : {setIsOpen : (arg0: boolean) => void}) => {
   ]
 
   const [searchTerm, setSearchTerm] = useState("")
+  const trimmedTerm = searchTerm.trim()
 
   const {
     isPending,
     error,
     data: searchResults = [],
   } = useQuery({
-    queryKey: ["search", searchTerm],
+    queryKey: ["search", trimmedTerm],
     queryFn: async () => {
-      if (!searchTerm) return []
-      return await searchProducts(searchTerm)
+      const res = await searchProducts(trimmedTerm)
+      if (!res.ok) {
+        throw new Error(res.message)
+      }
+      return res.data
     },
-    enabled: searchTerm.length > 0,
+    // The server requires 2-64 trimmed characters; don't fire before that.
+    enabled: trimmedTerm.length >= 2,
     // Don't show loading state initially
     initialData: [],
   })
@@ -125,7 +130,7 @@ const SearchForm = ({ setIsOpen } : {setIsOpen : (arg0: boolean) => void}) => {
         )}
 
         {/* No results */}
-        {!isPending && !error && searchTerm && searchResults.length === 0 && (
+        {!isPending && !error && trimmedTerm.length >= 2 && searchResults.length === 0 && (
           <div className="flex flex-col items-center justify-center p-8 text-center">
             <p className="text-muted-foreground mb-1">No artisan products found</p>
             <p className="text-xs text-muted-foreground">Try a different search term</p>
