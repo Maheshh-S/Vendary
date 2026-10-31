@@ -12,7 +12,7 @@ import { AppError } from "@/lib/errors";
 import { computeOrderTotals } from "@/lib/money";
 import { confirmOrder } from "@/lib/orders/confirm-order";
 import { refundAndClose, restoreOrderStock, type RefundOutcome } from "@/lib/orders/refund";
-import { canTransition } from "@/lib/orders/status";
+import { canAdminTransition } from "@/lib/orders/status";
 import { invalidateProductCache } from "@/lib/product-cache";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { verifyRazorpayPaymentSignature } from "@/lib/razorpay";
@@ -412,9 +412,11 @@ const ORDER_STATUS_INPUT = z.object({
 });
 
 /**
- * Moves an order along the shared state machine. The status predicate on the
- * claim is what makes the stock restore idempotent: of two concurrent admins
- * exactly one `updateMany` matches, so `restoreOrderStock` runs at most once.
+ * Moves an order along the admin state machine. `pending -> confirmed` is not
+ * an admin edge: only `confirmOrder`, after payment verification, may confirm.
+ * The status predicate on the claim is what makes the stock restore
+ * idempotent: of two concurrent admins exactly one `updateMany` matches, so
+ * `restoreOrderStock` runs at most once.
  *
  * Phase 0 note: `cancelled`/`refunded` from the admin are record-only
  * overrides — no Razorpay refund is issued here. Phase 1 Task 1.4 wires the
@@ -431,6 +433,7 @@ export const updateOrderStatus = async (orderId: string, status: string) =>
         where: { id: input.orderId },
         select: {
           status: true,
+          paymentId: true,
           items: { select: { productId: true, quantity: true } },
         },
       });
@@ -440,7 +443,17 @@ export const updateOrderStatus = async (orderId: string, status: string) =>
 
       const from = order.status;
       const to = input.status;
-      if (!canTransition(from, to)) {
+
+      // Unreachable through `canAdminTransition` below, but a direct caller
+      // deserves the actual reason instead of a generic transition conflict.
+      if (from === "pending" && to === "confirmed") {
+        throw new AppError(
+          "CONFLICT",
+          "Orders are confirmed automatically after payment verification. You cannot confirm a pending order manually."
+        );
+      }
+
+      if (!canAdminTransition(from, to)) {
         throw new AppError("CONFLICT", `Cannot change an order from ${from} to ${to}.`);
       }
 
@@ -456,8 +469,12 @@ export const updateOrderStatus = async (orderId: string, status: string) =>
 
       // Only `pending -> confirmed` ever decremented stock; pending orders
       // never did, and shipped/delivered goods have left the warehouse. Only
-      // the confirmed -> cancelled/refunded transition puts units back.
-      const restoreStock = from === "confirmed" && (to === "cancelled" || to === "refunded");
+      // the confirmed -> cancelled/refunded transition puts units back, and
+      // only when a payment was actually verified (`paymentId` present).
+      // Legacy/admin-confirmed rows have no proof, so restoring would inflate
+      // stock that was never decremented.
+      const wantsRestore = from === "confirmed" && (to === "cancelled" || to === "refunded");
+      const restoreStock = wantsRestore && order.paymentId !== "";
       if (restoreStock) {
         await restoreOrderStock(tx, order.items);
       }
@@ -466,11 +483,22 @@ export const updateOrderStatus = async (orderId: string, status: string) =>
         orderId: input.orderId,
         from,
         to,
+        restoreSkipped: wantsRestore && !restoreStock,
         restoredProductIds: restoreStock
           ? order.items.flatMap((item) => (item.productId ? [item.productId] : []))
           : [],
       };
     });
+
+    if (outcome.restoreSkipped) {
+      console.warn(
+        JSON.stringify({
+          level: "warn",
+          event: "order_restore_skipped_no_payment",
+          orderId: outcome.orderId,
+        })
+      );
+    }
 
     // Post-commit: only the winner changed stock, so only it drops the stale
     // product views. Cache outages stay non-fatal inside the helper.

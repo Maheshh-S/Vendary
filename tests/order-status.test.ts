@@ -44,7 +44,12 @@ import type { OrderStatus } from "@prisma/client";
 
 import { updateOrderStatus } from "@/actions/orders";
 import type { ActionErrorCode, ActionResult } from "@/lib/action-result";
-import { ORDER_TRANSITIONS, canTransition } from "@/lib/orders/status";
+import {
+  ADMIN_TRANSITIONS,
+  ORDER_TRANSITIONS,
+  canAdminTransition,
+  canTransition,
+} from "@/lib/orders/status";
 
 const ALL_STATUSES: OrderStatus[] = [
   "pending",
@@ -86,6 +91,17 @@ const ILLEGAL_TRANSITIONS: [OrderStatus, OrderStatus][] = [
 ];
 
 describe("ORDER_TRANSITIONS / canTransition", () => {
+  it("matches the full system map, including the payment-verified edge", () => {
+    expect(ORDER_TRANSITIONS).toEqual({
+      pending: ["confirmed", "cancelled"],
+      confirmed: ["shipped", "cancelled", "refunded"],
+      shipped: ["delivered", "refunded"],
+      delivered: ["refunded"],
+      cancelled: [],
+      refunded: [],
+    });
+  });
+
   it("covers every order status exactly once as a key", () => {
     expect(Object.keys(ORDER_TRANSITIONS).sort()).toEqual([...ALL_STATUSES].sort());
   });
@@ -120,6 +136,53 @@ describe("ORDER_TRANSITIONS / canTransition", () => {
   });
 });
 
+const ADMIN_LEGAL_TRANSITIONS: [OrderStatus, OrderStatus][] = LEGAL_TRANSITIONS.filter(
+  ([from, to]) => !(from === "pending" && to === "confirmed")
+);
+
+const ADMIN_ILLEGAL_TRANSITIONS: [OrderStatus, OrderStatus][] = [
+  ...ILLEGAL_TRANSITIONS,
+  ["pending", "confirmed"],
+];
+
+describe("ADMIN_TRANSITIONS / canAdminTransition", () => {
+  it("covers every order status exactly once as a key", () => {
+    expect(Object.keys(ADMIN_TRANSITIONS).sort()).toEqual([...ALL_STATUSES].sort());
+  });
+
+  it("removes only the payment-verified pending -> confirmed edge", () => {
+    expect(ADMIN_TRANSITIONS.pending).toEqual(["cancelled"]);
+    for (const from of ALL_STATUSES) {
+      const expected =
+        from === "pending"
+          ? ORDER_TRANSITIONS.pending.filter((to) => to !== "confirmed")
+          : ORDER_TRANSITIONS[from];
+      expect(ADMIN_TRANSITIONS[from]).toEqual(expected);
+    }
+  });
+
+  it("refuses pending -> confirmed while the system map still allows it", () => {
+    expect(canAdminTransition("pending", "confirmed")).toBe(false);
+    expect(canTransition("pending", "confirmed")).toBe(true);
+  });
+
+  it.each(ADMIN_LEGAL_TRANSITIONS)("allows admin %s -> %s", (from, to) => {
+    expect(canAdminTransition(from, to)).toBe(true);
+  });
+
+  it.each(ADMIN_ILLEGAL_TRANSITIONS)("rejects admin %s -> %s", (from, to) => {
+    expect(canAdminTransition(from, to)).toBe(false);
+  });
+
+  it("matches the declared admin map for every from/to pair", () => {
+    for (const from of ALL_STATUSES) {
+      for (const to of ALL_STATUSES) {
+        expect(canAdminTransition(from, to)).toBe(ADMIN_TRANSITIONS[from].includes(to));
+      }
+    }
+  });
+});
+
 const ORDER_ID = "order_1";
 const PRODUCT_A = "prod_1";
 const PRODUCT_B = "prod_2";
@@ -130,14 +193,18 @@ const USER_SESSION = { user: { id: "user_1", role: "USER" } };
 type OrderRow = {
   id: string;
   status: OrderStatus;
+  paymentId: string;
   items: { productId: string | null; quantity: number }[];
 };
 
 let orderRow: OrderRow | null;
 
-const makeOrder = (status: OrderStatus): OrderRow => ({
+const PAYMENT_ID = "pay_verified_1";
+
+const makeOrder = (status: OrderStatus, paymentId = PAYMENT_ID): OrderRow => ({
   id: ORDER_ID,
   status,
+  paymentId,
   items: [
     { productId: PRODUCT_A, quantity: 2 },
     // A deleted product has no row to restore; its snapshot id is null.
@@ -163,9 +230,14 @@ const expectFailure = (
 };
 
 const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+/** Exact structured warnings each test allows; every test starts at none. */
+let expectedWarnings: unknown[][] = [];
 
 beforeEach(() => {
   vi.clearAllMocks();
+  expectedWarnings = [];
   orderRow = makeOrder("confirmed");
 
   authMock.mockResolvedValue(ADMIN_SESSION);
@@ -186,7 +258,9 @@ beforeEach(() => {
   });
 
   txMock.order.findUnique.mockImplementation(async () =>
-    orderRow === null ? null : { status: orderRow.status, items: orderRow.items }
+    orderRow === null
+      ? null
+      : { status: orderRow.status, paymentId: orderRow.paymentId, items: orderRow.items }
   );
   txMock.order.updateMany.mockImplementation(
     async (args: { where: { id: string; status: OrderStatus }; data: { status: OrderStatus } }) => {
@@ -203,11 +277,15 @@ afterEach(() => {
   // Expected failures are user-facing AppErrors; only unexpected (INTERNAL)
   // errors may reach the logger.
   expect(consoleError).not.toHaveBeenCalled();
+  // Warnings are structured JSON; only the restore-skip test opts in.
+  expect(consoleWarn.mock.calls).toEqual(expectedWarnings);
   consoleError.mockClear();
+  consoleWarn.mockClear();
 });
 
 afterAll(() => {
   consoleError.mockRestore();
+  consoleWarn.mockRestore();
 });
 
 describe("updateOrderStatus authorization and validation", () => {
@@ -265,6 +343,22 @@ describe("updateOrderStatus transition guards", () => {
     expect(txMock.order.updateMany).not.toHaveBeenCalled();
     expect(txMock.product.updateMany).not.toHaveBeenCalled();
     expect(orderRow?.status).toBe("pending");
+  });
+
+  it("rejects pending -> confirmed with the payment-verification message and writes nothing", async () => {
+    orderRow = makeOrder("pending", "");
+
+    expectFailure(
+      await updateOrderStatus(ORDER_ID, "confirmed"),
+      "CONFLICT",
+      "Orders are confirmed automatically after payment verification. You cannot confirm a pending order manually."
+    );
+    expect(txMock.order.updateMany).not.toHaveBeenCalled();
+    expect(txMock.product.updateMany).not.toHaveBeenCalled();
+    expect(invalidateMock).not.toHaveBeenCalled();
+    expect(revalidateMock).not.toHaveBeenCalled();
+    expect(orderRow?.status).toBe("pending");
+    expect(orderRow?.paymentId).toBe("");
   });
 
   it("rejects delivered -> cancelled with CONFLICT and writes nothing", async () => {
@@ -335,6 +429,14 @@ describe("updateOrderStatus stock restoration", () => {
       ok: true,
       data: { orderId: ORDER_ID, from: "confirmed", to: "cancelled" },
     });
+    expect(txMock.order.findUnique).toHaveBeenCalledWith({
+      where: { id: ORDER_ID },
+      select: {
+        status: true,
+        paymentId: true,
+        items: { select: { productId: true, quantity: true } },
+      },
+    });
     expect(txMock.order.updateMany).toHaveBeenCalledTimes(1);
     expect(txMock.order.updateMany).toHaveBeenCalledWith({
       where: { id: ORDER_ID, status: "confirmed" },
@@ -375,19 +477,35 @@ describe("updateOrderStatus stock restoration", () => {
     expect(refundPaymentMock).not.toHaveBeenCalled();
   });
 
-  it("does not restore stock for pending -> confirmed (nothing was decremented)", async () => {
-    orderRow = makeOrder("pending");
+  it("transitions confirmed -> cancelled without restoring stock when paymentId is empty, logging a structured warning", async () => {
+    orderRow = makeOrder("confirmed", "");
+    expectedWarnings = [
+      [
+        JSON.stringify({
+          level: "warn",
+          event: "order_restore_skipped_no_payment",
+          orderId: ORDER_ID,
+        }),
+      ],
+    ];
 
-    const result = await updateOrderStatus(ORDER_ID, "confirmed");
+    const result = await updateOrderStatus(ORDER_ID, "cancelled");
 
     expect(result).toEqual({
       ok: true,
-      data: { orderId: ORDER_ID, from: "pending", to: "confirmed" },
+      data: { orderId: ORDER_ID, from: "confirmed", to: "cancelled" },
     });
+    expect(txMock.order.updateMany).toHaveBeenCalledWith({
+      where: { id: ORDER_ID, status: "confirmed" },
+      data: { status: "cancelled" },
+    });
+    // Nobody verified a payment, so no units were ever decremented.
     expect(txMock.product.updateMany).not.toHaveBeenCalled();
     expect(invalidateMock).not.toHaveBeenCalled();
     expect(revalidateMock).toHaveBeenCalledWith("/admin");
     expect(revalidateMock).toHaveBeenCalledWith("/my-orders");
+    expect(orderRow?.status).toBe("cancelled");
+    expect(consoleWarn).toHaveBeenCalledTimes(1);
   });
 
   it("does not restore stock for shipped -> delivered (goods left the warehouse)", async () => {

@@ -5,10 +5,10 @@ import toast from "react-hot-toast";
 import type { OrderStatus } from "@prisma/client";
 import { Select } from "@/components/ui/select";
 import { updateOrderStatus } from "@/actions/orders";
-import { ORDER_TRANSITIONS } from "@/lib/orders/status";
+import { ADMIN_TRANSITIONS } from "@/lib/orders/status";
 
 const isOrderStatus = (value: string): value is OrderStatus =>
-  Object.prototype.hasOwnProperty.call(ORDER_TRANSITIONS, value);
+  Object.prototype.hasOwnProperty.call(ADMIN_TRANSITIONS, value);
 
 type Props = {
   orderId: string;
@@ -47,7 +47,9 @@ const OrderStatusSelect = ({ orderId, status }: Props) => {
   });
 
   const current: OrderStatus = isOrderStatus(value) ? value : "pending";
-  const nextStates = ORDER_TRANSITIONS[current];
+  // Admin-only edges: `confirmed` is intentionally absent for pending orders,
+  // because only the payment-verified `confirmOrder` path may confirm.
+  const nextStates = ADMIN_TRANSITIONS[current];
   const options: OrderStatus[] = [current, ...nextStates];
 
   return (
