@@ -12,14 +12,8 @@ import {prisma} from "@/lib/db/prisma"
 import { getDummyHash } from "@/lib/dummy-hash"
 import bcrypt from "bcryptjs"
 import { getVerificationTokenByToken } from "../token"
-import { enforceRateLimit } from "@/lib/rate-limit"
-import { headers } from "next/headers"
-
-const clientKey = async (bucket: string) => {
-    const headerList = await headers();
-    const ip = headerList.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-    return `${bucket}:${ip}`;
-}
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
+import { clientKey } from "@/lib/request-key"
 
 export const signOutUser = async () => {
     try {
@@ -76,7 +70,11 @@ export const Login = async (credentials : z.infer<typeof LoginSchema>) => {
 
     // Brute-force guard: 5 attempts per IP per minute, counted on every
     // attempt (valid or not) so timing doesn't leak validity.
-    enforceRateLimit({ key: await clientKey("login"), limit: 5, windowMs: 60_000 });
+    await enforceRateLimit({
+        ...RATE_LIMITS.login,
+        bucket: "login",
+        subject: await clientKey("login"),
+    });
 
     const {
         email,
@@ -146,7 +144,11 @@ export const Register = async (credentials : RegisterSchemaType) => {
 
     // Registration sends a verification email (Resend cost) — 5 per IP per
     // 15 minutes.
-    enforceRateLimit({ key: await clientKey("register"), limit: 5, windowMs: 15 * 60_000 });
+    await enforceRateLimit({
+        ...RATE_LIMITS.register,
+        bucket: "register",
+        subject: await clientKey("register"),
+    });
 
     const user = await GetUserByEmail(data.email);
     if(user){
