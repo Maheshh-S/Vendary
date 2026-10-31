@@ -27,9 +27,12 @@ const createRedisClient = (url: string): CacheClient => {
   // Fail fast: every consumer already handles a rejected call by falling back
   // (cache reads to the DB, the limiter to its memory window). Queuing commands
   // during an outage would instead make those callers wait on ioredis retries.
+  // `commandTimeout` bounds a blackholed established socket too: without it a
+  // `get`/`del` for a product page could hang until TCP keeps-alive fires.
   const client = new Redis(url, {
     maxRetriesPerRequest: 1,
     connectTimeout: 1000,
+    commandTimeout: 1000,
     enableOfflineQueue: false,
   })
   client.on("error", (error) => {
