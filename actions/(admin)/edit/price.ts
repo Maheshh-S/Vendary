@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/auth-guards"
 import { prisma } from "@/lib/db/prisma"
 import { AppError } from "@/lib/errors"
 import { invalidateProductCache } from "@/lib/product-cache"
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
 import { runAction } from "@/lib/run-action"
 import { parseInput } from "@/lib/validation"
 import { editPriceSchema, formatPriceForStorage } from "@/schemas/admin/products/edit-price-schema"
@@ -17,7 +18,13 @@ type EditPriceInput = {
 
 export const editPrice = async (input: EditPriceInput) =>
   runAction("admin.editPrice", async () => {
-    await requireAdmin()
+    const session = await requireAdmin()
+
+    await enforceRateLimit({
+      bucket: "adminMutation",
+      subject: session.user.id,
+      ...RATE_LIMITS.adminMutation,
+    })
 
     const { productId, price } = parseInput(editPriceSchema, input)
     const priceValue = formatPriceForStorage(price)

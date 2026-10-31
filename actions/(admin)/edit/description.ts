@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/auth-guards"
 import { prisma } from "@/lib/db/prisma"
 import { AppError } from "@/lib/errors"
 import { invalidateProductCache } from "@/lib/product-cache"
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
 import { runAction } from "@/lib/run-action"
 import { parseInput } from "@/lib/validation"
 import {
@@ -18,7 +19,13 @@ export const editShortDescription = async (input: {
   shortDescription: string
 }) =>
   runAction("admin.editShortDescription", async () => {
-    await requireAdmin()
+    const session = await requireAdmin()
+
+    await enforceRateLimit({
+      bucket: "adminMutation",
+      subject: session.user.id,
+      ...RATE_LIMITS.adminMutation,
+    })
 
     const { productId, shortDescription } = parseInput(editShortDescriptionSchema, input)
 
@@ -42,7 +49,13 @@ export const editLongDescription = async (input: {
   longDescription: string
 }) =>
   runAction("admin.editLongDescription", async () => {
-    await requireAdmin()
+    const session = await requireAdmin()
+
+    await enforceRateLimit({
+      bucket: "adminMutation",
+      subject: session.user.id,
+      ...RATE_LIMITS.adminMutation,
+    })
 
     const { productId, longDescription } = parseInput(editLongDescriptionSchema, input)
 

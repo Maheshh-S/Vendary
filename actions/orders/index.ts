@@ -424,7 +424,13 @@ const ORDER_STATUS_INPUT = z.object({
  */
 export const updateOrderStatus = async (orderId: string, status: string) =>
   runAction("orders.updateStatus", async () => {
-    await requireAdmin();
+    const session = await requireAdmin();
+
+    await enforceRateLimit({
+      bucket: "adminMutation",
+      subject: session.user.id,
+      ...RATE_LIMITS.adminMutation,
+    });
 
     const input = parseInput(ORDER_STATUS_INPUT, { orderId, status });
 

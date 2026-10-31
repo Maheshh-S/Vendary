@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
  * authorization/validation order and the exact Prisma calls.
  */
 
-const { authMock, prismaMock, invalidateMock, revalidateMock } = vi.hoisted(() => {
+const { authMock, prismaMock, invalidateMock, revalidateMock, rateLimitMock } = vi.hoisted(() => {
   const prismaMock = {
     product: {
       findUnique: vi.fn(),
@@ -25,6 +25,7 @@ const { authMock, prismaMock, invalidateMock, revalidateMock } = vi.hoisted(() =
     prismaMock,
     invalidateMock: vi.fn(),
     revalidateMock: vi.fn(),
+    rateLimitMock: vi.fn(),
   };
 });
 
@@ -32,6 +33,13 @@ vi.mock("@/auth", () => ({ auth: authMock }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db/prisma", () => ({ prisma: prismaMock }));
 vi.mock("@/lib/product-cache", () => ({ invalidateProductCache: invalidateMock }));
+vi.mock("@/lib/rate-limit", () => ({
+  enforceRateLimit: rateLimitMock,
+  // Mirrors lib/rate-limit.ts; the actions read these at call time.
+  RATE_LIMITS: {
+    adminMutation: { limit: 60, windowMs: 60_000 },
+  },
+}));
 vi.mock("next/cache", () => ({ revalidatePath: revalidateMock }));
 
 import { editLongDescription, editShortDescription } from "@/actions/(admin)/edit/description";
@@ -41,6 +49,7 @@ import { createProduct } from "@/actions/(admin)/product/create-product";
 import { deleteProduct } from "@/actions/(admin)/product/delete-product";
 import { takeProductOffline } from "@/actions/(admin)/product/take-product-offline";
 import type { ActionErrorCode, ActionResult } from "@/lib/action-result";
+import { AppError } from "@/lib/errors";
 import type { ProductFormValues } from "@/schemas/admin/products/create-product-schema";
 
 const ADMIN_SESSION = {
@@ -104,6 +113,7 @@ const expectNoDatabaseAccess = () => {
 beforeEach(() => {
   vi.clearAllMocks();
   authMock.mockResolvedValue(ADMIN_SESSION);
+  rateLimitMock.mockResolvedValue(undefined);
   prismaMock.product.findUnique.mockResolvedValue({ id: PRODUCT_ID });
   prismaMock.product.updateMany.mockResolvedValue({ count: 1 });
   prismaMock.product.deleteMany.mockResolvedValue({ count: 1 });
@@ -146,6 +156,7 @@ describe.each(ACTION_CALLS)("%s authorization", (_name, call) => {
   it("rejects unauthenticated callers with UNAUTHORIZED", async () => {
     authMock.mockResolvedValue(null);
     expectFailure(await call(), "UNAUTHORIZED");
+    expect(rateLimitMock).not.toHaveBeenCalled();
     expectNoDatabaseAccess();
     expect(invalidateMock).not.toHaveBeenCalled();
   });
@@ -153,8 +164,44 @@ describe.each(ACTION_CALLS)("%s authorization", (_name, call) => {
   it("rejects non-ADMIN callers with FORBIDDEN before validating input", async () => {
     authMock.mockResolvedValue(USER_SESSION);
     expectFailure(await call(), "FORBIDDEN");
+    expect(rateLimitMock).not.toHaveBeenCalled();
     expectNoDatabaseAccess();
     expect(invalidateMock).not.toHaveBeenCalled();
+  });
+
+  it("counts one adminMutation hit for the signed-in admin", async () => {
+    await call();
+
+    expect(rateLimitMock).toHaveBeenCalledTimes(1);
+    expect(rateLimitMock).toHaveBeenCalledWith({
+      bucket: "adminMutation",
+      subject: ADMIN_SESSION.user.id,
+      limit: 60,
+      windowMs: 60_000,
+    });
+  });
+});
+
+describe("admin mutation rate limit", () => {
+  it("returns RATE_LIMITED and skips validation, database and cache work when the limiter rejects", async () => {
+    rateLimitMock.mockRejectedValue(
+      new AppError("RATE_LIMITED", "Too many attempts. Please try again in 60s.")
+    );
+
+    expectFailure(
+      await editPrice({ productId: PRODUCT_ID, price: 10.1 }),
+      "RATE_LIMITED",
+      "Too many attempts. Please try again in 60s."
+    );
+    expect(rateLimitMock).toHaveBeenCalledWith({
+      bucket: "adminMutation",
+      subject: ADMIN_SESSION.user.id,
+      limit: 60,
+      windowMs: 60_000,
+    });
+    expectNoDatabaseAccess();
+    expect(invalidateMock).not.toHaveBeenCalled();
+    expect(revalidateMock).not.toHaveBeenCalled();
   });
 });
 

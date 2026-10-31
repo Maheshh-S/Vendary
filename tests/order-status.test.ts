@@ -9,7 +9,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
  * are `AppError`s, so nothing may reach `console.error`.
  */
 
-const { authMock, prismaMock, txMock, invalidateMock, revalidateMock, refundPaymentMock } =
+const { authMock, prismaMock, txMock, invalidateMock, revalidateMock, refundPaymentMock, rateLimitMock } =
   vi.hoisted(() => {
     const txMock = {
       order: { findUnique: vi.fn(), updateMany: vi.fn() },
@@ -23,6 +23,7 @@ const { authMock, prismaMock, txMock, invalidateMock, revalidateMock, refundPaym
       invalidateMock: vi.fn(),
       revalidateMock: vi.fn(),
       refundPaymentMock: vi.fn(),
+      rateLimitMock: vi.fn(),
     };
   });
 
@@ -36,14 +37,19 @@ vi.mock("@/lib/razorpay-client", () => ({
   refundPayment: refundPaymentMock,
 }));
 vi.mock("@/lib/rate-limit", () => ({
-  enforceRateLimit: vi.fn(),
-  RATE_LIMITS: { createRazorpayOrder: { limit: 10, windowMs: 60_000 } },
+  enforceRateLimit: rateLimitMock,
+  // Mirrors lib/rate-limit.ts; the actions read these at call time.
+  RATE_LIMITS: {
+    createRazorpayOrder: { limit: 10, windowMs: 60_000 },
+    adminMutation: { limit: 60, windowMs: 60_000 },
+  },
 }));
 
 import type { OrderStatus } from "@prisma/client";
 
 import { updateOrderStatus } from "@/actions/orders";
 import type { ActionErrorCode, ActionResult } from "@/lib/action-result";
+import { AppError } from "@/lib/errors";
 import {
   ADMIN_TRANSITIONS,
   ORDER_TRANSITIONS,
@@ -241,6 +247,7 @@ beforeEach(() => {
   orderRow = makeOrder("confirmed");
 
   authMock.mockResolvedValue(ADMIN_SESSION);
+  rateLimitMock.mockResolvedValue(undefined);
   invalidateMock.mockResolvedValue(undefined);
   revalidateMock.mockReturnValue(undefined);
   txMock.product.updateMany.mockResolvedValue({ count: 1 });
@@ -293,6 +300,7 @@ describe("updateOrderStatus authorization and validation", () => {
     authMock.mockResolvedValue(null);
 
     expectFailure(await updateOrderStatus(ORDER_ID, "cancelled"), "UNAUTHORIZED", "Please sign in to continue.");
+    expect(rateLimitMock).not.toHaveBeenCalled();
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
     expect(invalidateMock).not.toHaveBeenCalled();
   });
@@ -305,6 +313,7 @@ describe("updateOrderStatus authorization and validation", () => {
       "FORBIDDEN",
       "You do not have permission to do that."
     );
+    expect(rateLimitMock).not.toHaveBeenCalled();
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
     expect(invalidateMock).not.toHaveBeenCalled();
   });
@@ -318,6 +327,35 @@ describe("updateOrderStatus authorization and validation", () => {
     expectFailure(await updateOrderStatus("", "cancelled"), "VALIDATION");
     expectFailure(await updateOrderStatus("x".repeat(65), "cancelled"), "VALIDATION");
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateOrderStatus rate limiting", () => {
+  it("counts one adminMutation hit per admin invocation", async () => {
+    await updateOrderStatus(ORDER_ID, "cancelled");
+
+    expect(rateLimitMock).toHaveBeenCalledTimes(1);
+    expect(rateLimitMock).toHaveBeenCalledWith({
+      bucket: "adminMutation",
+      subject: "admin_1",
+      limit: 60,
+      windowMs: 60_000,
+    });
+  });
+
+  it("returns RATE_LIMITED without touching the database or cache when the limiter rejects", async () => {
+    rateLimitMock.mockRejectedValue(
+      new AppError("RATE_LIMITED", "Too many attempts. Please try again in 60s.")
+    );
+
+    expectFailure(
+      await updateOrderStatus(ORDER_ID, "cancelled"),
+      "RATE_LIMITED",
+      "Too many attempts. Please try again in 60s."
+    );
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    expect(invalidateMock).not.toHaveBeenCalled();
+    expect(revalidateMock).not.toHaveBeenCalled();
   });
 });
 

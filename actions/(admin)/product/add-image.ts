@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/auth-guards"
 import { prisma } from "@/lib/db/prisma"
 import { AppError } from "@/lib/errors"
 import { invalidateProductCache } from "@/lib/product-cache"
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
 import { runAction } from "@/lib/run-action"
 import { parseInput } from "@/lib/validation"
 import {
@@ -15,7 +16,13 @@ import {
 
 export const addImagesToProduct = async (productId: string, imageData: ImageFormValues) =>
   runAction("admin.addImagesToProduct", async () => {
-    await requireAdmin()
+    const session = await requireAdmin()
+
+    await enforceRateLimit({
+      bucket: "adminMutation",
+      subject: session.user.id,
+      ...RATE_LIMITS.adminMutation,
+    })
 
     const input = parseInput(addImagesInputSchema, { productId, images: imageData?.images })
 
