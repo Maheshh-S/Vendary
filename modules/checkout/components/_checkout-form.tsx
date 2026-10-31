@@ -26,6 +26,12 @@ import { PlaceOrder, createRazorpayOrder } from "@/actions/orders";
 import { useLocale } from "@/providers/locale-provider";
 import type { Country } from "react-phone-number-input";
 
+type RazorpaySuccessResponse = {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+};
+
 // Add Razorpay types
 declare global {
   interface Window {
@@ -77,7 +83,11 @@ export default function CheckoutForm({ checkoutSession } : { checkoutSession : C
     onMutate: () => {
       toast.loading("Placing your order", { id: "place-order" });
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
+      if (!res.ok) {
+        toast.error(res.message, { id: "place-order" });
+        return;
+      }
       clearCart();
       toast.success("Order placed successfully", { id: "place-order" });
       router.push('/my-orders');
@@ -97,27 +107,30 @@ export default function CheckoutForm({ checkoutSession } : { checkoutSession : C
 
     try {
       toast.loading("Initializing payment...", { id: "razorpay-init" });
-      
-      // Create Razorpay order on the server
-      const razorpayOrderData = await createRazorpayOrder({
+
+      // Create the Razorpay order and the durable pending order on the server.
+      const init = await createRazorpayOrder({
         checkoutSession,
         orderData
       });
-      
-      if (!razorpayOrderData || !razorpayOrderData.id) {
-        throw new Error("Failed to create payment order");
+
+      if (!init.ok) {
+        toast.error(init.message, { id: "razorpay-init" });
+        return;
       }
+
+      const { razorpayOrderId, amountPaise, currency } = init.data;
 
       toast.success("Payment initialized", { id: "razorpay-init" });
 
       // Configure Razorpay options
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-        amount: razorpayOrderData.amount,
-        currency: razorpayOrderData.currency,
+        amount: amountPaise,
+        currency,
         name: "Vendary",
         description: "Order Payment",
-        order_id: razorpayOrderData.id,
+        order_id: razorpayOrderId,
         prefill: {
           name: `${orderData.fName} ${orderData.lName || ''}`,
           email: '', // You may want to add email to your form
@@ -129,16 +142,16 @@ export default function CheckoutForm({ checkoutSession } : { checkoutSession : C
         theme: {
           color: "#3B82F6" // Blue color to match your button
         },
-        handler: function(response: any) {
-          // Process successful payment
+        handler: function(response: RazorpaySuccessResponse) {
+          if (response.razorpay_order_id !== razorpayOrderId) {
+            toast.error("Payment does not match this order. Please contact support.", { id: "place-order" });
+            return;
+          }
+          // The server re-derives everything from the order created above.
           OrderNow({
-            checkoutSession, 
-            orderData,
-            paymentDetails: {
-              razorpayPaymentId: response.razorpay_payment_id,
-              razorpayOrderId: response.razorpay_order_id,
-              razorpaySignature: response.razorpay_signature
-            }
+            razorpayOrderId: response.razorpay_order_id,
+            razorpayPaymentId: response.razorpay_payment_id,
+            razorpaySignature: response.razorpay_signature
           });
         }
       };

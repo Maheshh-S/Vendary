@@ -1,85 +1,76 @@
-"use server"
+"use server";
 
-import { auth } from "@/auth";
+import crypto from "node:crypto";
+
+import { OrderStatus } from "@prisma/client";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+
+import { requireUser } from "@/lib/auth-guards";
 import { prisma } from "@/lib/db/prisma";
 import { serializePrismaObject } from "@/lib/db/serializer";
+import { AppError } from "@/lib/errors";
+import { computeOrderTotals } from "@/lib/money";
+import { confirmOrder } from "@/lib/orders/confirm-order";
+import { invalidateProductCache } from "@/lib/product-cache";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { verifyRazorpayPaymentSignature } from "@/lib/razorpay";
+import { getRazorpayClient, refundPayment, type RefundReason } from "@/lib/razorpay-client";
+import { runAction } from "@/lib/run-action";
+import { parseInput } from "@/lib/validation";
+import { confirmPaymentSchema, type ConfirmPaymentSchema } from "@/schemas/checkout/confirm-payment-schema";
 import {
   checkoutSessionSchema,
   placeOrderSchema,
-  PlaceOrderSchema,
+  type PlaceOrderSchema,
 } from "@/schemas/checkout/place-order-schema";
 import { CheckoutSession } from "@/modules/products/types/checkout";
-import { computeOrderTotals } from "@/lib/money";
-import { verifyRazorpayPaymentSignature } from "@/lib/razorpay";
-import { invalidateProductCache } from "@/lib/product-cache";
-import { revalidatePath } from "next/cache";
-import Razorpay from "razorpay";
 
 // Razorpay rejects order amounts below 100 paise (₹1).
 const MIN_RAZORPAY_AMOUNT_PAISE = 100;
+const CREATE_ORDER_BUCKET = "createRazorpayOrder";
 
-/**
- * Rejections that are safe (and necessary) to show the shopper verbatim:
- * stock changes, unavailable products, amount mismatches. Everything else is
- * masked behind a generic message so internals never leak.
- */
-class OrderRejectionError extends Error {}
-
-const getRazorpayClient = () => {
-  const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
-  if (!keyId || !keySecret) {
-    console.error("Razorpay keys are not configured (NEXT_PUBLIC_RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET)");
-    throw new Error("Payment initialization failed");
-  }
-  return new Razorpay({ key_id: keyId, key_secret: keySecret });
-};
+const toRupees = (paise: number): string => (paise / 100).toFixed(2);
 
 type VerifiedLine = {
-  product: {
-    id: string;
-    name: string;
-    stockQty: number;
-  };
+  productId: string;
+  productName: string;
+  productImage: string | null;
   quantity: number;
   unitPaise: number;
 };
 
 /**
- * Re-prices a client checkout session from the database. Client-supplied
+ * Re-prices a validated checkout session from the database. Client-supplied
  * prices are ignored entirely — this is the single source of truth for every
- * amount charged or persisted. Throws OrderRejectionError (with the product
- * name) when a product is missing, not in stock, or under-stocked for the
- * requested quantity.
+ * amount charged and persisted. Throws an AppError when a product is missing,
+ * unavailable, or under-stocked, so the shopper sees a verbatim explanation.
  */
-const verifyAndPriceLines = async (
-  checkoutSession: { line_items: { productId: string; quantity: number }[] }
-): Promise<{ lines: VerifiedLine[]; totals: ReturnType<typeof computeOrderTotals> }> => {
-  const { data, error } = checkoutSessionSchema.safeParse(checkoutSession);
-  if (error) {
-    throw new OrderRejectionError("Your cart is invalid or empty. Please refresh your cart.");
-  }
-
+const verifyAndPriceLines = async (checkoutSession: {
+  line_items: { productId: string; quantity: number }[];
+}): Promise<{ lines: VerifiedLine[]; totals: ReturnType<typeof computeOrderTotals> }> => {
   const products = await prisma.product.findMany({
-    where: { id: { in: data.line_items.map((item) => item.productId) } },
-    select: { id: true, name: true, price: true, availability: true, stockQty: true },
+    where: { id: { in: checkoutSession.line_items.map((item) => item.productId) } },
+    select: { id: true, name: true, price: true, availability: true, stockQty: true, thumbnail: true },
   });
   const productById = new Map(products.map((product) => [product.id, product]));
 
   const lines: VerifiedLine[] = [];
-  for (const item of data.line_items) {
+  for (const item of checkoutSession.line_items) {
     const product = productById.get(item.productId);
     if (!product) {
-      throw new OrderRejectionError("Some items in your cart are no longer available. Please refresh your cart.");
+      throw new AppError("OUT_OF_STOCK", "Some items in your cart are no longer available. Please refresh your cart.");
     }
     if (product.availability !== "IN_STOCK") {
-      throw new OrderRejectionError(`"${product.name}" is currently unavailable.`);
+      throw new AppError("OUT_OF_STOCK", `"${product.name}" is currently unavailable.`);
     }
     if (product.stockQty < item.quantity) {
-      throw new OrderRejectionError(`Only ${product.stockQty} left of "${product.name}". Please update your cart.`);
+      throw new AppError("OUT_OF_STOCK", `Only ${product.stockQty} left of "${product.name}". Please update your cart.`);
     }
     lines.push({
-      product: { id: product.id, name: product.name, stockQty: product.stockQty },
+      productId: product.id,
+      productName: product.name,
+      productImage: product.thumbnail,
       quantity: item.quantity,
       // Stored prices are rupees; paise conversion rounded to stay integral.
       unitPaise: Math.round(Number(product.price) * 100),
@@ -89,232 +80,332 @@ const verifyAndPriceLines = async (
   return { lines, totals: computeOrderTotals(lines) };
 };
 
-// Function to create Razorpay order
-export const createRazorpayOrder = async ({
-  checkoutSession,
-  orderData
-}: {
-  checkoutSession: CheckoutSession;
-  orderData: PlaceOrderSchema
-}) => {
-  // Pricing/stock validation happens outside the try: its rejections reach
-  // the shopper verbatim and must not be masked.
-  const { error } = placeOrderSchema.safeParse(orderData);
-  if (error) {
-    throw new Error("Invalid order data");
-  }
+/**
+ * Re-prices the durable order's lines at current DB prices. The snapshot name
+ * is used only for the user-facing error. A missing product (deleted after
+ * init) or a null productId is unfulfillable, so it surfaces as OUT_OF_STOCK.
+ */
+const priceOrderItemsFromDb = async (
+  items: { productId: string | null; productName: string; quantity: number }[]
+): Promise<ReturnType<typeof computeOrderTotals>> => {
+  const productIds = items
+    .map((item) => item.productId)
+    .filter((productId): productId is string => productId !== null);
+  const products = await prisma.product.findMany({
+    where: { id: { in: productIds } },
+    select: { id: true, price: true },
+  });
+  const priceById = new Map(products.map((product) => [product.id, product]));
 
-  // Price from the database, never from the client session.
-  const { totals } = await verifyAndPriceLines(checkoutSession);
-  if (totals.totalPaise < MIN_RAZORPAY_AMOUNT_PAISE) {
-    throw new OrderRejectionError("Order total must be at least ₹1");
+  return computeOrderTotals(
+    items.map((item) => {
+      const product = item.productId ? priceById.get(item.productId) : undefined;
+      if (!product) {
+        throw new AppError(
+          "OUT_OF_STOCK",
+          `"${item.productName}" is no longer available. Your payment will be refunded.`
+        );
+      }
+      return { unitPaise: Math.round(Number(product.price) * 100), quantity: item.quantity };
+    })
+  );
+};
+
+/**
+ * Refunds a capture we cannot fulfil and closes the order.
+ *
+ * The payment proof is persisted first (guarded on `pending`) so a failed
+ * refund leaves a pending order that support can find by payment id. A `count`
+ * of 0 means another confirm/refund path already owns the order — we must not
+ * refund a second time.
+ */
+const refundAndClose = async (
+  orderId: string,
+  paymentId: string,
+  amountPaise: number,
+  reason: RefundReason
+): Promise<void> => {
+  const claimed = await prisma.order.updateMany({
+    // `paymentId: ""` makes the refund claim exclusive: the first path records
+    // the proof, every concurrent path sees a non-empty id and backs off.
+    where: { id: orderId, status: "pending", paymentId: "" },
+    data: { paymentId },
+  });
+  if (claimed.count === 0) {
+    // Either another path already handled this capture, or an earlier refund
+    // attempt failed and left the proof on a pending order. Never refund twice.
+    const current = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { status: true, paymentId: true },
+    });
+    if (current?.status === "pending" && current.paymentId !== "") {
+      throw new AppError(
+        "PAYMENT_FAILED",
+        "We couldn't complete or refund this payment yet. Please contact support with your payment reference."
+      );
+    }
+    return;
   }
 
   try {
-    const razorpay = getRazorpayClient();
-    const order = await razorpay.orders.create({
-      amount: totals.totalPaise,
-      currency: "INR",
-      receipt: `receipt_${Date.now()}`,
-      notes: {
-        customerName: `${orderData.fName} ${orderData.lName || ''}`,
-        shippingAddress: orderData.address,
-        phone: orderData.mobile
-      }
-    });
-
-    return order;
+    await refundPayment({ paymentId, amountPaise, orderId, reason });
   } catch (error) {
-    if (error instanceof OrderRejectionError) {
-      throw error;
-    }
-    console.error("Failed to create Razorpay order:", error);
-    throw new Error("Payment initialization failed");
+    console.error(
+      JSON.stringify({
+        level: "error",
+        event: "order_refund_failed",
+        orderId,
+        reason,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    );
+    throw new AppError(
+      "PAYMENT_FAILED",
+      "Your payment was captured but we couldn't complete your order. Please contact support with your payment reference."
+    );
   }
+
+  await prisma.order.updateMany({
+    where: { id: orderId, status: "pending" },
+    data: { status: "refunded" },
+  });
+  revalidatePath("/my-orders");
+  revalidatePath("/admin");
 };
 
-// Function to verify Razorpay payment
-// (signature verification lives in lib/razorpay.ts — see tests/razorpay-signature.test.ts)
-
-// Main order placement function
-export const PlaceOrder = async ({
-  orderData,
+/**
+ * Creates the Razorpay order first, then the durable `pending` order + item
+ * snapshots that carry its id. The client never sees a payable order without a
+ * matching row, so a captured payment can always be reconciled to an order.
+ */
+export const createRazorpayOrder = async ({
   checkoutSession,
-  paymentDetails
+  orderData,
 }: {
-  orderData: PlaceOrderSchema;
   checkoutSession: CheckoutSession;
-  paymentDetails: {
-    razorpayPaymentId: string;
-    razorpayOrderId: string;
-    razorpaySignature: string;
-  }
-}) => {
-    const session = await auth();
-    if (!session?.user?.id) {
-        throw new Error("Unauthorized");
-    }
+  orderData: PlaceOrderSchema;
+}) =>
+  runAction("orders.createRazorpayOrder", async () => {
+    const session = await requireUser();
 
-    const {
-        data,
-        error
-    } = placeOrderSchema.safeParse(orderData);
-
-    if (error) {
-        throw new Error("Invalid order data");
-    }
-
-    if (!paymentDetails?.razorpayPaymentId || !paymentDetails?.razorpayOrderId || !paymentDetails?.razorpaySignature) {
-        throw new Error("Payment verification failed");
-    }
-
-    // Idempotency: a replayed success callback must not create a second order.
-    const existingOrder = await prisma.order.findFirst({
-        where: { transactionId: paymentDetails.razorpayOrderId },
-        select: { id: true },
+    await enforceRateLimit({
+      bucket: CREATE_ORDER_BUCKET,
+      subject: session.user.id,
+      ...RATE_LIMITS.createRazorpayOrder,
     });
-    if (existingOrder) {
-        return { success: true, orderId: existingOrder.id };
-    }
 
-    // Verify the payment signature, then confirm the paid amount equals the
-    // server-computed total (protects against paying for a cheap session and
-    // replaying its signature against an expensive cart).
-    if (!verifyRazorpayPaymentSignature(
-      paymentDetails.razorpayOrderId,
-      paymentDetails.razorpayPaymentId,
-      paymentDetails.razorpaySignature,
-      process.env.RAZORPAY_KEY_SECRET
-    )) {
-      throw new Error("Payment verification failed");
-    }
+    const data = parseInput(placeOrderSchema, orderData);
+    const cart = parseInput(checkoutSessionSchema, checkoutSession);
 
     // Price from the database, never from the client session.
-    const { lines, totals } = await verifyAndPriceLines(checkoutSession);
+    const { lines, totals } = await verifyAndPriceLines(cart);
     if (totals.totalPaise < MIN_RAZORPAY_AMOUNT_PAISE) {
-        throw new OrderRejectionError("Order total must be at least ₹1");
+      throw new AppError("VALIDATION", "Order total must be at least ₹1.");
     }
 
     const razorpay = getRazorpayClient();
-    const paidOrder = await razorpay.orders.fetch(paymentDetails.razorpayOrderId);
-    // Razorpay typings cap Order.status at created|attempted, but the live API
-    // reports paid|authorized once a payment succeeds on the order.
-    // "created" is accepted: a valid signature can only be minted by Razorpay
-    // checkout (or a holder of our secret — i.e. the server/tests), so the
-    // signature + amount checks above are the real gates; the webhook and
-    // Razorpay dashboard reconcile anything that slips through.
-    const paidStatus = String(paidOrder.status);
-    if (paidOrder.amount !== totals.totalPaise) {
-        throw new OrderRejectionError("Payment amount does not match your cart. No order was recorded — please contact support for a refund.");
-    }
-    if (paidStatus === "attempted") {
-        throw new OrderRejectionError("Payment was not completed. No order was placed.");
-    }
+    const razorpayOrder = await razorpay.orders.create({
+      amount: totals.totalPaise,
+      currency: "INR",
+      receipt: `rcpt_${crypto.randomUUID().slice(0, 18)}`,
+      notes: { userId: session.user.id },
+    });
 
-    const userId = session.user.id;
-
+    let orderId: string;
     try {
-        const order = await prisma.$transaction(async (tx) => {
-            // Create Address
-            const address = await tx.address.create({
-                data: {
-                    firstName: data.fName,
-                    lastName: data.lName ?? "",
-                    phone: data.mobile,
-                    address: data.address,
-                    area: data.area,
-                    landmark: data.landmark,
-                    postalCode: data.pinCode,
-                    country: data.country[0],
-                    state: data.country[1] ?? "",
-                }
-            });
-
-            // Create Order — payment already verified above.
-            const order = await tx.order.create({
-                data: {
-                    total: (totals.totalPaise / 100).toFixed(2),
-                    taxAmount: (totals.taxPaise / 100).toFixed(2),
-                    status: "confirmed",
-                    userId,
-                    addressId: address.id,
-                    paymentMethod: "RAZORPAY",
-                    paymentId: paymentDetails.razorpayPaymentId,
-                    transactionId: paymentDetails.razorpayOrderId,
-                }
-            });
-
-            // Create OrderItems at DB prices and decrement stock atomically.
-            for (const line of lines) {
-                await tx.orderItem.create({
-                    data: {
-                        orderId: order.id,
-                        productId: line.product.id,
-                        quantity: line.quantity,
-                        price: (line.unitPaise / 100).toFixed(2),
-                    }
-                });
-
-                const decremented = await tx.product.updateMany({
-                    where: {
-                        id: line.product.id,
-                        availability: "IN_STOCK",
-                        stockQty: { gte: line.quantity },
-                    },
-                    data: { stockQty: { decrement: line.quantity } },
-                });
-                if (decremented.count !== 1) {
-                    throw new OrderRejectionError(`"${line.product.name}" just sold out. Your payment can be refunded — please contact support.`);
-                }
-
-                if (line.product.stockQty - line.quantity <= 0) {
-                    await tx.product.update({
-                        where: { id: line.product.id },
-                        data: { availability: "OUT_OF_STOCK" },
-                    });
-                }
-            }
-
-            return order;
+      const order = await prisma.$transaction(async (tx) => {
+        const address = await tx.address.create({
+          data: {
+            firstName: data.fName,
+            lastName: data.lName ?? "",
+            phone: data.mobile,
+            address: data.address,
+            area: data.area,
+            landmark: data.landmark,
+            postalCode: data.pinCode,
+            country: data.country[0],
+            state: data.country[1] ?? "",
+          },
         });
 
-        for (const line of lines) {
-            await invalidateProductCache(line.product.id);
-        }
+        const created = await tx.order.create({
+          data: {
+            total: toRupees(totals.totalPaise),
+            taxAmount: toRupees(totals.taxPaise),
+            status: "pending",
+            userId: session.user.id,
+            addressId: address.id,
+            paymentMethod: "RAZORPAY",
+            // The payment proof arrives at confirm; the row exists first.
+            paymentId: "",
+            transactionId: razorpayOrder.id,
+          },
+        });
 
-        revalidatePath("/my-orders");
-        revalidatePath("/admin");
+        await tx.orderItem.createMany({
+          data: lines.map((line) => ({
+            orderId: created.id,
+            productId: line.productId,
+            productName: line.productName,
+            productImage: line.productImage,
+            quantity: line.quantity,
+            price: toRupees(line.unitPaise),
+          })),
+        });
 
-        return { success: true, orderId: order.id };
-
+        return created;
+      });
+      orderId = order.id;
     } catch (error) {
-        if (error instanceof OrderRejectionError) {
-            throw error;
-        }
-        console.error("Failed to place order:", error);
-        throw new Error("Something went wrong while placing the order");
+      // The customer can never pay this Razorpay order (no client-side id was
+      // returned), but it stays in the dashboard — log its id for reconciliation.
+      console.error(
+        JSON.stringify({
+          level: "error",
+          event: "order_persist_failed",
+          razorpayOrderId: razorpayOrder.id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      );
+      throw new AppError("INTERNAL", "We couldn't start your checkout. Please try again.");
     }
-};
 
-export type OrderStatus = "pending" | "confirmed" | "shipped" | "delivered" | "cancelled";
+    return {
+      orderId,
+      razorpayOrderId: razorpayOrder.id,
+      amountPaise: totals.totalPaise,
+      currency: "INR",
+    };
+  });
+
+/**
+ * Confirms a pending order using payment proof only. The cart and address were
+ * snapshotted at init and are re-priced from current DB rows; nothing the
+ * client sends here can change what was bought or where it ships.
+ */
+export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
+  runAction("orders.place", async () => {
+    const session = await requireUser();
+    const proof = parseInput(confirmPaymentSchema, input);
+
+    const order = await prisma.order.findUnique({
+      where: { transactionId: proof.razorpayOrderId },
+      include: { items: true },
+    });
+    if (!order) {
+      throw new AppError("NOT_FOUND", "We couldn't find this order. Please contact support.");
+    }
+    if (order.userId !== session.user.id) {
+      throw new AppError("FORBIDDEN", "You do not have permission to do that.");
+    }
+
+    if (order.status !== "pending") {
+      // A replay of a successful confirmation is a success, not an error.
+      if (order.status === "confirmed" || order.status === "shipped" || order.status === "delivered") {
+        return { orderId: order.id };
+      }
+      throw new AppError("CONFLICT", "This order can no longer be confirmed.");
+    }
+
+    if (
+      !verifyRazorpayPaymentSignature(
+        proof.razorpayOrderId,
+        proof.razorpayPaymentId,
+        proof.razorpaySignature,
+        process.env.RAZORPAY_KEY_SECRET
+      )
+    ) {
+      throw new AppError("PAYMENT_FAILED", "We couldn't verify this payment. Please contact support.");
+    }
+
+    const paidOrder = await getRazorpayClient().orders.fetch(order.transactionId);
+    const paidAmountPaise = Number(paidOrder.amount);
+
+    // Razorpay typings cap the status at created|attempted|paid; the live API
+    // reports paid once captured. "attempted" means no money moved.
+    if (String(paidOrder.status) === "attempted") {
+      throw new AppError("PAYMENT_FAILED", "Payment was not completed. No order was placed.");
+    }
+
+    // Never hand a non-integer amount to the refund API; persist the proof and
+    // let support reconcile the capture instead.
+    if (!Number.isInteger(paidAmountPaise) || paidAmountPaise <= 0) {
+      await prisma.order.updateMany({
+        where: { id: order.id, status: "pending" },
+        data: { paymentId: proof.razorpayPaymentId },
+      });
+      throw new AppError("PAYMENT_FAILED", "We couldn't verify the captured amount. Please contact support.");
+    }
+
+    const orderTotalPaise = Math.round(Number(order.total) * 100);
+    if (paidAmountPaise !== orderTotalPaise) {
+      await refundAndClose(order.id, proof.razorpayPaymentId, paidAmountPaise, "AMOUNT_MISMATCH");
+      throw new AppError("AMOUNT_MISMATCH", "The paid amount does not match this order. Your payment has been refunded.");
+    }
+
+    // Re-price from current DB rows: a price change after init means the paid
+    // amount no longer buys this cart, so refund instead of confirming.
+    let currentTotals: ReturnType<typeof computeOrderTotals>;
+    try {
+      currentTotals = await priceOrderItemsFromDb(order.items);
+    } catch (error) {
+      if (error instanceof AppError && error.code === "OUT_OF_STOCK") {
+        await refundAndClose(order.id, proof.razorpayPaymentId, paidAmountPaise, "OUT_OF_STOCK");
+      }
+      throw error;
+    }
+
+    if (currentTotals.totalPaise !== paidAmountPaise) {
+      await refundAndClose(order.id, proof.razorpayPaymentId, paidAmountPaise, "PRICE_CHANGED");
+      throw new AppError("PRICE_CHANGED", "Prices changed while you were checking out. Your payment has been refunded.");
+    }
+
+    let confirmation: Awaited<ReturnType<typeof confirmOrder>>;
+    try {
+      confirmation = await confirmOrder(order.id, proof.razorpayPaymentId);
+    } catch (error) {
+      if (error instanceof AppError && error.code === "OUT_OF_STOCK") {
+        await refundAndClose(order.id, proof.razorpayPaymentId, paidAmountPaise, "OUT_OF_STOCK");
+      }
+      throw error;
+    }
+
+    if (confirmation.status === "already") {
+      if (confirmation.current === "cancelled" || confirmation.current === "refunded") {
+        throw new AppError("CONFLICT", "This order can no longer be confirmed.");
+      }
+      return { orderId: order.id };
+    }
+
+    for (const item of order.items) {
+      if (item.productId) {
+        await invalidateProductCache(item.productId);
+      }
+    }
+    revalidatePath("/my-orders");
+    revalidatePath("/admin");
+
+    return { orderId: order.id };
+  });
 
 // NOTE: kept module-private (not exported) — "use server" modules may only
 // export async functions.
-const ORDER_STATUSES: OrderStatus[] = ["pending", "confirmed", "shipped", "delivered", "cancelled"];
+const ORDER_STATUS_INPUT = z.object({
+  orderId: z.string().min(1).max(64),
+  status: z.nativeEnum(OrderStatus),
+});
 
 export const updateOrderStatus = async (orderId: string, status: string) => {
-    const session = await auth();
-    if (!session?.user?.id || session.user.role !== "ADMIN") {
-        throw new Error("Unauthorized");
+    const session = await requireUser();
+    if (session.user.role !== "ADMIN") {
+        throw new AppError("FORBIDDEN", "You do not have permission to do that.");
     }
 
-    if (!ORDER_STATUSES.includes(status as OrderStatus)) {
-        throw new Error("Invalid order status");
-    }
+    const input = parseInput(ORDER_STATUS_INPUT, { orderId, status });
 
     const updated = await prisma.order.update({
-        where: { id: orderId },
-        data: { status },
+        where: { id: input.orderId },
+        data: { status: input.status },
     });
 
     revalidatePath("/admin");

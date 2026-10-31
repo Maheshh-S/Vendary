@@ -15,7 +15,8 @@ export default async function MyOrdersPage() {
     await prisma.order.findMany({
       where: { userId: session.user.id },
       include: {
-        items: { include: { product: true } },
+        // Item snapshots are the source of truth: the product row may be gone.
+        items: true,
         address: true,
       },
       orderBy: { createdAt: "desc" },
@@ -48,9 +49,9 @@ export default async function MyOrdersPage() {
               </p>
 
               <ul className="mt-3 space-y-1">
-                {order.items.map((item: { id: string; quantity: number; product?: { name?: string } | null }) => (
+                {order.items.map((item: { id: string; productName: string; quantity: number }) => (
                   <li key={item.id} className="text-sm text-gray-700">
-                    {item.product?.name ?? "Product"} × {item.quantity}
+                    {item.productName} × {item.quantity}
                   </li>
                 ))}
               </ul>

@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 import { Select } from "@/components/ui/select";
 import { updateOrderStatus } from "@/actions/orders";
 
-const STATUSES = ["pending", "confirmed", "shipped", "delivered", "cancelled"];
+const STATUSES = ["pending", "confirmed", "shipped", "delivered", "cancelled", "refunded"];
 
 type Props = {
   orderId: string;

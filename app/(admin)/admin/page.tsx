@@ -47,15 +47,8 @@ export default async function AdminPage() {
         email: true,
       },
     },
-    items: {
-      include: {
-        product: {
-          select: {
-            name: true,
-          },
-        },
-      },
-    },
+    // Snapshots survive product deletion; never join Product for the line name.
+    items: true,
     address: true,
   },
   orderBy: { createdAt: 'desc' },
@@ -200,10 +193,10 @@ export default async function AdminPage() {
                         {order.user?.email ?? "N/A"}
                       </td>
                       <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
-                        {order.items.map((item: { product?: { name?: string } | null; quantity: number }, index: number) => (
+                        {order.items.map((item: { productName?: string; quantity: number }, index: number) => (
                           <span key={index}>
                             {index > 0 && ", "}
-                            {item.product?.name ?? "Unknown product"} x {item.quantity}
+                            {item.productName || "Unknown product"} x {item.quantity}
                           </span>
                         ))}
                       </td>
