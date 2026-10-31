@@ -1,4 +1,7 @@
-"use server";
+// Internal server-only fetchers imported by the auth modules (`auth.config.ts`,
+// `auth.ts`, `actions/auth`). Deliberately NOT a `"use server"` module: these
+// return full Prisma user rows (including `password`) and must never become
+// callable POST endpoints. Never import this from a client component.
 import {prisma} from "@/lib/db/prisma";
 
 /**
