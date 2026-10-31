@@ -33,7 +33,7 @@ export type RateLimitOptions = {
  */
 export const REDIS_CALL_TIMEOUT_MS = 1000;
 
-/** Limits from the phase plan. Only the auth ones are wired up today. */
+/** Limits from the phase plan. Every bucket is wired up at its call site. */
 export const RATE_LIMITS = {
   login: { limit: 5, windowMs: 60_000 },
   register: { limit: 5, windowMs: 15 * 60_000 },
