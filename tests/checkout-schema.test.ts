@@ -85,19 +85,27 @@ describe("placeOrderSchema (address boundary)", () => {
     }
   });
 
-  it("rejects missing required address fields", () => {
+  it("rejects missing or malformed address fields", () => {
     expect(() => placeOrderSchema.parse({ ...validAddress, address: "" })).toThrow();
     expect(() => placeOrderSchema.parse({ ...validAddress, pinCode: "" })).toThrow();
+    expect(() => placeOrderSchema.parse({ ...validAddress, address: "abcd" })).toThrow();
+    expect(() => placeOrderSchema.parse({ ...validAddress, area: "x" })).toThrow();
   });
 
-  it("rejects address fields past their length bounds", () => {
+  it("requires a real 6-digit PIN code", () => {
+    for (const pinCode of ["56001", "5600011", "56000a", "560 001", "+91560001"]) {
+      expect(() => placeOrderSchema.parse({ ...validAddress, pinCode })).toThrow();
+    }
+    expect(() => placeOrderSchema.parse({ ...validAddress, pinCode: "560001" })).not.toThrow();
+  });
+
+  it("rejects address fields past their tightened bounds", () => {
     const tooLong = {
-      fName: "a".repeat(101),
-      lName: "a".repeat(101),
-      address: "a".repeat(501),
+      fName: "a".repeat(61),
+      lName: "a".repeat(61),
+      address: "a".repeat(201),
       area: "a".repeat(101),
-      landmark: "a".repeat(101),
-      pinCode: "1".repeat(11),
+      landmark: "a".repeat(121),
     };
     for (const [field, value] of Object.entries(tooLong)) {
       expect(() => placeOrderSchema.parse({ ...validAddress, [field]: value })).toThrow();
@@ -105,6 +113,19 @@ describe("placeOrderSchema (address boundary)", () => {
     expect(() =>
       placeOrderSchema.parse({ ...validAddress, country: ["a".repeat(101), "Karnataka"] })
     ).toThrow();
+  });
+
+  it("accepts values exactly at the bounds", () => {
+    expect(() =>
+      placeOrderSchema.parse({
+        ...validAddress,
+        fName: "a".repeat(60),
+        lName: "b".repeat(60),
+        address: "c".repeat(200),
+        area: "d".repeat(100),
+        landmark: "e".repeat(120),
+      })
+    ).not.toThrow();
   });
 });
 
