@@ -1,21 +1,40 @@
 "use server"
 
-import { auth } from "@/auth";
-import { prisma } from "@/lib/db/prisma";
-import { invalidateProductCache } from "@/lib/product-cache";
+import { revalidatePath } from "next/cache"
 
-export const editPrice = async ({ price, productId }: { price: number; productId: string }) => {
-    const session = await auth();
-    if (!session) {
-        throw new Error("Unauthorized");
+import { requireAdmin } from "@/lib/auth-guards"
+import { prisma } from "@/lib/db/prisma"
+import { AppError } from "@/lib/errors"
+import { invalidateProductCache } from "@/lib/product-cache"
+import { runAction } from "@/lib/run-action"
+import { parseInput } from "@/lib/validation"
+import { editPriceSchema, formatPriceForStorage } from "@/schemas/admin/products/edit-price-schema"
+
+type EditPriceInput = {
+  price: number | string
+  productId: string
+}
+
+export const editPrice = async (input: EditPriceInput) =>
+  runAction("admin.editPrice", async () => {
+    await requireAdmin()
+
+    const { productId, price } = parseInput(editPriceSchema, input)
+    const priceValue = formatPriceForStorage(price)
+
+    // Admins are single-store editors: the id is the only predicate, userId
+    // stays on the product purely as creator audit.
+    const { count } = await prisma.product.updateMany({
+      where: { id: productId },
+      data: { price: priceValue },
+    })
+    if (count === 0) {
+      throw new AppError("NOT_FOUND", "Product not found.")
     }
 
-    await prisma.product.update({
-        where: {
-            id: productId,
-            userId: session.user.id,
-        },
-        data: { price },
-    })
-    await invalidateProductCache(productId);
-}
+    await invalidateProductCache(productId)
+    revalidatePath(`/products/${productId}`)
+    revalidatePath("/admin")
+
+    return { productId, price: priceValue }
+  })

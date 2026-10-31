@@ -26,6 +26,7 @@ const CreateProductForm = ({ categories }: Props) => {
     const {
         register,
         handleSubmit,
+        setError,
         formState: { errors },
     } = useForm<ProductFormValues>({
         resolver: zodResolver(productFormSchema),
@@ -42,24 +43,43 @@ const CreateProductForm = ({ categories }: Props) => {
         },
     })
 
+    const applyServerFieldErrors = (fieldErrors?: Record<string, string[]>) => {
+        if (!fieldErrors) return
+
+        for (const [field, messages] of Object.entries(fieldErrors)) {
+            const message = messages[0]
+            if (!message) continue
+
+            if (field === "_form") {
+                setError("root", { type: "server", message })
+            } else if (field in productFormSchema.shape) {
+                setError(field as keyof ProductFormValues, { type: "server", message })
+            }
+        }
+    }
+
     const createProductMutation = useMutation({
         mutationKey: ["create-product"],
         mutationFn: createProduct,
         onMutate: () => {
             toast.loading("Creating Product", {id: "create-product"})
         },
-        onSuccess: () => {
+        onSuccess: (res) => {
+            if (!res.ok) {
+                applyServerFieldErrors(res.fieldErrors)
+                toast.error(res.message, {id: "create-product"})
+                return
+            }
             toast.success("Product Created Successfully", {id: "create-product"})
+            router.push("/admin")
         },
-        onError: (error) => {
-            console.error(error)
+        onError: () => {
             toast.error("Failed to Create Product", {id: "create-product"})
         }
     })
 
     const onSubmit = (data: ProductFormValues) => {
         createProductMutation.mutate(data)
-        router.push("/admin")
     }
 
     return (

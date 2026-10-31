@@ -1,31 +1,31 @@
 "use server"
 
-import { auth } from "@/auth"
-import { prisma } from "@/lib/db/prisma";
-import { invalidateProductCache } from "@/lib/product-cache";
-import { revalidatePath } from "next/cache";
+import { revalidatePath } from "next/cache"
 
-export const deleteProduct = async (productId: string) => {
-    try {
-        const session = await auth();
+import { requireAdmin } from "@/lib/auth-guards"
+import { prisma } from "@/lib/db/prisma"
+import { AppError } from "@/lib/errors"
+import { invalidateProductCache } from "@/lib/product-cache"
+import { runAction } from "@/lib/run-action"
+import { parseInput } from "@/lib/validation"
+import { deleteProductSchema } from "@/schemas/admin/products/delete-product-schema"
 
-        if(!session){
-            throw new Error("Unauthorized");
-        }
+export const deleteProduct = async (productId: string) =>
+  runAction("admin.deleteProduct", async () => {
+    await requireAdmin()
 
-        await prisma.product.delete({
-            where: {
-                id: productId,
-                userId: session.user.id
-            }
-        })
-        await invalidateProductCache(productId);
-        revalidatePath("/admin");
-        return {
-            message: "Product deleted successfully"
-        }
-    } catch (error) {
-        console.error("Error deleting product:", error);
-        throw new Error("Failed to delete product");
+    const input = parseInput(deleteProductSchema, { productId })
+
+    // `deleteMany` + count turns a missing row into an expected NOT_FOUND
+    // instead of a thrown Prisma error. OrderItem.productId is `SetNull`, so
+    // order history keeps its name/image/price snapshots after the delete.
+    const { count } = await prisma.product.deleteMany({ where: { id: input.productId } })
+    if (count === 0) {
+      throw new AppError("NOT_FOUND", "Product not found.")
     }
-}
+
+    await invalidateProductCache(input.productId)
+    revalidatePath("/admin")
+
+    return { productId: input.productId }
+  })

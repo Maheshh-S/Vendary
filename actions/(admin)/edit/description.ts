@@ -1,63 +1,62 @@
 "use server"
 
-import { auth } from "@/auth"
-import { prisma } from "@/lib/db/prisma";
-import { invalidateProductCache } from "@/lib/product-cache";
+import { revalidatePath } from "next/cache"
 
-export const editShortDescription = async ( {
-    productId,
-    shortDescription
-} : {
-    productId: string,
-    shortDescription: string,
-} ) => {
-    try {
-        const session = await auth();
-        if(!session?.user.id) {
-            throw new Error("User not authenticated");
-        }
+import { requireAdmin } from "@/lib/auth-guards"
+import { prisma } from "@/lib/db/prisma"
+import { AppError } from "@/lib/errors"
+import { invalidateProductCache } from "@/lib/product-cache"
+import { runAction } from "@/lib/run-action"
+import { parseInput } from "@/lib/validation"
+import {
+  editLongDescriptionSchema,
+  editShortDescriptionSchema,
+} from "@/schemas/admin/products/edit-description-schema"
 
-        await prisma.product.update({
-            where: {
-                id: productId,
-                userId: session.user.id,
-            },
-            data: {
-                shortDescription
-            }
-        })
-        await invalidateProductCache(productId);
-    } catch (error) {
-        console.error("Error updating short description:", error);
-        throw error;
+export const editShortDescription = async (input: {
+  productId: string
+  shortDescription: string
+}) =>
+  runAction("admin.editShortDescription", async () => {
+    await requireAdmin()
+
+    const { productId, shortDescription } = parseInput(editShortDescriptionSchema, input)
+
+    const { count } = await prisma.product.updateMany({
+      where: { id: productId },
+      data: { shortDescription },
+    })
+    if (count === 0) {
+      throw new AppError("NOT_FOUND", "Product not found.")
     }
-}
 
-export const editLongDescription = async ( {
-    productId,
-    longDescription
-} : {
-    productId: string,
-    longDescription: string,
-} ) => {
-    try {
-        const session = await auth();
-        if(!session?.user.id) {
-            throw new Error("User not authenticated");
-        }
+    await invalidateProductCache(productId)
+    revalidatePath(`/products/${productId}`)
+    revalidatePath("/admin")
 
-        await prisma.product.update({
-            where: {
-                id: productId,
-                userId: session.user.id,
-            },
-            data: {
-                description: longDescription
-            }
-        })
-        await invalidateProductCache(productId);
-    } catch (error) {
-        console.error("Error updating long description:", error);
-        throw error;
+    return { productId }
+  })
+
+export const editLongDescription = async (input: {
+  productId: string
+  longDescription: string
+}) =>
+  runAction("admin.editLongDescription", async () => {
+    await requireAdmin()
+
+    const { productId, longDescription } = parseInput(editLongDescriptionSchema, input)
+
+    const { count } = await prisma.product.updateMany({
+      where: { id: productId },
+      data: { description: longDescription },
+    })
+    if (count === 0) {
+      throw new AppError("NOT_FOUND", "Product not found.")
     }
-}
+
+    await invalidateProductCache(productId)
+    revalidatePath(`/products/${productId}`)
+    revalidatePath("/admin")
+
+    return { productId }
+  })

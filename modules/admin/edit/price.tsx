@@ -11,6 +11,7 @@ type Props = {
 
 const PriceEdit = ({ price, productId }: Props) => {
     const [priceState, setPriceState] = React.useState<number>(price)
+    const [savedPrice, setSavedPrice] = React.useState<number>(price)
 
     const {
         mutate,
@@ -18,17 +19,24 @@ const PriceEdit = ({ price, productId }: Props) => {
     } = useMutation({
         mutationKey: ['price-edit', productId],
         mutationFn: editPrice,
-        onSuccess: () => {
+        onSuccess: (res) => {
+            if (!res.ok) {
+                toast.error(res.message)
+                setPriceState(savedPrice)
+                return
+            }
+            setSavedPrice(Number(res.data.price))
+            setPriceState(Number(res.data.price))
             toast.success('Price updated')
         },
-        onError: (error) => {
+        onError: () => {
             toast.error('Error editing price')
-            console.error('Error editing price:', error)
+            setPriceState(savedPrice)
         }
     })
 
     const handleBlur = () => {
-        if (priceState !== price) {
+        if (priceState !== savedPrice) {
             mutate({ price: priceState, productId })
         }
     }
@@ -41,7 +49,7 @@ const PriceEdit = ({ price, productId }: Props) => {
             onBlur={handleBlur}
             className="border p-2 border-gray-300 ml-2 rounded-xl max-w-20 bg-transparent"
             placeholder="Price"
-            min={0}
+            min={1}
             step={0.01}
             disabled={isPending}
             required

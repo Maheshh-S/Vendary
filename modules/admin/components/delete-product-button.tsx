@@ -33,7 +33,11 @@ const DeleteProductButton = ({ productId }: Props) => {
     onMutate: () => {
         toast.loading("Deleting product", { id: "delete-product" });
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
+      if (!res.ok) {
+        toast.error(res.message, { id: "delete-product" });
+        return;
+      }
       toast.success("Product deleted successfully", { id: "delete-product" });
       setIsOpen(false);
     },

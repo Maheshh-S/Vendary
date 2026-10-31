@@ -1,4 +1,3 @@
-import { z } from "zod"
 import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import type { Prisma } from "@prisma/client"
@@ -10,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { useMutation } from "@tanstack/react-query"
 import { addImagesToProduct } from "@/actions/(admin)/product/add-image"
+import { imageFormSchema, type ImageFormValues } from "@/schemas/admin/products/add-image-schema"
 import toast from "react-hot-toast"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PlusCircle, Trash2 } from "lucide-react"
@@ -24,20 +24,11 @@ type Props = {
   }>
 }
 
-const imageSchema = z.object({
-  url: z.string().url("Please enter a valid URL"),
-  isMain: z.boolean().default(false),
-})
-
-const formSchema = z.object({
-  images: z.array(imageSchema).min(1, "Add at least one image"),
-})
-
-type FormValues = z.infer<typeof formSchema>
+type FormValues = ImageFormValues
 
 const AddImageForm = ({ product }: Props) => {
   const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(imageFormSchema),
     defaultValues: {
       images: [],
     },
@@ -50,8 +41,14 @@ const AddImageForm = ({ product }: Props) => {
 
   const mutation = useMutation({
     mutationFn: (imageData: FormValues) => addImagesToProduct(product.id, imageData),
-    onSuccess: () => {
+    onSuccess: (res) => {
+      if (!res.ok) {
+        const detail = res.fieldErrors ? Object.values(res.fieldErrors).flat()[0] : undefined
+        toast.error(detail ?? res.message, { id: "add-image" })
+        return
+      }
       toast.success("Images added successfully", { id: "add-image" })
+      form.reset({ images: [] })
     },
     onError: () => {
       toast.error("Failed to add images", { id: "add-image" })

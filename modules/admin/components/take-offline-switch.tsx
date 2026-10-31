@@ -33,14 +33,19 @@ export default function TakeOfflineSwitch({ product }: Props) {
     },
 
     // Success Handling
-    onSuccess: () => {
+    onSuccess: (res, _availability, context) => {
+        if (!res.ok) {
+            setEnabled(context?.previousState ?? product.availability)
+            toast.error(res.message, { id: "take-product-offline" })
+            return
+        }
+        setEnabled(res.data.availability)
         toast.success("Product availability updated!", { id: "take-product-offline" })
     },
 
     // Rollback on Error
-    onError: (error, _, context) => {
-        console.error(error)
-        setEnabled(context?.previousState || product.availability)
+    onError: (_error, _availability, context) => {
+        setEnabled(context?.previousState ?? product.availability)
         toast.error("Failed to update availability", { id: "take-product-offline" })
     }
   })

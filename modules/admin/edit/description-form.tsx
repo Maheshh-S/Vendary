@@ -32,12 +32,15 @@ const DescriptionForm = ({ description, shortDescription, productId }: Props) =>
   } = useMutation({
     mutationKey: ["update-short-description", productId],
     mutationFn: editShortDescription,
-    onSuccess: () => {
+    onSuccess: (res) => {
+      if (!res.ok) {
+        toast.error(res.message);
+        return;
+      }
       toast.success("Short Description Updated");
     },
-    onError: (error) => {
-      console.error("Error updating short description");
-      toast.error(error.message);
+    onError: () => {
+      toast.error("Failed to update short description");
     }
   });
 
@@ -47,12 +50,15 @@ const DescriptionForm = ({ description, shortDescription, productId }: Props) =>
   } = useMutation({
     mutationKey: ["update-long-description", productId],
     mutationFn: editLongDescription,
-    onSuccess: () => {
+    onSuccess: (res) => {
+      if (!res.ok) {
+        toast.error(res.message);
+        return;
+      }
       toast.success("Long Description Updated");
     },
-    onError: (error) => {
-      console.error("Error updating long description");
-      toast.error(error.message);
+    onError: () => {
+      toast.error("Failed to update long description");
     }
   });
 

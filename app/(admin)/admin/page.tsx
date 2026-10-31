@@ -27,15 +27,13 @@ export default async function AdminPage() {
     redirect("/");
   }
 
-  // Fetch all products without pagination or search filters
+  // Single-store admin: every ADMIN sees the whole catalog. Product.userId is
+  // creator audit only and must never scope visibility or edits.
  const products = (await prisma.product.findMany({
   include: {
     category: true,
     images: true,
     videos: true,
-  },
-  where: {
-    userId: session.user.id,
   },
    orderBy: { name: 'asc' },
  })).map(serializePrismaObject);
@@ -61,7 +59,7 @@ export default async function AdminPage() {
         <div className="sm:flex-auto">
           <h1 className="text-xl font-semibold text-gray-900">Products</h1>
           <p className="mt-2 text-sm text-gray-700">
-            A list of all products in your account.
+            A list of every product in the store.
           </p>
         </div>
         <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">

@@ -1,27 +1,38 @@
 "use server"
 
-import { auth } from "@/auth"
-import {prisma} from "@/lib/db/prisma"
-import { invalidateProductCache } from "@/lib/product-cache";
 import type { $Enums } from "@prisma/client"
 import { revalidatePath } from "next/cache"
 
-export const takeProductOffline = async (productId: string, availability: $Enums.Availability) => {
-    const session = await auth()
-    if (!session?.user.id || session.user.role !== "ADMIN") {
-        throw new Error("Unauthorized")
+import { requireAdmin } from "@/lib/auth-guards"
+import { prisma } from "@/lib/db/prisma"
+import { AppError } from "@/lib/errors"
+import { invalidateProductCache } from "@/lib/product-cache"
+import { runAction } from "@/lib/run-action"
+import { parseInput } from "@/lib/validation"
+import { takeOfflineSchema } from "@/schemas/admin/products/take-offline-schema"
+
+export const takeProductOffline = async (
+  productId: string,
+  availability: $Enums.Availability
+) =>
+  runAction("admin.takeProductOffline", async () => {
+    await requireAdmin()
+
+    // The enum is validated at runtime; the TypeScript parameter type alone
+    // would let an untyped caller persist an arbitrary string.
+    const input = parseInput(takeOfflineSchema, { productId, availability })
+
+    const { count } = await prisma.product.updateMany({
+      where: { id: input.productId },
+      data: { availability: input.availability },
+    })
+    if (count === 0) {
+      throw new AppError("NOT_FOUND", "Product not found.")
     }
 
-    const product = await prisma.product.update({
-        where: {
-            id: productId
-        },
-        data: {
-            availability
-        }
-    })
+    await invalidateProductCache(input.productId)
+    revalidatePath(`/products/${input.productId}`)
+    revalidatePath("/admin")
 
-    await invalidateProductCache(productId);
-    revalidatePath(`/products/${productId}`)
-    return product
-}
+    return { productId: input.productId, availability: input.availability }
+  })
