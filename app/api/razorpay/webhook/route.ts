@@ -352,7 +352,7 @@ export async function POST(req: Request) {
           // so the order must stay pending.
           logWarn({
             event: "payment_failed",
-            orderId: payment.order_id,
+            razorpayOrderId: payment.order_id,
             paymentId: payment.id,
             paymentStatus: payment.status,
             errorCode: payment.error_code ?? null,

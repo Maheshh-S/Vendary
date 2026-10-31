@@ -395,7 +395,7 @@ describe("razorpay webhook route", () => {
         expect(entry).toMatchObject({
           level: "warn",
           event: "payment_failed",
-          orderId: RAZORPAY_ORDER_ID,
+          razorpayOrderId: RAZORPAY_ORDER_ID,
           paymentId: PAYMENT_ID,
           errorCode: "BAD_REQUEST_ERROR",
         });
