@@ -75,7 +75,6 @@ model User {
   orders         Order[]
   reviews        Review[]
   products       Product[]
-  analytics      Analytics[]
 
   @@map("users")
 }
@@ -147,21 +146,30 @@ model Category {
   updatedAt DateTime  @updatedAt
 }
 
+enum OrderStatus {
+  pending
+  confirmed
+  shipped
+  delivered
+  cancelled
+  refunded
+}
+
 model Order {
-  id        String      @id @default(cuid())
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String
-  status    String      @default("pending")
-  total     Decimal     @db.Decimal(10, 2)
-  taxAmount Decimal     @default(0) @db.Decimal(10, 2)
-  items     OrderItem[]
-  address   Address?     @relation(fields: [addressId], references: [id])
-  addressId String      @unique
+  id            String      @id @default(cuid())
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  status        OrderStatus @default(pending)
+  total         Decimal     @db.Decimal(10, 2)
+  taxAmount     Decimal     @default(0) @db.Decimal(10, 2)
+  items         OrderItem[]
+  address       Address?    @relation(fields: [addressId], references: [id])
+  addressId     String      @unique
   paymentMethod String
-  paymentId String
-  transactionId String
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  paymentId     String      @default("")
+  transactionId String      @unique
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 }
 
 model Address {
@@ -180,38 +188,31 @@ model Address {
   updatedAt DateTime @updatedAt
 }
 
-
 model OrderItem {
-  id        String   @id @default(cuid())
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderId   String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  productId String
-  quantity  Int
-  price     Decimal  @db.Decimal(10, 2)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Analytics {
-  id        String   @id @default(cuid())
-  loggedIn  Boolean  @default(false)
-  referrer  String?
-  userAgent String?
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId      String
+  product      Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productId    String?
+  productName  String
+  productImage String?
+  quantity     Int
+  price        Decimal  @db.Decimal(10, 2)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model Review {
-  id        String   @id @default(cuid())
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  productId String
-  rating    Int
-  review    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String   @id @default(cuid())
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId        String
+  rating           Int
+  review           String
+  verifiedPurchase Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([userId, productId])
 }
