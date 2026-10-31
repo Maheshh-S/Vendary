@@ -26,6 +26,7 @@ const MANAGED_KEYS: readonly string[] = [
   "REDIS_URL",
   "NEXT_PUBLIC_SITE_URL",
   "NEXT_PHASE",
+  "NEXT_RUNTIME",
   "SKIP_ENV_VALIDATION",
 ] as const;
 
@@ -225,12 +226,47 @@ describe("getEnvProblems", () => {
 });
 
 describe("instrumentation register", () => {
-  it("fails fast in production when DATABASE_URL is malformed", async () => {
-    applyProcessEnv({ ...BASE_ENV, DATABASE_URL: "mysql://user:pass@localhost:3306/vendary" });
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("exits with code 1 when production validation fails on the node runtime", async () => {
+    applyProcessEnv({
+      ...BASE_ENV,
+      RAZORPAY_KEY_SECRET: undefined,
+      NEXT_RUNTIME: "nodejs",
+    });
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exit = vi.spyOn(process, "exit").mockImplementation((code) => {
+      throw new Error(`exit:${code}`);
+    });
+
+    await expect(register()).rejects.toThrow("exit:1");
+
+    expect(exit).toHaveBeenCalledTimes(1);
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(errorLog).toHaveBeenCalledTimes(1);
+    const message = String(errorLog.mock.calls[0][0]);
+    expect(message).toContain("RAZORPAY_KEY_SECRET");
+    expect(message).not.toContain(BASE_ENV.AUTH_SECRET);
+    expect(message).not.toContain(BASE_ENV.DATABASE_URL);
+    expect(message).not.toContain(BASE_ENV.RAZORPAY_WEBHOOK_SECRET);
+  });
+
+  it("does not exit on the edge runtime, where process.exit is unusable", async () => {
+    applyProcessEnv({
+      ...BASE_ENV,
+      DATABASE_URL: "mysql://user:pass@localhost:3306/vendary",
+      NEXT_RUNTIME: "edge",
+    });
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exit = vi.spyOn(process, "exit").mockImplementation((code) => {
+      throw new Error(`exit:${code}`);
+    });
 
     await expect(register()).rejects.toThrow(/DATABASE_URL/);
-    expect(warn).not.toHaveBeenCalled();
+
+    expect(exit).not.toHaveBeenCalled();
+    expect(errorLog).toHaveBeenCalledTimes(1);
+    const message = String(errorLog.mock.calls[0][0]);
+    expect(message).toContain("DATABASE_URL");
+    expect(message).not.toContain("user:pass");
   });
 
   it("skips validation during next build (phase-production-build)", async () => {

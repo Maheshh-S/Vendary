@@ -21,7 +21,20 @@ export async function register(): Promise<void> {
     if (process.env.NEXT_PHASE === "phase-production-build") {
       return;
     }
-    assertRuntimeEnv();
+    try {
+      assertRuntimeEnv();
+    } catch (error) {
+      // The thrown message lists variable names only, never their values.
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[env] ${message}`);
+      // Next logs a rejected register() but keeps listening and returns 500
+      // for every request, so a production node server must exit explicitly.
+      // The edge runtime also runs this hook but has no usable process.exit.
+      if (process.env.NEXT_RUNTIME !== "nodejs") {
+        throw error;
+      }
+      process.exit(1);
+    }
     return;
   }
 
