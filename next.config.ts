@@ -1,5 +1,6 @@
 import nextMDX from '@next/mdx'
 
+import { ALLOWED_IMAGE_HOSTS } from './lib/images'
 import { recmaPlugins } from './mdx/recma.mjs'
 import { rehypePlugins } from './mdx/rehype.mjs'
 import { remarkPlugins } from './mdx/remark.mjs'
@@ -25,37 +26,19 @@ const nextConfig = {
   },
   pageExtensions: ['js', 'jsx', 'ts', 'tsx', 'mdx'],
   images: {
+    // Same allowlist the admin actions validate against (lib/images.ts), so a
+    // URL accepted at the server boundary is always renderable by next/image.
     remotePatterns: [
-      {
+      ...ALLOWED_IMAGE_HOSTS.map((hostname) => ({
         protocol: "https" as const,
-        hostname: "tailwindcss.com",
-      },
-      {
-        protocol: "https" as const,
-        hostname: "m.media-amazon.com"
-      },
-      {
-        protocol: "https" as const,
-        hostname: "lh3.googleusercontent.com"
-      },
-      {
-        protocol: "https" as const,
-        hostname: "images.pexels.com"
-      },
-      {
-        protocol: "https" as const,
-        hostname: "images.unsplash.com"
-      },
-      {
-        protocol: "https" as const,
-        hostname: "pixabay.com"
-      },
+        hostname,
+      })),
       {
         protocol: "http" as const,
         hostname: "localhost",
         port: "3000",
-      }
-    ]
+      },
+    ],
   },
   async headers() {
     return [
