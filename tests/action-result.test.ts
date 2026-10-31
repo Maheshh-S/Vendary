@@ -130,6 +130,61 @@ describe("runAction", () => {
       log.mockRestore();
     }
   });
+
+  it("rethrows a Next redirect error untouched", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const redirectError = Object.assign(new Error("NEXT_REDIRECT"), {
+        digest: "NEXT_REDIRECT;replace;/my-orders;307;",
+      });
+
+      await expect(
+        runAction("orders.place", async () => {
+          throw redirectError;
+        })
+      ).rejects.toBe(redirectError);
+      expect(log).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("rethrows a Next not-found error untouched", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const notFoundError = Object.assign(new Error("NEXT_NOT_FOUND"), {
+        digest: "NEXT_NOT_FOUND",
+      });
+
+      await expect(
+        runAction("orders.get", async () => {
+          throw notFoundError;
+        })
+      ).rejects.toBe(notFoundError);
+      expect(log).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it.each([
+    { label: "an unrelated digest", digest: "abc123" },
+    { label: "a non-string digest", digest: 42 },
+  ])("still masks an error with $label as INTERNAL", async ({ digest }) => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const result = await runAction("test.odd-digest", async () => {
+        throw Object.assign(new Error("unexpected"), { digest });
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.code).toBe("INTERNAL");
+      expect(log).toHaveBeenCalledTimes(1);
+    } finally {
+      log.mockRestore();
+    }
+  });
 });
 
 describe("requireUser", () => {
@@ -203,6 +258,28 @@ describe("parseInput", () => {
     expect(error.message).toBe("Please check the highlighted fields.");
     expect(error.fieldErrors?.email).toContain("Enter a valid email");
     expect(error.fieldErrors).not.toHaveProperty("_errors");
+    expect(error.fieldErrors).not.toHaveProperty("_form");
+  });
+
+  it("surfaces root-level refine errors under the _form key", () => {
+    const passwordSchema = z
+      .object({ password: z.string(), confirm: z.string() })
+      .refine((value) => value.password === value.confirm, {
+        message: "Passwords do not match",
+      });
+
+    let caught: unknown;
+    try {
+      parseInput(passwordSchema, { password: "secret", confirm: "other" });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(AppError);
+    const error = caught as AppError;
+    expect(error.code).toBe("VALIDATION");
+    expect(error.message).toBe("Please check the highlighted fields.");
+    expect(error.fieldErrors?._form).toContain("Passwords do not match");
   });
 });
 
