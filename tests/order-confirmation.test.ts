@@ -158,8 +158,14 @@ beforeEach(() => {
     paymentId: orderState.paymentId,
   }));
   prismaMock.order.updateMany.mockImplementation(
-    async (args: { where: { status?: string }; data: { status?: string; paymentId?: string } }) => {
+    async (args: {
+      where: { status?: string; paymentId?: string };
+      data: { status?: string; paymentId?: string };
+    }) => {
       if (args.where.status !== undefined && args.where.status !== orderState.status) {
+        return { count: 0 };
+      }
+      if (args.where.paymentId !== undefined && args.where.paymentId !== orderState.paymentId) {
         return { count: 0 };
       }
       if (args.data.status !== undefined) orderState.status = args.data.status;
@@ -181,8 +187,14 @@ beforeEach(() => {
   txMock.order.create.mockResolvedValue({ id: "order_1" });
   txMock.orderItem.createMany.mockResolvedValue({ count: 1 });
   txMock.order.updateMany.mockImplementation(
-    async (args: { where: { status?: string }; data: { status?: string; paymentId?: string } }) => {
+    async (args: {
+      where: { status?: string; paymentId?: string };
+      data: { status?: string; paymentId?: string };
+    }) => {
       if (args.where.status !== undefined && args.where.status !== txState.status) {
+        return { count: 0 };
+      }
+      if (args.where.paymentId !== undefined && args.where.paymentId !== txState.paymentId) {
         return { count: 0 };
       }
       if (args.data.status !== undefined) txState.status = args.data.status;
@@ -190,7 +202,10 @@ beforeEach(() => {
       return { count: 1 };
     }
   );
-  txMock.order.findUniqueOrThrow.mockResolvedValue({ status: "confirmed" });
+  txMock.order.findUniqueOrThrow.mockImplementation(async () => ({
+    status: txState.status,
+    paymentId: txState.paymentId,
+  }));
   txMock.orderItem.findMany.mockResolvedValue(makeOrder().items);
   txMock.product.updateMany.mockResolvedValue({ count: 1 });
 
@@ -339,6 +354,12 @@ describe("PlaceOrder (confirm with payment proof only)", () => {
 
     expect(first).toEqual({ ok: true, data: { orderId: "order_1" } });
     expect(orderState).toEqual({ status: "confirmed", paymentId: RAZORPAY_PAYMENT_ID });
+    // The claim is only available while the payment proof is empty, making it
+    // mutually exclusive with the refund claim.
+    expect(txMock.order.updateMany).toHaveBeenCalledWith({
+      where: { id: "order_1", status: "pending", paymentId: "" },
+      data: { status: "confirmed", paymentId: RAZORPAY_PAYMENT_ID },
+    });
     // One decrement + one zero-stock availability check for the single line.
     expect(txMock.product.updateMany).toHaveBeenCalledTimes(2);
     expect(txMock.product.updateMany).toHaveBeenNthCalledWith(1, {
@@ -353,6 +374,37 @@ describe("PlaceOrder (confirm with payment proof only)", () => {
     // The replay returns before the confirm transaction: no second decrement.
     expect(txMock.product.updateMany).toHaveBeenCalledTimes(2);
     expect(razorpayMock.orders.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses to confirm a pending order whose payment proof is already recorded", async () => {
+    // A refund is in flight (or its API call failed): it owns the capture.
+    initState("pending", RAZORPAY_PAYMENT_ID);
+
+    const result = await PlaceOrder(signedProof());
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe("PAYMENT_FAILED");
+    expect(result.message).toMatch(/support/i);
+    expect(razorpayMock.orders.fetch).not.toHaveBeenCalled();
+    expect(refundMock).not.toHaveBeenCalled();
+    expect(txMock.product.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("treats a lost confirm claim as success when a concurrent confirmation won", async () => {
+    // The claim inside the transaction matches nothing; the winner left the
+    // order confirmed with the proof recorded.
+    txMock.order.updateMany.mockResolvedValue({ count: 0 });
+    txMock.order.findUniqueOrThrow.mockResolvedValue({
+      status: "confirmed",
+      paymentId: RAZORPAY_PAYMENT_ID,
+    });
+
+    const result = await PlaceOrder(signedProof());
+
+    expect(result).toEqual({ ok: true, data: { orderId: "order_1" } });
+    expect(txMock.product.updateMany).not.toHaveBeenCalled();
+    expect(refundMock).not.toHaveBeenCalled();
   });
 
   it("refunds the capture and returns PRICE_CHANGED when current prices drift", async () => {
@@ -370,6 +422,22 @@ describe("PlaceOrder (confirm with payment proof only)", () => {
       expect.objectContaining({ paymentId: RAZORPAY_PAYMENT_ID, amountPaise: ORDER_TOTAL_PAISE, reason: "PRICE_CHANGED" })
     );
     expect(orderState).toEqual({ status: "refunded", paymentId: RAZORPAY_PAYMENT_ID });
+    expect(txMock.product.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("returns success without refunding when a concurrent confirmation wins the refund claim", async () => {
+    // Price drift would normally refund, but the refund claim finds the order
+    // already owned by the confirm path: no money moves, no stock is touched.
+    prismaMock.product.findMany.mockResolvedValue([{ id: PRODUCT.id, price: "300.00" }]);
+    prismaMock.order.updateMany.mockResolvedValue({ count: 0 });
+    prismaMock.order.findUnique
+      .mockResolvedValueOnce(makeOrder())
+      .mockResolvedValueOnce({ status: "confirmed", paymentId: RAZORPAY_PAYMENT_ID });
+
+    const result = await PlaceOrder(signedProof());
+
+    expect(result).toEqual({ ok: true, data: { orderId: "order_1" } });
+    expect(refundMock).not.toHaveBeenCalled();
     expect(txMock.product.updateMany).not.toHaveBeenCalled();
   });
 

@@ -32,6 +32,14 @@ const CREATE_ORDER_BUCKET = "createRazorpayOrder";
 
 const toRupees = (paise: number): string => (paise / 100).toFixed(2);
 
+/** Statuses a concurrent successful confirmation can leave the order in. */
+const isFulfilledStatus = (status: OrderStatus): boolean =>
+  status === "confirmed" || status === "shipped" || status === "delivered";
+
+type RefundOutcome =
+  | { outcome: "refunded" }
+  | { outcome: "already_handled"; status: OrderStatus };
+
 type VerifiedLine = {
   productId: string;
   productName: string;
@@ -114,26 +122,23 @@ const priceOrderItemsFromDb = async (
 /**
  * Refunds a capture we cannot fulfil and closes the order.
  *
- * The payment proof is persisted first (guarded on `pending`) so a failed
- * refund leaves a pending order that support can find by payment id. A `count`
- * of 0 means another confirm/refund path already owns the order — we must not
- * refund a second time.
+ * The claim (`pending` + empty proof → record proof) is what makes refund and
+ * confirm mutually exclusive: whichever path writes `paymentId` first owns the
+ * order. A `count` of 0 means the confirm path won, or an earlier refund
+ * attempt already recorded the proof. In both cases we must not refund again
+ * and must report what actually happened instead of claiming a refund.
  */
 const refundAndClose = async (
   orderId: string,
   paymentId: string,
   amountPaise: number,
   reason: RefundReason
-): Promise<void> => {
+): Promise<RefundOutcome> => {
   const claimed = await prisma.order.updateMany({
-    // `paymentId: ""` makes the refund claim exclusive: the first path records
-    // the proof, every concurrent path sees a non-empty id and backs off.
     where: { id: orderId, status: "pending", paymentId: "" },
     data: { paymentId },
   });
   if (claimed.count === 0) {
-    // Either another path already handled this capture, or an earlier refund
-    // attempt failed and left the proof on a pending order. Never refund twice.
     const current = await prisma.order.findUnique({
       where: { id: orderId },
       select: { status: true, paymentId: true },
@@ -144,7 +149,12 @@ const refundAndClose = async (
         "We couldn't complete or refund this payment yet. Please contact support with your payment reference."
       );
     }
-    return;
+    if (!current) {
+      throw new AppError("CONFLICT", "This order can no longer be confirmed.");
+    }
+    // Another path already moved the order on (e.g. a concurrent confirm).
+    // Never report a refund we did not perform.
+    return { outcome: "already_handled", status: current.status };
   }
 
   try {
@@ -171,6 +181,8 @@ const refundAndClose = async (
   });
   revalidatePath("/my-orders");
   revalidatePath("/admin");
+
+  return { outcome: "refunded" };
 };
 
 /**
@@ -307,6 +319,16 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
       throw new AppError("CONFLICT", "This order can no longer be confirmed.");
     }
 
+    // A recorded proof on a still-pending order means a refund is in flight or
+    // failed. Confirming now would race that refund into a confirmed order
+    // whose money was already returned, so hand it to support instead.
+    if (order.paymentId !== "") {
+      throw new AppError(
+        "PAYMENT_FAILED",
+        "We're still processing this payment. Please contact support with your payment reference."
+      );
+    }
+
     if (
       !verifyRazorpayPaymentSignature(
         proof.razorpayOrderId,
@@ -339,7 +361,14 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
 
     const orderTotalPaise = Math.round(Number(order.total) * 100);
     if (paidAmountPaise !== orderTotalPaise) {
-      await refundAndClose(order.id, proof.razorpayPaymentId, paidAmountPaise, "AMOUNT_MISMATCH");
+      const refund = await refundAndClose(order.id, proof.razorpayPaymentId, paidAmountPaise, "AMOUNT_MISMATCH");
+      if (refund.outcome === "already_handled") {
+        // The concurrent confirm won and already decremented stock.
+        if (isFulfilledStatus(refund.status)) {
+          return { orderId: order.id };
+        }
+        throw new AppError("CONFLICT", "This order can no longer be confirmed.");
+      }
       throw new AppError("AMOUNT_MISMATCH", "The paid amount does not match this order. Your payment has been refunded.");
     }
 
@@ -350,13 +379,25 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
       currentTotals = await priceOrderItemsFromDb(order.items);
     } catch (error) {
       if (error instanceof AppError && error.code === "OUT_OF_STOCK") {
-        await refundAndClose(order.id, proof.razorpayPaymentId, paidAmountPaise, "OUT_OF_STOCK");
+        const refund = await refundAndClose(order.id, proof.razorpayPaymentId, paidAmountPaise, "OUT_OF_STOCK");
+        if (refund.outcome === "already_handled") {
+          if (isFulfilledStatus(refund.status)) {
+            return { orderId: order.id };
+          }
+          throw new AppError("CONFLICT", "This order can no longer be confirmed.");
+        }
       }
       throw error;
     }
 
     if (currentTotals.totalPaise !== paidAmountPaise) {
-      await refundAndClose(order.id, proof.razorpayPaymentId, paidAmountPaise, "PRICE_CHANGED");
+      const refund = await refundAndClose(order.id, proof.razorpayPaymentId, paidAmountPaise, "PRICE_CHANGED");
+      if (refund.outcome === "already_handled") {
+        if (isFulfilledStatus(refund.status)) {
+          return { orderId: order.id };
+        }
+        throw new AppError("CONFLICT", "This order can no longer be confirmed.");
+      }
       throw new AppError("PRICE_CHANGED", "Prices changed while you were checking out. Your payment has been refunded.");
     }
 
@@ -365,12 +406,26 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
       confirmation = await confirmOrder(order.id, proof.razorpayPaymentId);
     } catch (error) {
       if (error instanceof AppError && error.code === "OUT_OF_STOCK") {
-        await refundAndClose(order.id, proof.razorpayPaymentId, paidAmountPaise, "OUT_OF_STOCK");
+        const refund = await refundAndClose(order.id, proof.razorpayPaymentId, paidAmountPaise, "OUT_OF_STOCK");
+        if (refund.outcome === "already_handled") {
+          if (isFulfilledStatus(refund.status)) {
+            return { orderId: order.id };
+          }
+          throw new AppError("CONFLICT", "This order can no longer be confirmed.");
+        }
       }
       throw error;
     }
 
     if (confirmation.status === "already") {
+      // Losing the claim to an in-flight refund means the proof is recorded and
+      // money is (being) returned; never report this as a successful confirm.
+      if (confirmation.current === "pending") {
+        throw new AppError(
+          "PAYMENT_FAILED",
+          "We're still processing this payment. Please contact support with your payment reference."
+        );
+      }
       if (confirmation.current === "cancelled" || confirmation.current === "refunded") {
         throw new AppError("CONFLICT", "This order can no longer be confirmed.");
       }

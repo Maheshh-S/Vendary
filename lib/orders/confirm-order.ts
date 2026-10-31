@@ -7,7 +7,7 @@ import { AppError } from "@/lib/errors";
 
 export type ConfirmOrderResult =
   | { status: "confirmed" }
-  | { status: "already"; current: OrderStatus };
+  | { status: "already"; current: OrderStatus; paymentId: string };
 
 /**
  * Claims a pending order and decrements stock in one transaction.
@@ -15,6 +15,10 @@ export type ConfirmOrderResult =
  * The `pending → confirmed` claim is the idempotency gate: of two concurrent
  * confirmations exactly one `updateMany` matches, so stock is decremented
  * exactly once. A loser observes the winner's state instead of retrying.
+ *
+ * The claim also requires `paymentId: ""`, so it is mutually exclusive with
+ * the refund claim (`pending` + empty proof → record proof). Whichever path
+ * writes first owns the order; the other backs off.
  *
  * Every line is decremented conditionally (`stockQty >= quantity`). A single
  * failure — including a line whose product was deleted after checkout started
@@ -27,16 +31,16 @@ export const confirmOrder = async (
 ): Promise<ConfirmOrderResult> =>
   prisma.$transaction(async (tx) => {
     const claimed = await tx.order.updateMany({
-      where: { id: orderId, status: "pending" },
+      where: { id: orderId, status: "pending", paymentId: "" },
       data: { status: "confirmed", paymentId },
     });
 
     if (claimed.count === 0) {
       const current = await tx.order.findUniqueOrThrow({
         where: { id: orderId },
-        select: { status: true },
+        select: { status: true, paymentId: true },
       });
-      return { status: "already", current: current.status };
+      return { status: "already", current: current.status, paymentId: current.paymentId };
     }
 
     const items = await tx.orderItem.findMany({ where: { orderId } });
