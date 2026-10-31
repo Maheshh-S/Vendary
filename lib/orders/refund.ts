@@ -75,10 +75,22 @@ export const refundAndClose = async (
     );
   }
 
-  await prisma.order.updateMany({
+  const closed = await prisma.order.updateMany({
     where: { id: orderId, status: "pending" },
     data: { status: "refunded" },
   });
+  if (closed.count === 0) {
+    // The money is back (the Razorpay refund succeeded), but the order moved
+    // off `pending` between the claim and this close. Never silent: support
+    // must reconcile an order whose status does not reflect the refund.
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        event: "order_refund_close_race",
+        orderId,
+      })
+    );
+  }
 
   return { outcome: "refunded" };
 };
