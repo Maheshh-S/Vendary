@@ -12,10 +12,11 @@ import { serializePrismaObject } from "@/lib/db/serializer";
 import { AppError } from "@/lib/errors";
 import { computeOrderTotals } from "@/lib/money";
 import { confirmOrder } from "@/lib/orders/confirm-order";
+import { refundAndClose, type RefundOutcome } from "@/lib/orders/refund";
 import { invalidateProductCache } from "@/lib/product-cache";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { verifyRazorpayPaymentSignature } from "@/lib/razorpay";
-import { getRazorpayClient, refundPayment, type RefundReason } from "@/lib/razorpay-client";
+import { getRazorpayClient, type RefundReason } from "@/lib/razorpay-client";
 import { runAction } from "@/lib/run-action";
 import { parseInput } from "@/lib/validation";
 import { confirmPaymentSchema, type ConfirmPaymentSchema } from "@/schemas/checkout/confirm-payment-schema";
@@ -35,10 +36,6 @@ const toRupees = (paise: number): string => (paise / 100).toFixed(2);
 /** Statuses a concurrent successful confirmation can leave the order in. */
 const isFulfilledStatus = (status: OrderStatus): boolean =>
   status === "confirmed" || status === "shipped" || status === "delivered";
-
-type RefundOutcome =
-  | { outcome: "refunded" }
-  | { outcome: "already_handled"; status: OrderStatus };
 
 type VerifiedLine = {
   productId: string;
@@ -119,70 +116,34 @@ const priceOrderItemsFromDb = async (
   );
 };
 
+const SUPPORT_REFUND_MESSAGE =
+  "We couldn't complete or refund this payment yet. Please contact support with your payment reference.";
+
 /**
- * Refunds a capture we cannot fulfil and closes the order.
- *
- * The claim (`pending` + empty proof → record proof) is what makes refund and
- * confirm mutually exclusive: whichever path writes `paymentId` first owns the
- * order. A `count` of 0 means the confirm path won, or an earlier refund
- * attempt already recorded the proof. In both cases we must not refund again
- * and must report what actually happened instead of claiming a refund.
+ * Refunds through the shared claim helper and maps the outcome the shopper
+ * must never see as a conflict: a pending order already owned by a refund
+ * (in flight, or a refund call that failed and recorded the proof) belongs
+ * with support. A successful refund also refreshes both order views;
+ * `already_handled` with a fulfilled status is returned so each caller can
+ * treat a concurrent confirmation as success.
  */
-const refundAndClose = async (
+const refundAndCloseForAction = async (
   orderId: string,
   paymentId: string,
   amountPaise: number,
   reason: RefundReason
 ): Promise<RefundOutcome> => {
-  const claimed = await prisma.order.updateMany({
-    where: { id: orderId, status: "pending", paymentId: "" },
-    data: { paymentId },
-  });
-  if (claimed.count === 0) {
-    const current = await prisma.order.findUnique({
-      where: { id: orderId },
-      select: { status: true, paymentId: true },
-    });
-    if (current?.status === "pending" && current.paymentId !== "") {
-      throw new AppError(
-        "PAYMENT_FAILED",
-        "We couldn't complete or refund this payment yet. Please contact support with your payment reference."
-      );
+  const refund = await refundAndClose(orderId, paymentId, amountPaise, reason);
+  if (refund.outcome === "already_handled") {
+    if (refund.status === "pending") {
+      throw new AppError("PAYMENT_FAILED", SUPPORT_REFUND_MESSAGE);
     }
-    if (!current) {
-      throw new AppError("CONFLICT", "This order can no longer be confirmed.");
-    }
-    // Another path already moved the order on (e.g. a concurrent confirm).
-    // Never report a refund we did not perform.
-    return { outcome: "already_handled", status: current.status };
+    return refund;
   }
 
-  try {
-    await refundPayment({ paymentId, amountPaise, orderId, reason });
-  } catch (error) {
-    console.error(
-      JSON.stringify({
-        level: "error",
-        event: "order_refund_failed",
-        orderId,
-        reason,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    );
-    throw new AppError(
-      "PAYMENT_FAILED",
-      "Your payment was captured but we couldn't complete your order. Please contact support with your payment reference."
-    );
-  }
-
-  await prisma.order.updateMany({
-    where: { id: orderId, status: "pending" },
-    data: { status: "refunded" },
-  });
   revalidatePath("/my-orders");
   revalidatePath("/admin");
-
-  return { outcome: "refunded" };
+  return refund;
 };
 
 /**
@@ -361,7 +322,7 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
 
     const orderTotalPaise = Math.round(Number(order.total) * 100);
     if (paidAmountPaise !== orderTotalPaise) {
-      const refund = await refundAndClose(order.id, proof.razorpayPaymentId, paidAmountPaise, "AMOUNT_MISMATCH");
+      const refund = await refundAndCloseForAction(order.id, proof.razorpayPaymentId, paidAmountPaise, "AMOUNT_MISMATCH");
       if (refund.outcome === "already_handled") {
         // The concurrent confirm won and already decremented stock.
         if (isFulfilledStatus(refund.status)) {
@@ -379,7 +340,7 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
       currentTotals = await priceOrderItemsFromDb(order.items);
     } catch (error) {
       if (error instanceof AppError && error.code === "OUT_OF_STOCK") {
-        const refund = await refundAndClose(order.id, proof.razorpayPaymentId, paidAmountPaise, "OUT_OF_STOCK");
+        const refund = await refundAndCloseForAction(order.id, proof.razorpayPaymentId, paidAmountPaise, "OUT_OF_STOCK");
         if (refund.outcome === "already_handled") {
           if (isFulfilledStatus(refund.status)) {
             return { orderId: order.id };
@@ -391,7 +352,7 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
     }
 
     if (currentTotals.totalPaise !== paidAmountPaise) {
-      const refund = await refundAndClose(order.id, proof.razorpayPaymentId, paidAmountPaise, "PRICE_CHANGED");
+      const refund = await refundAndCloseForAction(order.id, proof.razorpayPaymentId, paidAmountPaise, "PRICE_CHANGED");
       if (refund.outcome === "already_handled") {
         if (isFulfilledStatus(refund.status)) {
           return { orderId: order.id };
@@ -406,7 +367,7 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
       confirmation = await confirmOrder(order.id, proof.razorpayPaymentId);
     } catch (error) {
       if (error instanceof AppError && error.code === "OUT_OF_STOCK") {
-        const refund = await refundAndClose(order.id, proof.razorpayPaymentId, paidAmountPaise, "OUT_OF_STOCK");
+        const refund = await refundAndCloseForAction(order.id, proof.razorpayPaymentId, paidAmountPaise, "OUT_OF_STOCK");
         if (refund.outcome === "already_handled") {
           if (isFulfilledStatus(refund.status)) {
             return { orderId: order.id };
