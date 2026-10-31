@@ -37,12 +37,17 @@ const SearchForm = ({ setIsOpen } : {setIsOpen : (arg0: boolean) => void}) => {
     },
     // The server requires 2-64 trimmed characters; don't fire before that.
     enabled: trimmedTerm.length >= 2,
+    // A failed search must not be retried automatically: the term is user
+    // input, so every retry is another avoidable server round trip.
+    retry: false,
     // Don't show loading state initially
     initialData: [],
   })
 
   const handleDebouncedSearch = (value: string) => {
-    setSearchTerm(value)
+    // The server caps search terms at 64 characters; mirror it here so an
+    // over-long term never leaves the browser.
+    setSearchTerm(value.slice(0, 64))
   }
 
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
