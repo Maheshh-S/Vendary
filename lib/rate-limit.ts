@@ -22,7 +22,16 @@ export type RateLimitOptions = {
   subject: string;
   limit: number;
   windowMs: number;
+  /** Upper bound on the Redis round trip; defaults to `REDIS_CALL_TIMEOUT_MS`. */
+  timeoutMs?: number;
 };
+
+/**
+ * Upper bound on the Redis path. A blackholed/partitioned Redis must not make
+ * the caller (e.g. login) wait on ioredis retries; past this bound the limiter
+ * degrades to the in-memory window within the same request.
+ */
+export const REDIS_CALL_TIMEOUT_MS = 1000;
 
 /** Limits from the phase plan. Only the auth ones are wired up today. */
 export const RATE_LIMITS = {
@@ -45,7 +54,10 @@ const FALLBACK_WARNING_INTERVAL_MS = 60_000;
  * One warning per minute per process. `reason` is a fixed code so a Redis
  * error message (which may contain a URL or host) is never logged.
  */
-const warnFallback = (reason: "redis_disabled" | "redis_error", now: number): void => {
+const warnFallback = (
+  reason: "redis_disabled" | "redis_error" | "timeout",
+  now: number
+): void => {
   if (now - lastFallbackWarningAt < FALLBACK_WARNING_INTERVAL_MS) {
     return;
   }
@@ -110,6 +122,32 @@ const checkRedis = async (
   return toResult(count, limit, now, expiresAt);
 };
 
+/** Distinguishes our own deadline from a Redis error so the reason is exact. */
+class RedisTimeoutError extends Error {}
+
+/**
+ * Resolves with `operation` or rejects with `RedisTimeoutError` after
+ * `timeoutMs`. The timer is always cleared, and `Promise.race` keeps a handler
+ * on `operation`, so a late rejection after the deadline is not unhandled.
+ */
+const withTimeout = async <T>(
+  operation: Promise<T>,
+  timeoutMs: number
+): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new RedisTimeoutError("redis call timed out")),
+      timeoutMs
+    );
+  });
+  try {
+    return await Promise.race([operation, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 /**
  * Counts one hit for `subject` in `bucket` and reports whether it is allowed.
  * The key is `rl:{bucket}:{subject}:{windowIndex}` — `subject` must therefore
@@ -120,6 +158,7 @@ export const checkRateLimit = async ({
   subject,
   limit,
   windowMs,
+  timeoutMs = REDIS_CALL_TIMEOUT_MS,
 }: RateLimitOptions): Promise<RateLimitResult> => {
   const now = Date.now();
   const windowIndex = Math.floor(now / windowMs);
@@ -132,9 +171,17 @@ export const checkRateLimit = async ({
   }
 
   try {
-    return await checkRedis(key, limit, windowMs, now, expiresAt);
-  } catch {
-    warnFallback("redis_error", now);
+    return await withTimeout(
+      checkRedis(key, limit, windowMs, now, expiresAt),
+      timeoutMs
+    );
+  } catch (error) {
+    // A timed-out INCR may still land in Redis later; the memory window is
+    // authoritative for this hit so the caller is never blocked past the bound.
+    warnFallback(
+      error instanceof RedisTimeoutError ? "timeout" : "redis_error",
+      now
+    );
     return checkMemory(key, limit, now, expiresAt);
   }
 };

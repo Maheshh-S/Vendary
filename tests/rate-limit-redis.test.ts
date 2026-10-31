@@ -190,4 +190,38 @@ describe("checkRateLimit (redis)", () => {
       })
     ).resolves.toBeDefined();
   });
+
+  it("bounds the Redis wait and falls back to memory when INCR hangs", async () => {
+    const opts = {
+      bucket: "search",
+      subject: "198.51.100.9",
+      limit: 2,
+      windowMs: 60_000,
+    };
+    // A blackholed Redis: the command never settles.
+    redisMock.incr.mockImplementation(
+      () => new Promise<number>(() => {})
+    );
+
+    const pending = rateLimit.checkRateLimit({ ...opts, timeoutMs: 10 });
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(pending).resolves.toMatchObject({ allowed: true, remaining: 1 });
+
+    // A second call within the bound degrades the same way and counts in memory.
+    const second = rateLimit.checkRateLimit({ ...opts, timeoutMs: 10 });
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(second).resolves.toMatchObject({ allowed: true, remaining: 0 });
+
+    expect(redisMock.pexpire).not.toHaveBeenCalled();
+    // Same throttled structured warning, with a fixed timeout reason; the
+    // second call is inside the one-per-minute window.
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][1]).toMatchObject({
+      event: "rate_limit_redis_fallback",
+      reason: "timeout",
+    });
+    const logged = JSON.stringify(warnSpy.mock.calls);
+    expect(logged).not.toContain(opts.subject);
+    expect(logged).not.toContain("timeoutMs");
+  });
 });
