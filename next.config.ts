@@ -17,6 +17,12 @@ const withMDX = nextMDX({
 const nextConfig = {
   // Self-contained server bundle for the hardened Docker runner.
   output: 'standalone' as const,
+  experimental: {
+    serverActions: {
+      // Next 15 default, pinned so a framework bump cannot silently raise it.
+      bodySizeLimit: '1mb' as const,
+    },
+  },
   pageExtensions: ['js', 'jsx', 'ts', 'tsx', 'mdx'],
   images: {
     remotePatterns: [
