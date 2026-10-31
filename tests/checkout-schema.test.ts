@@ -3,6 +3,7 @@ import {
   checkoutSessionSchema,
   placeOrderSchema,
 } from "@/schemas/checkout/place-order-schema";
+import { confirmPaymentSchema } from "@/schemas/checkout/confirm-payment-schema";
 
 const validAddress = {
   fName: "Ada",
@@ -53,6 +54,19 @@ describe("checkoutSessionSchema (client cart boundary)", () => {
       checkoutSessionSchema.parse({ line_items: [{ productId: "p", quantity: 99 }] })
     ).not.toThrow();
   });
+
+  it("bounds line count and product id length", () => {
+    const line = { productId: "p", quantity: 1 };
+    expect(() =>
+      checkoutSessionSchema.parse({ line_items: Array.from({ length: 101 }, () => line) })
+    ).toThrow();
+    expect(() =>
+      checkoutSessionSchema.parse({ line_items: Array.from({ length: 100 }, () => line) })
+    ).not.toThrow();
+    expect(() =>
+      checkoutSessionSchema.parse({ line_items: [{ productId: "x".repeat(65), quantity: 1 }] })
+    ).toThrow();
+  });
 });
 
 describe("placeOrderSchema (address boundary)", () => {
@@ -74,5 +88,55 @@ describe("placeOrderSchema (address boundary)", () => {
   it("rejects missing required address fields", () => {
     expect(() => placeOrderSchema.parse({ ...validAddress, address: "" })).toThrow();
     expect(() => placeOrderSchema.parse({ ...validAddress, pinCode: "" })).toThrow();
+  });
+
+  it("rejects address fields past their length bounds", () => {
+    const tooLong = {
+      fName: "a".repeat(101),
+      lName: "a".repeat(101),
+      address: "a".repeat(501),
+      area: "a".repeat(101),
+      landmark: "a".repeat(101),
+      pinCode: "1".repeat(11),
+    };
+    for (const [field, value] of Object.entries(tooLong)) {
+      expect(() => placeOrderSchema.parse({ ...validAddress, [field]: value })).toThrow();
+    }
+    expect(() =>
+      placeOrderSchema.parse({ ...validAddress, country: ["a".repeat(101), "Karnataka"] })
+    ).toThrow();
+  });
+});
+
+describe("confirmPaymentSchema (payment proof boundary)", () => {
+  const validProof = {
+    razorpayOrderId: "order_Pq1AbC2dEfGhIj",
+    razorpayPaymentId: "pay_Pq1AbC2dEfGhIj",
+    razorpaySignature: "a".repeat(64),
+  };
+
+  it("accepts a well-formed Razorpay proof", () => {
+    expect(confirmPaymentSchema.parse(validProof)).toEqual(validProof);
+  });
+
+  it("requires all three proofs (the client can no longer supply a cart)", () => {
+    for (const field of Object.keys(validProof) as (keyof typeof validProof)[]) {
+      expect(() => confirmPaymentSchema.parse({ ...validProof, [field]: "" })).toThrow();
+      const { [field]: _removed, ...withoutField } = validProof;
+      expect(() => confirmPaymentSchema.parse(withoutField)).toThrow();
+    }
+    expect(() => confirmPaymentSchema.parse({})).toThrow();
+  });
+
+  it("caps identifier and signature lengths", () => {
+    expect(() =>
+      confirmPaymentSchema.parse({ ...validProof, razorpayOrderId: "o".repeat(65) })
+    ).toThrow();
+    expect(() =>
+      confirmPaymentSchema.parse({ ...validProof, razorpayPaymentId: "p".repeat(65) })
+    ).toThrow();
+    expect(() =>
+      confirmPaymentSchema.parse({ ...validProof, razorpaySignature: "s".repeat(129) })
+    ).toThrow();
   });
 });
