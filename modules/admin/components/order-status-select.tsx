@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import type { OrderStatus } from "@prisma/client";
@@ -48,9 +48,28 @@ const OrderStatusSelect = ({ orderId, status }: Props) => {
 
   const current: OrderStatus = isOrderStatus(value) ? value : "pending";
   // Admin-only edges: `confirmed` is intentionally absent for pending orders,
-  // because only the payment-verified `confirmOrder` path may confirm.
+  // because only the payment-verified `confirmOrder` path may confirm, and
+  // pending orders have no cancel option until the Phase 1 refund flow.
   const nextStates = ADMIN_TRANSITIONS[current];
   const options: OrderStatus[] = [current, ...nextStates];
+
+  // Cancelling or refunding here is a record-only override: no money moves.
+  // Make the admin acknowledge that before the mutation runs.
+  const handleChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    const next = e.target.value;
+    if (
+      (next === "cancelled" || next === "refunded") &&
+      !window.confirm(
+        "This changes the order status only and does NOT issue a Razorpay refund. Continue?"
+      )
+    ) {
+      // Keep the current selection. A controlled select normally snaps back on
+      // re-render, but no state changed here, so reset the DOM value directly.
+      e.target.value = current;
+      return;
+    }
+    mutate(next);
+  };
 
   return (
     <Select
@@ -58,7 +77,7 @@ const OrderStatusSelect = ({ orderId, status }: Props) => {
       disabled={isPending || nextStates.length === 0}
       aria-label="Order status"
       title="Phase 0: status changes are record-only; no Razorpay refund is issued."
-      onChange={(e) => mutate(e.target.value)}
+      onChange={handleChange}
     >
       {options.map((s) => (
         <option key={s} value={s} className="capitalize">
