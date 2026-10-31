@@ -26,9 +26,10 @@ type StockRestoreItem = {
  *
  * The Razorpay call is the one failure that is thrown: a refund without a
  * successful API call must leave the order `pending` with the payment id for
- * support, never mark it refunded. Callers decide how loud that is (the
- * checkout action returns `PAYMENT_FAILED`; the webhook returns 500 so
- * Razorpay retries).
+ * support, never mark it refunded. Callers decide how loud that is: the
+ * checkout action returns `PAYMENT_FAILED`; the webhook acknowledges the event
+ * and alerts support, because the recorded proof makes a retry a no-op until a
+ * refund ledger exists (Phase 1).
  */
 export const refundAndClose = async (
   orderId: string,

@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
 import { confirmOrder } from "@/lib/orders/confirm-order";
 import { refundAndClose, restoreOrderStock } from "@/lib/orders/refund";
+import { invalidateProductCache } from "@/lib/product-cache";
 import type { RefundReason } from "@/lib/razorpay-client";
 import { verifyRazorpayWebhookSignature } from "@/lib/razorpay";
 import {
@@ -28,8 +29,10 @@ import {
  *
  * The HMAC is verified over the raw body before parsing; the parsed body is
  * schema-validated before any DB access. Invalid trust-boundary input is 400
- * with no side effects, unknown events are acknowledged with 200, and DB or
- * refund failures are 500 so Razorpay retries.
+ * with no side effects, unknown events are acknowledged with 200, and DB
+ * failures are 500 so Razorpay retries. A failed refund is acknowledged (200)
+ * with a loud alert instead: the payment proof is already recorded, so a retry
+ * would find the order `already_handled` and could not restart the refund.
  */
 
 const acknowledgment = () => NextResponse.json({ received: true });
@@ -51,10 +54,26 @@ const revalidateOrderViews = (): void => {
 };
 
 /**
+ * Drops the Redis views derived from every product whose stock this event
+ * changed. `invalidateProductCache` swallows cache outages, so invalidation
+ * stays non-fatal.
+ */
+const invalidateProductCaches = async (productIds: readonly string[]): Promise<void> => {
+  for (const productId of productIds) {
+    await invalidateProductCache(productId);
+  }
+};
+
+/**
  * Refunds a capture the webhook could not turn into an order.
  * `already_handled` means another path (client callback or an earlier refund)
- * already owns the order: never refund twice. A failed Razorpay call is a 500
- * so the event is retried; the order stays `pending` with the payment id.
+ * already owns the order: never refund twice.
+ *
+ * A failed Razorpay refund is acknowledged (200) with a loud alert, not a 500:
+ * the claim already recorded the payment proof, so a retried delivery would
+ * hit `already_handled` and could not retry the refund. Until a refund ledger
+ * tracks failed attempts (Phase 1), recovery is support-led from the alert.
+ * DB/transaction failures still propagate for a 500 so Razorpay retries.
  */
 const refundCapture = async (
   orderId: string,
@@ -80,22 +99,30 @@ const refundCapture = async (
     revalidateOrderViews();
     return acknowledgment();
   } catch (error) {
-    logError({
-      event: "webhook_refund_failed",
-      orderId,
-      paymentId,
-      reason,
-      error: errorMessage(error),
-      ...context,
-    });
-    return NextResponse.json({ error: "Refund failed" }, { status: 500 });
+    if (error instanceof AppError && error.code === "PAYMENT_FAILED") {
+      logError({
+        event: "webhook_refund_failed",
+        orderId,
+        paymentId,
+        reason,
+        error: errorMessage(error),
+        ...context,
+      });
+      return acknowledgment();
+    }
+    throw error;
   }
 };
 
 const handlePaymentCaptured = async (payment: PaymentWebhookEntity): Promise<NextResponse> => {
   const order = await prisma.order.findUnique({
     where: { transactionId: payment.order_id },
-    select: { id: true, status: true, total: true },
+    select: {
+      id: true,
+      status: true,
+      total: true,
+      items: { select: { productId: true } },
+    },
   });
 
   if (!order) {
@@ -140,6 +167,11 @@ const handlePaymentCaptured = async (payment: PaymentWebhookEntity): Promise<Nex
       return acknowledgment();
     }
 
+    // Only the confirm winner changed stock: drop the stale product views
+    // before revalidating the order pages.
+    await invalidateProductCaches(
+      order.items.flatMap((item) => (item.productId ? [item.productId] : []))
+    );
     revalidateOrderViews();
     return acknowledgment();
   } catch (error) {
@@ -157,7 +189,7 @@ type RefundTransition =
   | { kind: "partial"; orderId: string; refundedPaise: number; orderTotalPaise: number }
   | { kind: "terminal"; orderId: string; status: OrderStatus }
   | { kind: "raced"; orderId: string; status: OrderStatus }
-  | { kind: "refunded"; orderId: string };
+  | { kind: "refunded"; orderId: string; productIds: string[] };
 
 const handleRefundProcessed = async (refund: RefundWebhookEntity): Promise<NextResponse> => {
   const transition = await prisma.$transaction<RefundTransition>(async (tx) => {
@@ -201,7 +233,13 @@ const handleRefundProcessed = async (refund: RefundWebhookEntity): Promise<NextR
         }
 
         await restoreOrderStock(tx, order.items);
-        return { kind: "refunded", orderId: order.id };
+        // Only lines with a live product row were restored; null snapshots
+        // (deleted products) have no cache entry to drop.
+        return {
+          kind: "refunded",
+          orderId: order.id,
+          productIds: order.items.flatMap((item) => (item.productId ? [item.productId] : [])),
+        };
       }
 
       case "pending":
@@ -217,7 +255,8 @@ const handleRefundProcessed = async (refund: RefundWebhookEntity): Promise<NextR
           return { kind: "raced", orderId: order.id, status: order.status };
         }
 
-        return { kind: "refunded", orderId: order.id };
+        // Stock was not touched, so no product view is stale.
+        return { kind: "refunded", orderId: order.id, productIds: [] };
       }
     }
   });
@@ -261,6 +300,9 @@ const handleRefundProcessed = async (refund: RefundWebhookEntity): Promise<NextR
       return acknowledgment();
 
     case "refunded":
+      // Committed: drop the stale product views before revalidating order
+      // pages. Replays, partials and racers never reach this branch.
+      await invalidateProductCaches(transition.productIds);
       revalidateOrderViews();
       return acknowledgment();
   }

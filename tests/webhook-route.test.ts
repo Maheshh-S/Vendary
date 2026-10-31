@@ -9,22 +9,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * cover the actual status guards and the "refund exactly once" behaviour.
  */
 
-const { prismaMock, txMock, confirmOrderMock, refundPaymentMock, revalidateMock } = vi.hoisted(() => {
-  const txMock = {
-    order: { findFirst: vi.fn(), updateMany: vi.fn() },
-    product: { updateMany: vi.fn() },
-  };
-  return {
-    txMock,
-    prismaMock: {
-      order: { findUnique: vi.fn(), updateMany: vi.fn() },
-      $transaction: vi.fn(),
-    },
-    confirmOrderMock: vi.fn(),
-    refundPaymentMock: vi.fn(),
-    revalidateMock: vi.fn(),
-  };
-});
+const { prismaMock, txMock, confirmOrderMock, refundPaymentMock, revalidateMock, invalidateMock } =
+  vi.hoisted(() => {
+    const txMock = {
+      order: { findFirst: vi.fn(), updateMany: vi.fn() },
+      product: { updateMany: vi.fn() },
+    };
+    return {
+      txMock,
+      prismaMock: {
+        order: { findUnique: vi.fn(), updateMany: vi.fn() },
+        $transaction: vi.fn(),
+      },
+      confirmOrderMock: vi.fn(),
+      refundPaymentMock: vi.fn(),
+      revalidateMock: vi.fn(),
+      invalidateMock: vi.fn(),
+    };
+  });
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db/prisma", () => ({ prisma: prismaMock }));
@@ -34,6 +36,7 @@ vi.mock("@/lib/razorpay-client", () => ({
   refundPayment: refundPaymentMock,
 }));
 vi.mock("next/cache", () => ({ revalidatePath: revalidateMock }));
+vi.mock("@/lib/product-cache", () => ({ invalidateProductCache: invalidateMock }));
 
 import { POST } from "@/app/api/razorpay/webhook/route";
 import { AppError } from "@/lib/errors";
@@ -49,6 +52,7 @@ const ORDER = {
   id: ORDER_ID,
   status: "pending",
   total: "216.00",
+  items: [{ productId: "prod_1" }, { productId: null }],
 };
 
 const paymentEntity = (overrides: Record<string, unknown> = {}) => ({
@@ -110,6 +114,7 @@ describe("razorpay webhook route", () => {
     confirmOrderMock.mockResolvedValue({ status: "confirmed" });
     refundPaymentMock.mockResolvedValue({ refundId: "rfnd_123" });
     revalidateMock.mockReturnValue(undefined);
+    invalidateMock.mockResolvedValue(undefined);
 
     txMock.order.updateMany.mockResolvedValue({ count: 1 });
     txMock.product.updateMany.mockResolvedValue({ count: 1 });
@@ -173,8 +178,26 @@ describe("razorpay webhook route", () => {
       expect(confirmOrderMock).toHaveBeenCalledTimes(1);
       expect(confirmOrderMock).toHaveBeenCalledWith(ORDER_ID, PAYMENT_ID);
       expect(refundPaymentMock).not.toHaveBeenCalled();
+      // The confirm winner decremented stock: every live product's views are
+      // dropped (the null snapshot has nothing cached).
+      expect(invalidateMock).toHaveBeenCalledTimes(1);
+      expect(invalidateMock).toHaveBeenCalledWith("prod_1");
       expect(revalidateMock).toHaveBeenCalledWith("/admin");
       expect(revalidateMock).toHaveBeenCalledWith("/my-orders");
+    });
+
+    it("invalidates every ordered product after a winning confirm", async () => {
+      prismaMock.order.findUnique.mockResolvedValue({
+        ...ORDER,
+        items: [{ productId: "prod_1" }, { productId: "prod_2" }, { productId: null }],
+      });
+
+      const res = await POST(signedRequest(capturedBody()));
+
+      expect(res.status).toBe(200);
+      expect(invalidateMock).toHaveBeenCalledTimes(2);
+      expect(invalidateMock).toHaveBeenNthCalledWith(1, "prod_1");
+      expect(invalidateMock).toHaveBeenNthCalledWith(2, "prod_2");
     });
 
     it("acknowledges a capture whose order row does not exist", async () => {
@@ -188,6 +211,7 @@ describe("razorpay webhook route", () => {
         expect(confirmOrderMock).not.toHaveBeenCalled();
         expect(refundPaymentMock).not.toHaveBeenCalled();
         expect(revalidateMock).not.toHaveBeenCalled();
+        expect(invalidateMock).not.toHaveBeenCalled();
         expect(JSON.parse(String(warn.mock.calls[0][0]))).toMatchObject({
           event: "webhook_order_not_found",
           razorpayOrderId: RAZORPAY_ORDER_ID,
@@ -209,6 +233,7 @@ describe("razorpay webhook route", () => {
         expect(confirmOrderMock).not.toHaveBeenCalled();
         expect(refundPaymentMock).not.toHaveBeenCalled();
         expect(revalidateMock).not.toHaveBeenCalled();
+        expect(invalidateMock).not.toHaveBeenCalled();
       }
     );
 
@@ -235,6 +260,9 @@ describe("razorpay webhook route", () => {
         where: { id: ORDER_ID, status: "pending" },
         data: { status: "refunded" },
       });
+      // The order never confirmed, so no stock changed and no product cache is
+      // stale.
+      expect(invalidateMock).not.toHaveBeenCalled();
       expect(revalidateMock).toHaveBeenCalledWith("/admin");
       expect(revalidateMock).toHaveBeenCalledWith("/my-orders");
     });
@@ -255,10 +283,11 @@ describe("razorpay webhook route", () => {
         where: { id: ORDER_ID, status: "pending" },
         data: { status: "refunded" },
       });
+      expect(invalidateMock).not.toHaveBeenCalled();
       expect(revalidateMock).toHaveBeenCalledWith("/admin");
     });
 
-    it("returns 500 and leaves the order pending when the refund call fails", async () => {
+    it("acknowledges a failed refund with a loud alert instead of a retryable 500", async () => {
       const error = vi.spyOn(console, "error").mockImplementation(() => {});
       try {
         confirmOrderMock.mockRejectedValue(new AppError("OUT_OF_STOCK", "sold out"));
@@ -266,7 +295,10 @@ describe("razorpay webhook route", () => {
 
         const res = await POST(signedRequest(capturedBody()));
 
-        expect(res.status).toBe(500);
+        // The proof is recorded before the refund call, so Razorpay's retry
+        // would hit `already_handled` and could not retry the refund: Phase 0
+        // acknowledges and alerts support instead of asking for a retry.
+        expect(res.status).toBe(200);
         // The claim is the only write: the order is never marked refunded
         // without a successful refund.
         expect(prismaMock.order.updateMany).toHaveBeenCalledTimes(1);
@@ -275,6 +307,7 @@ describe("razorpay webhook route", () => {
           data: { paymentId: PAYMENT_ID },
         });
         expect(revalidateMock).not.toHaveBeenCalled();
+        expect(invalidateMock).not.toHaveBeenCalled();
 
         const entries = error.mock.calls.map((call) => JSON.parse(String(call[0])));
         expect(entries).toEqual(
@@ -299,6 +332,27 @@ describe("razorpay webhook route", () => {
       }
     });
 
+    it("returns 500 when the refund claim hits a database failure", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        confirmOrderMock.mockRejectedValue(new AppError("OUT_OF_STOCK", "sold out"));
+        prismaMock.order.updateMany.mockRejectedValue(new Error("db down"));
+
+        const res = await POST(signedRequest(capturedBody()));
+
+        expect(res.status).toBe(500);
+        expect(revalidateMock).not.toHaveBeenCalled();
+        expect(invalidateMock).not.toHaveBeenCalled();
+        expect(JSON.parse(String(error.mock.calls[0][0]))).toMatchObject({
+          level: "error",
+          event: "webhook_processing_failed",
+          eventType: "payment.captured",
+        });
+      } finally {
+        error.mockRestore();
+      }
+    });
+
     it("does not refund again when a refund already owns the pending order", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       try {
@@ -313,6 +367,7 @@ describe("razorpay webhook route", () => {
         expect(res.status).toBe(200);
         expect(refundPaymentMock).not.toHaveBeenCalled();
         expect(revalidateMock).not.toHaveBeenCalled();
+        expect(invalidateMock).not.toHaveBeenCalled();
         expect(JSON.parse(String(warn.mock.calls[0][0]))).toMatchObject({
           event: "webhook_confirm_lost_claim",
           orderId: ORDER_ID,
@@ -372,6 +427,12 @@ describe("razorpay webhook route", () => {
         where: { id: "prod_1" },
         data: { stockQty: { increment: 2 }, availability: "IN_STOCK" },
       });
+      // The restored live product's views are dropped before revalidating.
+      expect(invalidateMock).toHaveBeenCalledTimes(1);
+      expect(invalidateMock).toHaveBeenCalledWith("prod_1");
+      expect(invalidateMock.mock.invocationCallOrder[0]).toBeLessThan(
+        revalidateMock.mock.invocationCallOrder[0]
+      );
       expect(revalidateMock).toHaveBeenCalledWith("/admin");
       expect(revalidateMock).toHaveBeenCalledWith("/my-orders");
     });
@@ -387,6 +448,7 @@ describe("razorpay webhook route", () => {
         expect(txMock.order.updateMany).not.toHaveBeenCalled();
         expect(txMock.product.updateMany).not.toHaveBeenCalled();
         expect(revalidateMock).not.toHaveBeenCalled();
+        expect(invalidateMock).not.toHaveBeenCalled();
         expect(JSON.parse(String(warn.mock.calls[0][0]))).toMatchObject({
           event: "webhook_refund_ignored",
           orderStatus: "refunded",
@@ -406,6 +468,7 @@ describe("razorpay webhook route", () => {
         expect(res.status).toBe(200);
         expect(txMock.order.updateMany).not.toHaveBeenCalled();
         expect(txMock.product.updateMany).not.toHaveBeenCalled();
+        expect(invalidateMock).not.toHaveBeenCalled();
         expect(JSON.parse(String(warn.mock.calls[0][0]))).toMatchObject({
           event: "webhook_refund_ignored",
           orderStatus: "cancelled",
@@ -426,6 +489,8 @@ describe("razorpay webhook route", () => {
         data: { status: "refunded" },
       });
       expect(txMock.product.updateMany).not.toHaveBeenCalled();
+      // No stock was restored, so no product cache is stale.
+      expect(invalidateMock).not.toHaveBeenCalled();
       expect(revalidateMock).toHaveBeenCalledWith("/admin");
     });
 
@@ -442,6 +507,7 @@ describe("razorpay webhook route", () => {
           data: { status: "refunded" },
         });
         expect(txMock.product.updateMany).not.toHaveBeenCalled();
+        expect(invalidateMock).not.toHaveBeenCalled();
       }
     );
 
@@ -456,6 +522,7 @@ describe("razorpay webhook route", () => {
         expect(res.status).toBe(200);
         expect(txMock.product.updateMany).not.toHaveBeenCalled();
         expect(revalidateMock).not.toHaveBeenCalled();
+        expect(invalidateMock).not.toHaveBeenCalled();
         expect(JSON.parse(String(warn.mock.calls[0][0]))).toMatchObject({
           event: "webhook_refund_raced",
           orderStatus: "confirmed",
@@ -476,6 +543,7 @@ describe("razorpay webhook route", () => {
         expect(txMock.order.updateMany).not.toHaveBeenCalled();
         expect(txMock.product.updateMany).not.toHaveBeenCalled();
         expect(revalidateMock).not.toHaveBeenCalled();
+        expect(invalidateMock).not.toHaveBeenCalled();
         expect(JSON.parse(String(warn.mock.calls[0][0]))).toMatchObject({
           event: "webhook_refund_partial",
           orderId: ORDER_ID,
@@ -496,6 +564,7 @@ describe("razorpay webhook route", () => {
 
         expect(res.status).toBe(200);
         expect(txMock.order.updateMany).not.toHaveBeenCalled();
+        expect(invalidateMock).not.toHaveBeenCalled();
         expect(JSON.parse(String(warn.mock.calls[0][0]))).toMatchObject({
           event: "webhook_refund_order_not_found",
           paymentId: PAYMENT_ID,
