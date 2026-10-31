@@ -143,12 +143,13 @@ describe("ORDER_TRANSITIONS / canTransition", () => {
 });
 
 const ADMIN_LEGAL_TRANSITIONS: [OrderStatus, OrderStatus][] = LEGAL_TRANSITIONS.filter(
-  ([from, to]) => !(from === "pending" && to === "confirmed")
+  ([from, to]) => !(from === "pending" && (to === "confirmed" || to === "cancelled"))
 );
 
 const ADMIN_ILLEGAL_TRANSITIONS: [OrderStatus, OrderStatus][] = [
   ...ILLEGAL_TRANSITIONS,
   ["pending", "confirmed"],
+  ["pending", "cancelled"],
 ];
 
 describe("ADMIN_TRANSITIONS / canAdminTransition", () => {
@@ -156,20 +157,26 @@ describe("ADMIN_TRANSITIONS / canAdminTransition", () => {
     expect(Object.keys(ADMIN_TRANSITIONS).sort()).toEqual([...ALL_STATUSES].sort());
   });
 
-  it("removes only the payment-verified pending -> confirmed edge", () => {
-    expect(ADMIN_TRANSITIONS.pending).toEqual(["cancelled"]);
+  it("removes both pending edges while the system map keeps them", () => {
+    // Pending orders have no admin options at all: confirming needs payment
+    // verification and cancelling needs Phase 1's refund flow.
+    expect(ADMIN_TRANSITIONS.pending).toEqual([]);
+    expect(ORDER_TRANSITIONS.pending).toEqual(["confirmed", "cancelled"]);
     for (const from of ALL_STATUSES) {
-      const expected =
-        from === "pending"
-          ? ORDER_TRANSITIONS.pending.filter((to) => to !== "confirmed")
-          : ORDER_TRANSITIONS[from];
-      expect(ADMIN_TRANSITIONS[from]).toEqual(expected);
+      expect(ADMIN_TRANSITIONS[from]).toEqual(
+        from === "pending" ? [] : ORDER_TRANSITIONS[from]
+      );
     }
   });
 
   it("refuses pending -> confirmed while the system map still allows it", () => {
     expect(canAdminTransition("pending", "confirmed")).toBe(false);
     expect(canTransition("pending", "confirmed")).toBe(true);
+  });
+
+  it("refuses pending -> cancelled even though Phase 3 cleanup may use it", () => {
+    expect(canAdminTransition("pending", "cancelled")).toBe(false);
+    expect(canTransition("pending", "cancelled")).toBe(true);
   });
 
   it.each(ADMIN_LEGAL_TRANSITIONS)("allows admin %s -> %s", (from, to) => {
@@ -381,6 +388,25 @@ describe("updateOrderStatus transition guards", () => {
     expect(txMock.order.updateMany).not.toHaveBeenCalled();
     expect(txMock.product.updateMany).not.toHaveBeenCalled();
     expect(orderRow?.status).toBe("pending");
+  });
+
+  it("rejects pending -> cancelled with CONFLICT and writes nothing", async () => {
+    // A capture can arrive after an admin cancel (the webhook acks captures
+    // for non-pending orders), so cancelling before payment is never safe
+    // until the Phase 1 refund flow exists.
+    orderRow = makeOrder("pending", "");
+
+    expectFailure(
+      await updateOrderStatus(ORDER_ID, "cancelled"),
+      "CONFLICT",
+      "Cannot change an order from pending to cancelled."
+    );
+    expect(txMock.order.updateMany).not.toHaveBeenCalled();
+    expect(txMock.product.updateMany).not.toHaveBeenCalled();
+    expect(invalidateMock).not.toHaveBeenCalled();
+    expect(revalidateMock).not.toHaveBeenCalled();
+    expect(orderRow?.status).toBe("pending");
+    expect(orderRow?.paymentId).toBe("");
   });
 
   it("rejects pending -> confirmed with the payment-verification message and writes nothing", async () => {

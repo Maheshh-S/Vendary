@@ -9,9 +9,11 @@ import type { OrderStatus } from "@prisma/client";
  * pull in `server-only`, Node built-ins, or database code.
  *
  * `pending -> confirmed` is deliberate: only `confirmOrder` performs it, and
- * only after the Razorpay signature and captured amount are verified. Admins
- * must use `ADMIN_TRANSITIONS`, which omits that edge — they cannot manually
- * confirm an unpaid pending order.
+ * only after the Razorpay signature and captured amount are verified.
+ *
+ * `pending -> cancelled` exists only so Phase 3's cleanup job can close
+ * abandoned pending rows (checkout started, never paid). Admins must use
+ * `ADMIN_TRANSITIONS`, which omits both edges.
  *
  * Stock is decremented only on `pending -> confirmed`, so stock is restored
  * only on `confirmed -> cancelled | refunded`. `shipped`/`delivered` orders
@@ -31,14 +33,22 @@ export const canTransition = (from: OrderStatus, to: OrderStatus): boolean =>
   ORDER_TRANSITIONS[from]?.includes(to) ?? false;
 
 /**
- * Transitions an admin may perform, derived from `ORDER_TRANSITIONS` with the
- * payment-verified `pending -> confirmed` edge removed. `confirmOrder` owns
- * that edge so a pending order can never be confirmed without a captured
- * payment.
+ * Transitions an admin may perform, derived from `ORDER_TRANSITIONS` with both
+ * pending edges removed:
+ *
+ * - `pending -> confirmed` is owned by `confirmOrder` (payment verification).
+ * - `pending -> cancelled` is blocked until Phase 1's refund flow exists. A
+ *   capture can land after an admin cancels (the webhook acks captures for
+ *   non-pending orders), which would leave the customer paid-but-cancelled
+ *   with no refund. Admins may only cancel after `confirmed`.
+ *
+ * Consequently a pending order has no admin options at all.
  */
 export const ADMIN_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   ...ORDER_TRANSITIONS,
-  pending: ORDER_TRANSITIONS.pending.filter((to) => to !== "confirmed"),
+  pending: ORDER_TRANSITIONS.pending.filter(
+    (to) => to !== "confirmed" && to !== "cancelled"
+  ),
 };
 
 export const canAdminTransition = (from: OrderStatus, to: OrderStatus): boolean =>
