@@ -6,13 +6,13 @@ import { OrderStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { requireUser } from "@/lib/auth-guards";
+import { requireAdmin, requireUser } from "@/lib/auth-guards";
 import { prisma } from "@/lib/db/prisma";
-import { serializePrismaObject } from "@/lib/db/serializer";
 import { AppError } from "@/lib/errors";
 import { computeOrderTotals } from "@/lib/money";
 import { confirmOrder } from "@/lib/orders/confirm-order";
-import { refundAndClose, type RefundOutcome } from "@/lib/orders/refund";
+import { refundAndClose, restoreOrderStock, type RefundOutcome } from "@/lib/orders/refund";
+import { canTransition } from "@/lib/orders/status";
 import { invalidateProductCache } from "@/lib/product-cache";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { verifyRazorpayPaymentSignature } from "@/lib/razorpay";
@@ -411,19 +411,75 @@ const ORDER_STATUS_INPUT = z.object({
   status: z.nativeEnum(OrderStatus),
 });
 
-export const updateOrderStatus = async (orderId: string, status: string) => {
-    const session = await requireUser();
-    if (session.user.role !== "ADMIN") {
-        throw new AppError("FORBIDDEN", "You do not have permission to do that.");
-    }
+/**
+ * Moves an order along the shared state machine. The status predicate on the
+ * claim is what makes the stock restore idempotent: of two concurrent admins
+ * exactly one `updateMany` matches, so `restoreOrderStock` runs at most once.
+ *
+ * Phase 0 note: `cancelled`/`refunded` from the admin are record-only
+ * overrides — no Razorpay refund is issued here. Phase 1 Task 1.4 wires the
+ * refund API into this action.
+ */
+export const updateOrderStatus = async (orderId: string, status: string) =>
+  runAction("orders.updateStatus", async () => {
+    await requireAdmin();
 
     const input = parseInput(ORDER_STATUS_INPUT, { orderId, status });
 
-    const updated = await prisma.order.update({
+    const outcome = await prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
         where: { id: input.orderId },
-        data: { status: input.status },
+        select: {
+          status: true,
+          items: { select: { productId: true, quantity: true } },
+        },
+      });
+      if (!order) {
+        throw new AppError("NOT_FOUND", "Order not found.");
+      }
+
+      const from = order.status;
+      const to = input.status;
+      if (!canTransition(from, to)) {
+        throw new AppError("CONFLICT", `Cannot change an order from ${from} to ${to}.`);
+      }
+
+      // Compare-and-set claim: only the caller that observed `from` may move
+      // the order, and only that caller reaches the stock restore below.
+      const claimed = await tx.order.updateMany({
+        where: { id: input.orderId, status: from },
+        data: { status: to },
+      });
+      if (claimed.count === 0) {
+        throw new AppError("CONFLICT", "The order changed while you were updating it. Please refresh.");
+      }
+
+      // Only `pending -> confirmed` ever decremented stock; pending orders
+      // never did, and shipped/delivered goods have left the warehouse. Only
+      // the confirmed -> cancelled/refunded transition puts units back.
+      const restoreStock = from === "confirmed" && (to === "cancelled" || to === "refunded");
+      if (restoreStock) {
+        await restoreOrderStock(tx, order.items);
+      }
+
+      return {
+        orderId: input.orderId,
+        from,
+        to,
+        restoredProductIds: restoreStock
+          ? order.items.flatMap((item) => (item.productId ? [item.productId] : []))
+          : [],
+      };
     });
 
+    // Post-commit: only the winner changed stock, so only it drops the stale
+    // product views. Cache outages stay non-fatal inside the helper.
+    for (const productId of outcome.restoredProductIds) {
+      await invalidateProductCache(productId);
+    }
+
     revalidatePath("/admin");
-    return serializePrismaObject(updated);
-};
+    revalidatePath("/my-orders");
+
+    return { orderId: outcome.orderId, from: outcome.from, to: outcome.to };
+  });

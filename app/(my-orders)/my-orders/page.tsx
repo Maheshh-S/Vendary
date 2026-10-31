@@ -40,7 +40,7 @@ export default async function MyOrdersPage() {
                 <p className="text-sm font-medium text-gray-900">
                   Order #{String(order.id).slice(0, 8)}
                 </p>
-                <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">
+                <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800 capitalize">
                   {order.status}
                 </span>
               </div>

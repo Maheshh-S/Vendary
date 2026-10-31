@@ -1,11 +1,14 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import toast from "react-hot-toast";
+import type { OrderStatus } from "@prisma/client";
 import { Select } from "@/components/ui/select";
 import { updateOrderStatus } from "@/actions/orders";
+import { ORDER_TRANSITIONS } from "@/lib/orders/status";
 
-const STATUSES = ["pending", "confirmed", "shipped", "delivered", "cancelled", "refunded"];
+const isOrderStatus = (value: string): value is OrderStatus =>
+  Object.prototype.hasOwnProperty.call(ORDER_TRANSITIONS, value);
 
 type Props = {
   orderId: string;
@@ -15,15 +18,27 @@ type Props = {
 const OrderStatusSelect = ({ orderId, status }: Props) => {
   const [value, setValue] = useState(status);
 
+  // Keep the control in sync when the server renders a newer status (e.g. the
+  // webhook or a concurrent admin changed it).
+  useEffect(() => {
+    setValue(status);
+  }, [status]);
+
   const { mutate, isPending } = useMutation({
     mutationKey: ["update-order-status", orderId],
-    mutationFn: ({ orderId, status }: { orderId: string; status: string }) =>
-      updateOrderStatus(orderId, status),
+    mutationFn: (nextStatus: string) => updateOrderStatus(orderId, nextStatus),
     onMutate: () => {
       toast.loading("Updating order status", { id: `order-status-${orderId}` });
     },
-    onSuccess: (updated) => {
-      setValue(updated.status);
+    onSuccess: (res) => {
+      if (!res.ok) {
+        // The controlled value was never advanced, so the select snaps back to
+        // the order's actual status while the reason is shown.
+        toast.error(res.message, { id: `order-status-${orderId}` });
+        return;
+      }
+
+      setValue(res.data.to);
       toast.success("Order status updated", { id: `order-status-${orderId}` });
     },
     onError: () => {
@@ -31,15 +46,20 @@ const OrderStatusSelect = ({ orderId, status }: Props) => {
     },
   });
 
+  const current: OrderStatus = isOrderStatus(value) ? value : "pending";
+  const nextStates = ORDER_TRANSITIONS[current];
+  const options: OrderStatus[] = [current, ...nextStates];
+
   return (
     <Select
-      value={value}
-      disabled={isPending}
+      value={current}
+      disabled={isPending || nextStates.length === 0}
       aria-label="Order status"
-      onChange={(e) => mutate({ orderId, status: e.target.value })}
+      title="Phase 0: status changes are record-only; no Razorpay refund is issued."
+      onChange={(e) => mutate(e.target.value)}
     >
-      {STATUSES.map((s) => (
-        <option key={s} value={s}>
+      {options.map((s) => (
+        <option key={s} value={s} className="capitalize">
           {s}
         </option>
       ))}

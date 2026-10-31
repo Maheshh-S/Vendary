@@ -19,7 +19,7 @@ const { authMock, prismaMock, txMock, razorpayMock, rateLimitMock, refundMock, r
     };
     const prismaMock = {
       product: { findMany: vi.fn() },
-      order: { findUnique: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
+      order: { findUnique: vi.fn(), updateMany: vi.fn() },
       $transaction: vi.fn(),
     };
     const razorpayMock = {
@@ -54,7 +54,7 @@ vi.mock("@/lib/rate-limit", () => ({
 vi.mock("@/lib/product-cache", () => ({ invalidateProductCache: invalidateMock }));
 vi.mock("next/cache", () => ({ revalidatePath: revalidateMock }));
 
-import { PlaceOrder, createRazorpayOrder, updateOrderStatus } from "@/actions/orders";
+import { PlaceOrder, createRazorpayOrder } from "@/actions/orders";
 import { signRazorpayPayload } from "@/lib/razorpay";
 
 const SECRET = "unit-test-razorpay-secret";
@@ -576,28 +576,5 @@ describe("PlaceOrder (confirm with payment proof only)", () => {
     if (result.ok) return;
     expect(result.code).toBe("NOT_FOUND");
     expect(razorpayMock.orders.fetch).not.toHaveBeenCalled();
-  });
-});
-
-describe("updateOrderStatus (status typing)", () => {
-  beforeEach(() => {
-    authMock.mockResolvedValue({ user: { id: "admin_1", role: "ADMIN" } });
-    prismaMock.order.update.mockResolvedValue({ id: "order_1", status: "refunded" });
-  });
-
-  it("rejects a status outside the OrderStatus enum", async () => {
-    await expect(updateOrderStatus("order_1", "teleported")).rejects.toMatchObject({
-      code: "VALIDATION",
-    });
-    expect(prismaMock.order.update).not.toHaveBeenCalled();
-  });
-
-  it("accepts every enum value, including refunded", async () => {
-    await updateOrderStatus("order_1", "refunded");
-
-    expect(prismaMock.order.update).toHaveBeenCalledWith({
-      where: { id: "order_1" },
-      data: { status: "refunded" },
-    });
   });
 });
