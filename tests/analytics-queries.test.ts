@@ -16,6 +16,7 @@ const { prismaMock } = vi.hoisted(() => ({
   },
 }));
 
+vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db/prisma", () => ({ prisma: prismaMock }));
 
 import {
@@ -260,19 +261,38 @@ describe("loadAnalyticsDashboard", () => {
     // Two raw aggregates: daily revenue and top products.
     expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(2);
 
-    // Every raw aggregate is filtered to paid statuses only. The nested
-    // Prisma.sql object serializes its bound status params, so the assertion
-    // proves `cancelled`/`refunded`/`pending` never reach the revenue query.
-    const rawValues = prismaMock.$queryRaw.mock.calls
-      .flatMap(([, ...values]) => values)
-      .map((value) => JSON.stringify(value))
-      .join("|");
-    expect(rawValues).toContain('"confirmed"');
-    expect(rawValues).toContain('"shipped"');
-    expect(rawValues).toContain('"delivered"');
-    expect(rawValues).not.toContain('"cancelled"');
-    expect(rawValues).not.toContain('"refunded"');
-    expect(rawValues).not.toContain('"pending"');
+    const [dailyCall, topProductCall] = prismaMock.$queryRaw.mock.calls as [
+      [TemplateStringsArray, ...unknown[]],
+      [TemplateStringsArray, ...unknown[]],
+    ];
+
+    // Day buckets are formatted in UTC so they line up with the UTC range
+    // bounds regardless of the database session TimeZone.
+    const dailySql = dailyCall[0].join("?");
+    expect(dailySql).toContain(`AT TIME ZONE 'UTC'`);
+    expect(dailySql).toContain("to_char(");
+
+    // The daily revenue query is filtered to paid statuses only.
+    const dailyValues = JSON.stringify(dailyCall.slice(1));
+    expect(dailyValues).toContain('"confirmed"');
+    expect(dailyValues).toContain('"shipped"');
+    expect(dailyValues).toContain('"delivered"');
+    expect(dailyValues).not.toContain('"cancelled"');
+    expect(dailyValues).not.toContain('"refunded"');
+    expect(dailyValues).not.toContain('"pending"');
+
+    // The top-products query carries its own paid-status filter: cancelled and
+    // refunded orders must never contribute quantity or gross item revenue.
+    const topProductSql = topProductCall[0].join("?");
+    expect(topProductSql).toContain('JOIN "Order"');
+    expect(topProductSql).toContain('SUM(oi."price" * oi."quantity")');
+    const topProductValues = JSON.stringify(topProductCall.slice(1));
+    expect(topProductValues).toContain('"confirmed"');
+    expect(topProductValues).toContain('"shipped"');
+    expect(topProductValues).toContain('"delivered"');
+    expect(topProductValues).not.toContain('"cancelled"');
+    expect(topProductValues).not.toContain('"refunded"');
+    expect(topProductValues).not.toContain('"pending"');
 
     expect(prismaMock.order.groupBy).toHaveBeenCalledWith({
       by: ["status"],

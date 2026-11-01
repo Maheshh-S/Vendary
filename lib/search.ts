@@ -1,3 +1,5 @@
+import "server-only";
+
 import type { PrismaClient } from "@prisma/client";
 
 /**
@@ -45,7 +47,7 @@ const toHit = (row: RawSearchRow): SearchHit => ({
  * `Category` would force a join filter and defeat every trigram index. The
  * fuzzy arms use the indexable `%` operator (pg_trgm's default 0.3 threshold)
  * and the exact `similarity()` score is used for ordering. Category-name
- * search is intentionally not part of relevance.
+ * matches are a separate bounded query appended in `searchCatalog`.
  */
 export const trigramSearch = async (db: PrismaClient, term: string): Promise<SearchHit[]> => {
   const substring = `%${term}%`;
@@ -108,16 +110,80 @@ export const ilikeSearch = async (db: PrismaClient, term: string): Promise<Searc
 };
 
 /**
+ * Category-name matches for the primary path. A separate, bounded, in-stock
+ * query: adding a Category arm to the ranked SQL would force a join filter and
+ * defeat the trigram indexes. The ILIKE fallback already covers categories, so
+ * this only runs after a successful ranked query with slots left.
+ */
+export const categoryNameSearch = async (
+  db: PrismaClient,
+  term: string,
+  excludeIds: readonly string[],
+  take: number = SEARCH_RESULT_LIMIT
+): Promise<SearchHit[]> => {
+  if (take <= 0) {
+    return [];
+  }
+
+  const rows = await db.product.findMany({
+    where: {
+      availability: "IN_STOCK",
+      category: { name: { contains: term, mode: "insensitive" } },
+      ...(excludeIds.length > 0 ? { id: { notIn: [...excludeIds] } } : {}),
+    },
+    select: {
+      id: true,
+      name: true,
+      thumbnail: true,
+      price: true,
+    },
+    orderBy: { name: "asc" },
+    take: Math.min(take, SEARCH_RESULT_LIMIT),
+  });
+
+  return rows.map(toHit);
+};
+
+/** First occurrence wins, so ranked hits keep their position over appends. */
+const dedupeHits = (hits: readonly SearchHit[]): SearchHit[] => {
+  const seen = new Set<string>();
+  return hits.filter((hit) => {
+    if (seen.has(hit.id)) {
+      return false;
+    }
+    seen.add(hit.id);
+    return true;
+  });
+};
+
+/**
  * Runs the ranked query and degrades to ILIKE on any raw-query failure
- * (missing extension, restricted role, proxy that rejects the SQL). `usedFallback`
- * lets the action emit one redacted warning without logging the error payload.
+ * (missing extension, restricted role, proxy that rejects the SQL). When the
+ * ranked query leaves slots, a bounded category-name query is appended and
+ * deduped; the total stays capped at ten. `usedFallback` lets the action emit
+ * one redacted warning without logging the error payload.
  */
 export const searchCatalog = async (
   db: PrismaClient,
   term: string
 ): Promise<{ hits: SearchHit[]; usedFallback: boolean }> => {
   try {
-    return { hits: await trigramSearch(db, term), usedFallback: false };
+    const ranked = await trigramSearch(db, term);
+    const remaining = SEARCH_RESULT_LIMIT - ranked.length;
+    const categoryHits =
+      remaining > 0
+        ? await categoryNameSearch(
+            db,
+            term,
+            ranked.map((hit) => hit.id),
+            remaining
+          )
+        : [];
+
+    return {
+      hits: dedupeHits([...ranked, ...categoryHits]).slice(0, SEARCH_RESULT_LIMIT),
+      usedFallback: false,
+    };
   } catch {
     return { hits: await ilikeSearch(db, term), usedFallback: true };
   }

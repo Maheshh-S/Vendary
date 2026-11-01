@@ -73,7 +73,7 @@ const TopProductTable = ({
               Qty
             </th>
             <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-gray-500">
-              Revenue
+              Gross item revenue
             </th>
           </tr>
         </thead>
@@ -150,6 +150,10 @@ const AnalyticsTables = ({ data }: { data: AnalyticsDashboard }) => (
         />
       </section>
     </div>
+    <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+      Product money is gross item revenue (price × quantity, pre-tax, before coupon allocation). It
+      is a different lens from post-tax order revenue above and the two do not reconcile.
+    </p>
 
     <section className="mt-8 rounded-lg border border-gray-200 p-4 dark:border-gray-800">
       <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">

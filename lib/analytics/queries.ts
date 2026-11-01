@@ -1,3 +1,5 @@
+import "server-only";
+
 import { Prisma, type OrderStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
@@ -8,9 +10,16 @@ import { prisma } from "@/lib/db/prisma";
  * the store kept, so `cancelled` and `refunded` orders are excluded from every
  * revenue/AOV/top-product aggregate. `pending` orders were never charged.
  *
- * Days are UTC day buckets (`to_char(createdAt, 'YYYY-MM-DD')`) and the range
- * is `[from, toExclusive)`, which lets the queries use the existing
- * `Order(status, createdAt)` index. Every list is capped.
+ * Top-product money is gross item revenue (`OrderItem.price * quantity`): the
+ * pre-tax line value before coupon allocation. It is deliberately a different
+ * lens from post-discount, GST-inclusive `Order.total` and the two do not sum
+ * to each other.
+ *
+ * Days are UTC day buckets matching the UTC range bounds, written as a double
+ * `AT TIME ZONE 'UTC'` so the rendered wall clock is UTC regardless of the
+ * session `TimeZone`. The range is `[from, toExclusive)`, which lets the
+ * queries use the existing `Order(status, createdAt)` index. Every list is
+ * capped.
  */
 
 export const ANALYTICS_DEFAULT_RANGE_DAYS = 30;
@@ -319,7 +328,10 @@ export const loadAnalyticsDashboard = async (
 
   const [dailyRows, productRows, statusRows, lowStockRows] = await Promise.all([
     prisma.$queryRaw<RawRevenueDay[]>`
-      SELECT to_char(o."createdAt", 'YYYY-MM-DD') AS "day",
+      SELECT to_char(
+               o."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'UTC',
+               'YYYY-MM-DD'
+             ) AS "day",
              COALESCE(SUM(o."total"), 0) AS "revenue",
              COUNT(*)::int AS "orders"
       FROM "Order" o

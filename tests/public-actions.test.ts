@@ -61,6 +61,7 @@ import { GetFeaturedProducts } from "@/actions/products/hot-products";
 import type { ActionErrorCode, ActionResult } from "@/lib/action-result";
 import { AppError } from "@/lib/errors";
 import { CACHE_TTL_SECONDS, FEATURED_PRODUCTS_KEY } from "@/lib/product-cache";
+import { SEARCH_RESULT_LIMIT } from "@/lib/search";
 
 const USER_SESSION = {
   user: { id: "user_1", role: "USER", email: "user@example.com" },
@@ -186,9 +187,9 @@ describe("searchProducts", () => {
     });
     expect(clientKeyMock).toHaveBeenCalledWith("search");
 
-    // One raw aggregate query; the ILIKE fallback stays untouched.
+    // One ranked raw query, then one bounded category-name query.
     expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
-    expect(prismaMock.product.findMany).not.toHaveBeenCalled();
+    expect(prismaMock.product.findMany).toHaveBeenCalledTimes(1);
 
     const [strings, ...values] = prismaMock.$queryRaw.mock.calls[0] as [
       TemplateStringsArray,
@@ -203,6 +204,55 @@ describe("searchProducts", () => {
     expect(values).toContain("shawl%");
     expect(values).toContain(10);
     expect(JSON.stringify(values)).not.toContain("  shawl  ");
+
+    // Category matches are a separate in-stock query with the remaining slots,
+    // excluding ids the ranked query already returned.
+    expect(prismaMock.product.findMany).toHaveBeenCalledWith({
+      where: {
+        availability: "IN_STOCK",
+        category: { name: { contains: "shawl", mode: "insensitive" } },
+        id: { notIn: ["prod_1"] },
+      },
+      select: { id: true, name: true, thumbnail: true, price: true },
+      orderBy: { name: "asc" },
+      take: SEARCH_RESULT_LIMIT - 1,
+    });
+  });
+
+  it("merges and dedupes category-name matches after the ranked hits", async () => {
+    const ranked = [
+      { id: "prod_1", name: "Pashmina Shawl", thumbnail: null, price: 100 },
+      { id: "prod_2", name: "Shawl Pin", thumbnail: null, price: 20 },
+    ];
+    prismaMock.$queryRaw.mockResolvedValue(ranked);
+    prismaMock.product.findMany.mockResolvedValue([
+      // Duplicate of a ranked hit must not be listed twice.
+      { id: "prod_1", name: "Pashmina Shawl", thumbnail: null, price: 100 },
+      { id: "prod_3", name: "Shawl category piece", thumbnail: null, price: 30 },
+    ]);
+
+    const data = expectSuccess(await searchProducts("shawl"));
+
+    expect(data.map((hit) => hit.id)).toEqual(["prod_1", "prod_2", "prod_3"]);
+    expect(new Set(data.map((hit) => hit.id)).size).toBe(data.length);
+    const [categoryArgs] = prismaMock.product.findMany.mock.calls[0];
+    expect(categoryArgs.take).toBe(SEARCH_RESULT_LIMIT - ranked.length);
+  });
+
+  it("skips the category query when ranked hits already fill ten slots", async () => {
+    prismaMock.$queryRaw.mockResolvedValue(
+      Array.from({ length: SEARCH_RESULT_LIMIT }, (_, index) => ({
+        id: `prod_${index}`,
+        name: `Shawl ${index}`,
+        thumbnail: null,
+        price: 100,
+      }))
+    );
+
+    const data = expectSuccess(await searchProducts("shawl"));
+
+    expect(data).toHaveLength(SEARCH_RESULT_LIMIT);
+    expect(prismaMock.product.findMany).not.toHaveBeenCalled();
   });
 
   it("returns RATE_LIMITED without touching the database", async () => {

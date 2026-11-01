@@ -1,6 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { PrismaClient } from "@prisma/client";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
 
 import { searchCatalog } from "@/lib/search";
 

@@ -151,6 +151,18 @@ export default function CartPage() {
               }}
             />
 
+            {/* Quote-level blocker that is not a per-line issue, e.g. the ₹1
+                Razorpay floor for a coupon-less cart. Rendered here so the
+                disabled checkout button always has a visible reason. */}
+            {quote?.couponError && (
+              <div
+                role="status"
+                className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
+              >
+                {quote.couponError}
+              </div>
+            )}
+
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
               <div className="lg:col-span-8">
                 <div className="rounded-xl bg-white shadow-sm ring-1 ring-zinc-950/10 dark:bg-zinc-800 dark:ring-white/10">
