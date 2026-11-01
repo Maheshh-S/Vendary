@@ -171,6 +171,8 @@ model Order {
   paymentMethod String
   paymentId     String      @default("")
   transactionId String      @unique
+  events        OrderEvent[]
+  refunds       Refund[]
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
@@ -209,6 +211,38 @@ model OrderItem {
 
   @@index([orderId])
   @@index([productId])
+}
+
+model Refund {
+  id               String   @id @default(cuid())
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId          String
+  razorpayRefundId String   @unique
+  paymentId        String
+  amount           Decimal  @db.Decimal(10, 2)
+  reason           String
+  status           String   @default("created")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([orderId])
+}
+
+/// Append-only audit trail for an order. `type` is a stable string (e.g.
+/// `order_confirmed`, `status_changed`, `refund_failed`) so new event kinds do
+/// not require a migration; `fromStatus`/`toStatus` capture state transitions.
+model OrderEvent {
+  id         String       @id @default(cuid())
+  order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId    String
+  type       String
+  fromStatus OrderStatus?
+  toStatus   OrderStatus?
+  actorId    String?
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+
+  @@index([orderId, createdAt])
 }
 
 model Review {
