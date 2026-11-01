@@ -3,10 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { logger, redactText } from "@/lib/logger";
 import {
   captureException,
-  initMonitoring,
   isMonitoringConfigured,
   resetMonitoringForTests,
 } from "@/lib/monitoring";
+import { initMonitoring } from "@/lib/monitoring-init";
 
 /**
  * `lib/logger.ts` writes one JSON line per call. These tests pin the field

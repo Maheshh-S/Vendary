@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const redisMock = vi.hoisted(() => ({
-  incr: vi.fn(async (_key: string): Promise<number> => 1),
-  pexpire: vi.fn(async (_key: string, _ttlMs: number): Promise<number> => 1),
+  incr: vi.fn(async (): Promise<number> => 1),
+  pexpire: vi.fn(async (): Promise<number> => 1),
 }));
 
 vi.mock("@/lib/redis", () => ({
@@ -165,7 +165,8 @@ describe("checkRateLimit (redis)", () => {
 
     expect(redisMock.pexpire).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0][1]).toMatchObject({
+    expect(JSON.parse(String(warnSpy.mock.calls[0][0]))).toMatchObject({
+      msg: "rate_limit_redis_fallback",
       event: "rate_limit_redis_fallback",
       reason: "redis_error",
     });
@@ -212,7 +213,8 @@ describe("checkRateLimit (redis)", () => {
     // Same throttled structured warning, with a fixed timeout reason; the
     // second call is inside the one-per-minute window.
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0][1]).toMatchObject({
+    expect(JSON.parse(String(warnSpy.mock.calls[0][0]))).toMatchObject({
+      msg: "rate_limit_redis_fallback",
       event: "rate_limit_redis_fallback",
       reason: "timeout",
     });

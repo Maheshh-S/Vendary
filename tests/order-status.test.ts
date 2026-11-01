@@ -274,7 +274,7 @@ const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
 /** Exact structured warnings each test allows; every test starts at none. */
-let expectedWarnings: unknown[][] = [];
+let expectedWarnings: unknown[] = [];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -324,8 +324,10 @@ afterEach(() => {
   // Expected failures are user-facing AppErrors; only unexpected (INTERNAL)
   // errors may reach the logger.
   expect(consoleError).not.toHaveBeenCalled();
-  // Warnings are structured JSON; only the restore-skip test opts in.
-  expect(consoleWarn.mock.calls).toEqual(expectedWarnings);
+  // Warnings are single-line JSON from lib/logger; only the restore-skip test
+  // opts in.
+  const warnings = consoleWarn.mock.calls.map((call) => JSON.parse(String(call[0])));
+  expect(warnings).toEqual(expectedWarnings);
   consoleError.mockClear();
   consoleWarn.mockClear();
 });
@@ -640,13 +642,12 @@ describe("updateOrderStatus stock restoration", () => {
   it("transitions confirmed -> cancelled without restoring stock when paymentId is empty, logging a structured warning", async () => {
     orderRow = makeOrder("confirmed", "");
     expectedWarnings = [
-      [
-        JSON.stringify({
-          level: "warn",
-          event: "order_restore_skipped_no_payment",
-          orderId: ORDER_ID,
-        }),
-      ],
+      expect.objectContaining({
+        level: "warn",
+        msg: "order_restore_skipped_no_payment",
+        event: "order_restore_skipped_no_payment",
+        orderId: ORDER_ID,
+      }),
     ];
 
     const result = await updateOrderStatus(ORDER_ID, "cancelled");

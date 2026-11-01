@@ -8,6 +8,7 @@
  */
 
 import { AppError } from "./errors";
+import { logger } from "./logger";
 import { isRedisEnabled, redis } from "./redis";
 
 export type RateLimitResult = {
@@ -58,14 +59,15 @@ const FALLBACK_WARNING_INTERVAL_MS = 60_000;
 
 /**
  * One warning per minute per process. `reason` is a fixed code so a Redis
- * error message (which may contain a URL or host) is never logged.
+ * error message (which may contain a URL or host) and the request subject are
+ * never passed to the logger.
  */
 const warnFallback = (reason: "redis_disabled" | "redis_error" | "timeout", now: number): void => {
   if (now - lastFallbackWarningAt < FALLBACK_WARNING_INTERVAL_MS) {
     return;
   }
   lastFallbackWarningAt = now;
-  console.warn("[rate-limit] Redis unavailable; enforcing in-memory fallback.", {
+  logger.warn("rate_limit_redis_fallback", {
     event: "rate_limit_redis_fallback",
     reason,
   });

@@ -260,3 +260,145 @@ The payment spec stays local-only (real Razorpay test keys, `@payment` tag).
 - **Monitoring scope**: only node-runtime exceptions from `runAction` are
   captured; edge middleware/server errors and unhandled rejections rely on the
   platform.
+
+---
+
+## Fix round 1 (2026-11-01)
+
+Review findings addressed on `worktree-phase-1-4`.
+
+### Sentry capture now works in the built server
+
+- `lib/monitoring.ts` no longer keeps the SDK in module-local state. The SDK
+  namespace and an `__vendarySentryEnabled` flag are published on `globalThis`,
+  which every server chunk in the Node process shares. `captureException` reads
+  the global flag/SDK on each call, so an action chunk that never ran
+  `initMonitoring` still captures. Previously each chunk had its own
+  `let sentry = null`, and the action-chunk copies were permanently null.
+- The runtime `import("@sentry/nextjs")` moved to `lib/monitoring-init.ts`,
+  imported only by `instrumentation.ts`. This is also the bundle fix for minor
+  #5: before the split webpack embedded one ~1.6 MB SDK copy per server graph
+  (`chunks/1844.js`, `chunks/5131.js`, `chunks/7154.js`); after it the SDK is
+  emitted once (`chunks/7154.js`) and referenced only by
+  `instrumentation.js.nft.json`.
+- No DSN: `initMonitoring` returns false before importing the SDK; capture is a
+  no-op; nothing throws and no network call is made. `next build` stays green
+  (verified below).
+- Regression tests in `tests/monitoring.test.ts` use `vi.resetModules()` +
+  dynamic imports: `initMonitoring` runs in one module instance, `lib/monitoring`
+  is imported again as a separate instance, `captureException` is called, and
+  the mocked `@sentry/nextjs` `captureException` is asserted with the
+  action/requestId/code tags. A second test asserts no-DSN performs zero SDK
+  imports and zero captures.
+
+Built-artifact proof after `npm run build`:
+
+```
+$ grep -rl "@sentry/nextjs" .next/server/chunks .next/server/instrumentation.js
+.next/server/chunks/7154.js
+
+$ grep -rl "__vendarySentrySdk" .next/server/chunks .next/server/instrumentation.js
+.next/server/chunks/5198.js
+.next/server/chunks/879.js
+.next/server/instrumentation.js
+
+$ grep -o ".\{40\}__vendarySentryEnabled=.\{40\}" .next/server/instrumentation.js
+e=>{let t=tR();t.__vendarySentrySdk=e,t.__vendarySentryEnabled=!!e},tL=e=>({dsn:e,environment:"producti
+
+$ grep -rho ".\{40\}__vendarySentrySdk.captureException.\{50\}" .next/server/chunks
+equestId),t.code&&(a.code=t.code);try{r.__vendarySentrySdk.captureException(e,{tags:a})}catch{}},o=e=>{if("object"!=typeof e|
+equestId),t.code&&(a.code=t.code);try{a.__vendarySentrySdk.captureException(e,{tags:r})}catch{}},o=e=>{if("object"!=typeof e|
+```
+
+The init side lives in `instrumentation.js`; the two action chunks contain the
+non-empty global capture call, so the previous empty-function path is gone.
+
+### Sentry PII opt-out
+
+- `buildSentryOptions` sets `dataCollection.stackFrameVariables: false` and
+  `dataCollection.databaseQueryData: false` in addition to the existing
+  user/cookie/header/body/query opt-outs (Sentry v11 API, SDK 11.10.0).
+- `beforeSend` deletes `event.exception.values[].stacktrace.frames[].vars`
+  along with `request.headers/cookies/data/query_string` and `event.user`.
+  Action locals (addresses, emails, Razorpay objects) therefore cannot ship
+  even if a future SDK version collects them.
+- Test: a synthetic event carrying frame `vars` (email, street address,
+  Razorpay object) plus request/user fields is scrubbed by `beforeSend`.
+
+### CSP proven against the real Razorpay checkout
+
+- New `e2e/csp-razorpay.spec.ts` (tagged `@payment`, skipped without Razorpay
+  keys) does NOT stub `checkout.js`: it logs in, adds a product, fills the
+  checkout form, clicks "Proceed to Payment", waits for the real Razorpay
+  modal iframe, and collects console messages containing "Content Security
+  Policy" plus `checkout.razorpay.com`/`api.razorpay.com` responses and failed
+  requests. It asserts a successful `checkout.razorpay.com/v1/checkout.js`
+  response, a visible iframe and zero CSP violations, then removes the modal
+  without paying.
+- `lib/csp.ts`: `https://*.razorpay.com` added to `script-src`, `connect-src`
+  and `frame-src` alongside the exact hosts; `worker-src 'self' blob:` and
+  `child-src 'self' blob:` added; `https://nominatim.openstreetmap.org` added
+  to `connect-src` (checkout geolocation autofill). `'unsafe-inline'` /
+  `'unsafe-eval'` remain.
+- Outcome: the real checkout iframe loaded under the enforcing policy with no
+  CSP violations. Only modal loading is validated by this spec — no payment was
+  completed, so this is not a claim of full paid-flow validation. The paid path
+  remains covered by the stubbed `payment.spec.ts` (both pass, below).
+
+### Cheap minors
+
+1. Cleanup route: the interactive transaction now has an explicit
+   `CLEANUP_TRANSACTION_TIMEOUT_MS = 30_000` timeout. The batch stays capped at
+   200 and the guarded `updateMany` claim/audit-event logic (and therefore
+   idempotency) is unchanged.
+2. `playwright.config.ts` now defaults to `workers: 1` locally as well, with an
+   `E2E_WORKERS` override for a disposable database. CI retries are unchanged.
+3. Logger adoption: every remaining hot-path `console.error`/`console.warn` in
+   `lib/redis.ts`, `lib/rate-limit.ts`, `lib/orders/refund.ts`,
+   `lib/orders/late-capture.ts` and `actions/orders/index.ts` now goes through
+   `lib/logger.ts`. Existing structured `event` fields are preserved; error
+   values are reduced to the logger's redacted/truncated message and the rate
+   limiter still logs only a fixed `reason`. The orphan Razorpay order in
+   `order_persist_failed` is logged as `orderReference` because the logger
+   deliberately redacts any `razorpay`-named key; the reference remains usable
+   for reconciliation. Tests that parsed the old hand-built JSON were updated
+   for the logger line shape.
+4. Advisory note below.
+5. SDK consolidation: see the Sentry section — one emitted SDK chunk instead of
+   three.
+
+### Advisories (dated 2026-11-01)
+
+The audit position is unchanged from the first report: `next-auth@5.0.0-beta`
+still carries the Auth.js email-normalisation critical advisory and the
+`getToken()` high advisory, and `picomatch` ReDoS arrives through dev/tooling
+chains (`vitest`, `lint-staged`, Sentry's rollup plugin). CI continues to
+report high/critical findings without blocking. Follow-up remains: upgrade to a
+stable next-auth v5 release and pin/patch `picomatch`, then re-run
+`bun audit --audit-level=high`. No runtime dependency was added in this round.
+
+### Verification (fix round)
+
+| Command | Result |
+| --- | --- |
+| `npx vitest run` | **710 passed**, 3 integration tests skipped (35 files passed, 1 skipped) |
+| `npx tsc --noEmit` | pass |
+| `npm run lint` | pass, no warnings or errors |
+| `npm run format:check` | pass |
+| `DATABASE_URL=postgresql://vendary:vendary@localhost:5432/vendary npm run e2e -- --grep-invert @payment` | **26 passed** (1 worker, `workers: 1` default) |
+| `DATABASE_URL=… npm run e2e -- --grep @payment` | **2 passed** — stubbed paid flow plus the real Razorpay CSP spec (real iframe, no violations) |
+| Placeholder build (`DATABASE_URL=postgresql://ci:ci@localhost:5432/ci AUTH_SECRET=ci-placeholder-secret … npm run build`) | pass; chunk grep above shows one SDK chunk and the global capture path |
+| `docker build -t vendary-phase3-fix .` | pass (exit 0) |
+| Docker runtime probe | container **healthy**; `/api/status` → 200 `{"status":"ok","checks":{"db":"up","redis":"disabled"}}`; enforcing CSP header served with `https://*.razorpay.com`, `worker-src`/`child-src`, and the nominatim connect host |
+
+### Files changed
+
+- `lib/monitoring.ts`, `lib/monitoring-init.ts` (new), `instrumentation.ts`,
+  `tests/monitoring.test.ts` (new), `tests/logger.test.ts`
+- `lib/csp.ts`, `e2e/csp-razorpay.spec.ts` (new), `tests/csp.test.ts`
+- `app/api/cron/cleanup/route.ts`, `playwright.config.ts`
+- `lib/redis.ts`, `lib/rate-limit.ts`, `lib/orders/refund.ts`,
+  `lib/orders/late-capture.ts`, `actions/orders/index.ts`
+- `tests/rate-limit.test.ts`, `tests/rate-limit-redis.test.ts`,
+  `tests/order-status.test.ts`, `tests/order-confirmation.test.ts`
+- this report

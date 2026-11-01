@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
+import { logger } from "@/lib/logger";
 import {
   claimRefundInTransaction,
   failOrderRefund,
@@ -16,14 +17,6 @@ export type LateCaptureOutcome =
 
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
-
-const logWarn = (entry: Record<string, unknown>): void => {
-  console.warn(JSON.stringify({ level: "warn", ...entry }));
-};
-
-const logError = (entry: Record<string, unknown>): void => {
-  console.error(JSON.stringify({ level: "error", ...entry }));
-};
 
 /**
  * Late-capture backstop for a cancelled pending order: the customer cancelled
@@ -72,7 +65,7 @@ export const refundLateCapture = async (input: {
       // An existing refund row owns this order (processed or in flight); never
       // issue a second refund. The transaction rolled back, so a duplicate
       // capture is support-led.
-      logError({
+      logger.error("late_capture_claim_rejected", {
         event: "late_capture_claim_rejected",
         orderId,
         paymentId,
@@ -87,7 +80,7 @@ export const refundLateCapture = async (input: {
   if (!claim) {
     // Replay: this capture's proof is already recorded, so the refund it
     // started already ran (or is support-led).
-    logWarn({
+    logger.warn("late_capture_already_claimed", {
       event: "late_capture_already_claimed",
       orderId,
       paymentId,
@@ -105,7 +98,7 @@ export const refundLateCapture = async (input: {
     }));
   } catch (error) {
     const errorText = errorMessage(error);
-    logError({
+    logger.error("late_capture_refund_failed", {
       event: "late_capture_refund_failed",
       orderId,
       capturedPaise: amountPaise,
@@ -121,7 +114,7 @@ export const refundLateCapture = async (input: {
         actorId: null,
       });
     } catch (ledgerError) {
-      logError({
+      logger.error("late_capture_ledger_failed", {
         event: "late_capture_ledger_failed",
         orderId,
         error: errorMessage(ledgerError),
@@ -146,7 +139,7 @@ export const refundLateCapture = async (input: {
     // The money is back. `refund.processed` will reconcile the ledger row; a
     // retried delivery would no-op on the recorded proof, so alert and report
     // the refund as done.
-    logError({
+    logger.error("late_capture_ledger_failed", {
       event: "late_capture_ledger_failed",
       orderId,
       refundId,

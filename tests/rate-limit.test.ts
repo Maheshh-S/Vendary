@@ -162,9 +162,11 @@ describe("checkRateLimit (memory fallback)", () => {
     }
 
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    const [message, context] = warnSpy.mock.calls[0];
-    expect(String(message)).toContain("in-memory");
-    expect(context).toMatchObject({
+    // The logger emits one JSON line (single console.warn argument).
+    const entry = JSON.parse(String(warnSpy.mock.calls[0][0])) as Record<string, unknown>;
+    expect(entry).toMatchObject({
+      level: "warn",
+      msg: "rate_limit_redis_fallback",
       event: "rate_limit_redis_fallback",
       reason: "redis_disabled",
     });

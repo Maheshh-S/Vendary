@@ -9,6 +9,7 @@ import { z } from "zod";
 import { requireAdmin, requireUser } from "@/lib/auth-guards";
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
+import { logger } from "@/lib/logger";
 import { sendOrderEmail } from "@/lib/mail";
 import { computeOrderTotals } from "@/lib/money";
 import { confirmOrder } from "@/lib/orders/confirm-order";
@@ -271,15 +272,14 @@ export const createRazorpayOrder = async ({
       orderId = order.id;
     } catch (error) {
       // The customer can never pay this Razorpay order (no client-side id was
-      // returned), but it stays in the dashboard — log its id for reconciliation.
-      console.error(
-        JSON.stringify({
-          level: "error",
-          event: "order_persist_failed",
-          razorpayOrderId: razorpayOrder.id,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      );
+      // returned), but it stays in the dashboard — keep its reference for
+      // reconciliation. A `razorpay`-named key would be redacted by the
+      // logger's Razorpay-scoped rule, so the field names the role instead.
+      logger.error("order_persist_failed", {
+        event: "order_persist_failed",
+        orderReference: razorpayOrder.id,
+        error,
+      });
       throw new AppError("INTERNAL", "We couldn't start your checkout. Please try again.");
     }
 
@@ -615,13 +615,10 @@ export const updateOrderStatus = async (orderId: string, status: string) =>
     });
 
     if (outcome.restoreSkipped) {
-      console.warn(
-        JSON.stringify({
-          level: "warn",
-          event: "order_restore_skipped_no_payment",
-          orderId: outcome.orderId,
-        })
-      );
+      logger.warn("order_restore_skipped_no_payment", {
+        event: "order_restore_skipped_no_payment",
+        orderId: outcome.orderId,
+      });
     }
 
     // Post-commit: only the winner changed stock, so only it drops the stale

@@ -1,5 +1,7 @@
 import Redis from "ioredis";
 
+import { logger } from "./logger";
+
 interface CacheClient {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<string>;
@@ -39,7 +41,9 @@ const createRedisClient = (url: string): CacheClient => {
     enableOfflineQueue: false,
   });
   client.on("error", (error) => {
-    console.error("[redis] error event:", error);
+    // The logger reduces the error to a redacted, truncated message, so a
+    // connection string or credential in the raw event never reaches the log.
+    logger.error("redis_client_error", { event: "redis_client_error", error });
   });
   return {
     get: (key) => client.get(key),
@@ -55,5 +59,5 @@ const createRedisClient = (url: string): CacheClient => {
 export const redis: CacheClient = redisUrl ? createRedisClient(redisUrl) : disabledRedis;
 
 if (!redisUrl) {
-  console.warn("[redis] REDIS_URL not configured. Redis cache is disabled.");
+  logger.warn("redis_disabled", { event: "redis_disabled" });
 }

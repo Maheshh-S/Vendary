@@ -6,6 +6,7 @@ import type { OrderStatus, Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
+import { logger } from "@/lib/logger";
 import { sendOrderEmail } from "@/lib/mail";
 import { writeOrderEvent } from "@/lib/orders/events";
 import { refundPayment, type RefundReason } from "@/lib/razorpay-client";
@@ -152,16 +153,13 @@ export const refundAndClose = async (
   try {
     ({ refundId } = await refundPayment({ paymentId, amountPaise, orderId, reason }));
   } catch (error) {
-    console.error(
-      JSON.stringify({
-        level: "error",
-        event: "order_refund_failed",
-        orderId,
-        paymentId,
-        reason,
-        error: errorMessage(error),
-      })
-    );
+    logger.error("order_refund_failed", {
+      event: "order_refund_failed",
+      orderId,
+      paymentId,
+      reason,
+      error: errorMessage(error),
+    });
     throw new AppError(
       "PAYMENT_FAILED",
       "Your payment was captured but we couldn't complete your order. Please contact support with your payment reference.",
@@ -182,17 +180,14 @@ export const refundAndClose = async (
       reason,
     });
   } catch (error) {
-    console.error(
-      JSON.stringify({
-        level: "error",
-        event: "order_refund_ledger_failed",
-        orderId,
-        paymentId,
-        reason,
-        refundId,
-        error: errorMessage(error),
-      })
-    );
+    logger.error("order_refund_ledger_failed", {
+      event: "order_refund_ledger_failed",
+      orderId,
+      paymentId,
+      reason,
+      refundId,
+      error: errorMessage(error),
+    });
   }
 
   const closed = await prisma.order.updateMany({
@@ -203,13 +198,10 @@ export const refundAndClose = async (
     // The money is back (the Razorpay refund succeeded), but the order moved
     // off `pending` between the claim and this close. Never silent: support
     // must reconcile an order whose status does not reflect the refund.
-    console.warn(
-      JSON.stringify({
-        level: "warn",
-        event: "order_refund_close_race",
-        orderId,
-      })
-    );
+    logger.warn("order_refund_close_race", {
+      event: "order_refund_close_race",
+      orderId,
+    });
   } else {
     // Post-commit customer notification; the shared helper is idempotent and
     // never throws, so a mail outage cannot undo the refund.
@@ -557,25 +549,19 @@ export const startOrderRefund = async (
         actorId: options.actorId,
       });
     } catch (ledgerError) {
-      console.error(
-        JSON.stringify({
-          level: "error",
-          event: "refund_failed_ledger_write_failed",
-          orderId: options.orderId,
-          reason: options.reason,
-          error: errorMessage(ledgerError),
-        })
-      );
-    }
-    console.error(
-      JSON.stringify({
-        level: "error",
-        event: "order_refund_failed",
+      logger.error("refund_failed_ledger_write_failed", {
+        event: "refund_failed_ledger_write_failed",
         orderId: options.orderId,
         reason: options.reason,
-        error: errorText,
-      })
-    );
+        error: errorMessage(ledgerError),
+      });
+    }
+    logger.error("order_refund_failed", {
+      event: "order_refund_failed",
+      orderId: options.orderId,
+      reason: options.reason,
+      error: errorText,
+    });
     throw new AppError("PAYMENT_FAILED", options.failureMessage, undefined, error);
   }
 
@@ -588,14 +574,11 @@ export const startOrderRefund = async (
   if (result.toStatus === null) {
     // The money is back, but the order moved off the refundable statuses while
     // the Razorpay call was in flight. Support must reconcile the status.
-    console.warn(
-      JSON.stringify({
-        level: "warn",
-        event: "refund_order_status_race",
-        orderId: options.orderId,
-        reason: options.reason,
-      })
-    );
+    logger.warn("refund_order_status_race", {
+      event: "refund_order_status_race",
+      orderId: options.orderId,
+      reason: options.reason,
+    });
   }
 
   return result;

@@ -60,6 +60,19 @@ describe("Content-Security-Policy header", () => {
     expect(policy).toMatch(/connect-src[^;]*https:\/\/api\.razorpay\.com/);
   });
 
+  it("allows the real checkout's injected subresources, workers and geocoding", () => {
+    const policy = buildContentSecurityPolicy();
+
+    // The real checkout.js (unlike the e2e stub) pulls extra subresources and
+    // an iframe from arbitrary *.razorpay.com hosts.
+    expect(policy).toMatch(/script-src[^;]*https:\/\/\*\.razorpay\.com/);
+    expect(policy).toMatch(/connect-src[^;]*https:\/\/\*\.razorpay\.com/);
+    expect(policy).toMatch(/frame-src[^;]*https:\/\/\*\.razorpay\.com/);
+    expect(policy).toContain("https://nominatim.openstreetmap.org");
+    expect(policy).toContain("worker-src 'self' blob:");
+    expect(policy).toContain("child-src 'self' blob:");
+  });
+
   it("locks framing and navigation with the report endpoint attached", () => {
     const policy = cspHeader?.value ?? "";
 

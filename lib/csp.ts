@@ -18,16 +18,32 @@
  *   log (document URLs are stripped to origin + path).
  */
 
-/** Razorpay hosts required by the embedded checkout. */
-export const RAZORPAY_SCRIPT_SRC = ["https://checkout.razorpay.com"] as const;
+/**
+ * Razorpay hosts required by the embedded checkout.
+ *
+ * The exact hosts cover the documented endpoints; `https://*.razorpay.com` is
+ * included alongside them because the real `checkout.js` (not the e2e stub)
+ * injects additional subresources and an iframe whose hostname varies by
+ * checkout version and routing. Verified against the real script by
+ * `e2e/csp-razorpay.spec.ts`.
+ */
+export const RAZORPAY_SCRIPT_SRC = [
+  "https://checkout.razorpay.com",
+  "https://*.razorpay.com",
+] as const;
 export const RAZORPAY_CONNECT_SRC = [
   "https://api.razorpay.com",
   "https://lumberjack.razorpay.com",
+  "https://*.razorpay.com",
 ] as const;
 export const RAZORPAY_FRAME_SRC = [
   "https://api.razorpay.com",
   "https://checkout.razorpay.com",
+  "https://*.razorpay.com",
 ] as const;
+
+/** Reverse-geocoding host used by the checkout autofill hook. */
+export const NOMINATIM_SRC = "https://nominatim.openstreetmap.org" as const;
 
 /** Third-party image hosts mirrored from the next/image allowlist. */
 export const IMAGE_SRC_HOSTS = [
@@ -55,8 +71,14 @@ export const buildContentSecurityPolicy = (): string =>
       // FX widget: historical + current hostnames.
       "https://api.exchangerate-api.com",
       "https://exchangerate-api.com",
+      // Reverse geocoding for the checkout address autofill.
+      NOMINATIM_SRC,
     ].join(" "),
     ["frame-src", ...RAZORPAY_FRAME_SRC].join(" "),
+    // Razorpay checkout spawns blob workers (OTP/UPI helpers) in the top
+    // document; `child-src` is the legacy fallback for older browsers.
+    "worker-src 'self' blob:",
+    "child-src 'self' blob:",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

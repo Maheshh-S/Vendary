@@ -11,12 +11,19 @@ import { serverEnv } from "./e2e/env";
  */
 const PORT = Number(process.env.E2E_PORT ?? 3100);
 const baseURL = `http://127.0.0.1:${PORT}`;
+/**
+ * Serial by default, locally and in CI: every spec shares one seeded admin
+ * account and database, so parallel workers turn auth/session/latency timing
+ * into flakes. `E2E_WORKERS` is the explicit opt-in for a disposable DB.
+ */
+const WORKERS = Number(process.env.E2E_WORKERS ?? 1);
+const workers = Number.isInteger(WORKERS) && WORKERS > 0 ? WORKERS : 1;
 
 export default defineConfig({
   testDir: "./e2e",
   timeout: 60_000,
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers,
   reporter: process.env.CI ? "github" : "list",
   use: {
     baseURL,

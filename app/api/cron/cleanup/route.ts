@@ -37,6 +37,13 @@ const PENDING_ORDER_TTL_MS = 60 * 60 * 1000;
 const STALE_ADDRESS_TTL_MS = 24 * 60 * 60 * 1000;
 /** Upper bound per invocation; the next scheduled run drains any remainder. */
 const MAX_ORDERS_PER_RUN = 200;
+/**
+ * Explicit interactive-transaction budget. Without it Prisma applies its
+ * 5s-ish default and a large backlog rolls back every claim in the batch; a
+ * bounded 30s keeps a slow-but-progressing run together while still failing
+ * fast enough for the scheduler's retry to be useful.
+ */
+const CLEANUP_TRANSACTION_TIMEOUT_MS = 30_000;
 
 type Authorization = "ok" | "unconfigured" | "unauthorized";
 
@@ -77,30 +84,36 @@ const cancelStalePendingOrders = async (cutoff: Date): Promise<number> => {
     return 0;
   }
 
-  return prisma.$transaction(async (tx) => {
-    let cancelled = 0;
-    for (const order of stale) {
-      // The status/payment guard makes this the claim: a webhook capture or a
-      // customer cancel that won the race leaves a zero count and no event.
-      const claimed = await tx.order.updateMany({
-        where: { id: order.id, status: "pending", paymentId: "" },
-        data: { status: "cancelled" },
-      });
-      if (claimed.count === 0) {
-        continue;
+  return prisma.$transaction(
+    async (tx) => {
+      let cancelled = 0;
+      for (const order of stale) {
+        // The status/payment guard makes this the claim: a webhook capture or a
+        // customer cancel that won the race leaves a zero count and no event.
+        const claimed = await tx.order.updateMany({
+          where: { id: order.id, status: "pending", paymentId: "" },
+          data: { status: "cancelled" },
+        });
+        if (claimed.count === 0) {
+          continue;
+        }
+        await writeOrderEvent(tx, {
+          orderId: order.id,
+          type: "order_cancelled",
+          fromStatus: "pending",
+          toStatus: "cancelled",
+          actorId: null,
+          metadata: { source: "cleanup" },
+        });
+        cancelled += 1;
       }
-      await writeOrderEvent(tx, {
-        orderId: order.id,
-        type: "order_cancelled",
-        fromStatus: "pending",
-        toStatus: "cancelled",
-        actorId: null,
-        metadata: { source: "cleanup" },
-      });
-      cancelled += 1;
-    }
-    return cancelled;
-  });
+      return cancelled;
+    },
+    // Bounded explicitly: the batch is capped at MAX_ORDERS_PER_RUN, and a
+    // backlog that still overruns must fail the run (the scheduler retries)
+    // rather than hold locks until Prisma's much longer default timeout.
+    { timeout: CLEANUP_TRANSACTION_TIMEOUT_MS }
+  );
 };
 
 const deleteStaleAddresses = async (cutoff: Date): Promise<number> => {

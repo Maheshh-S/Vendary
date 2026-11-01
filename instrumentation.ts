@@ -1,5 +1,5 @@
 import { assertRuntimeEnv, getEnvProblems } from "@/lib/env";
-import { initMonitoring } from "@/lib/monitoring";
+import { initMonitoring } from "@/lib/monitoring-init";
 
 /**
  * Next.js instrumentation hook. Runs once when a server instance starts.

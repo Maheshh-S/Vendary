@@ -395,7 +395,9 @@ describe("createRazorpayOrder (durable checkout intent)", () => {
       expect(JSON.parse(String(log.mock.calls[0][0]))).toMatchObject({
         level: "error",
         event: "order_persist_failed",
-        razorpayOrderId: RAZORPAY_ORDER_ID,
+        // The logger redacts any `razorpay`-named key; the reference is logged
+        // under a role-based key so support can still reconcile the orphan.
+        orderReference: RAZORPAY_ORDER_ID,
       });
     } finally {
       log.mockRestore();
