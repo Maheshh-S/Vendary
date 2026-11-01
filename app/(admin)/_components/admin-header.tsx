@@ -20,7 +20,13 @@ const AdminHeader = async () => {
                 {/* Search */}
                 <SearchDialog />
               </div>
-              <div className="flex flex-1 items-center justify-end">
+              <div className="flex flex-1 items-center justify-end gap-6">
+                <Link
+                  href="/admin/analytics"
+                  className="hidden text-sm font-medium text-gray-700 hover:text-gray-800 lg:block"
+                >
+                  Analytics
+                </Link>
                 <Link
                   href="/admin/coupons"
                   className="hidden text-sm font-medium text-gray-700 hover:text-gray-800 lg:block"
@@ -28,7 +34,7 @@ const AdminHeader = async () => {
                   Coupons
                 </Link>
 
-                <div className="flex items-center lg:ml-8">
+                <div className="flex items-center lg:ml-2">
                   <UserButton session={session} />
                 </div>
               </div>

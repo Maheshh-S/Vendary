@@ -41,4 +41,28 @@ test.describe("admin dashboard", () => {
     await expect(page.getByTestId("admin-orders-table")).toContainText("No orders yet");
     await expect(page.getByTestId("admin-products-table")).toContainText("No products found");
   });
+
+  test("analytics renders KPIs, charts and the analytics tables", async ({ page }) => {
+    await login(page);
+    await page.goto("/admin/analytics");
+
+    await expect(page.getByRole("heading", { name: "Analytics" })).toBeVisible();
+    await expect(page.getByRole("term").filter({ hasText: "Revenue" })).toBeVisible();
+    await expect(page.getByText("Average order value")).toBeVisible();
+    await expect(page.getByTestId("revenue-chart")).toBeVisible();
+    await expect(page.getByTestId("top-products-revenue")).toBeVisible();
+    await expect(page.getByTestId("top-products-quantity")).toBeVisible();
+    await expect(page.getByTestId("low-stock-table")).toBeVisible();
+    await expect(page.getByText(/30 days shown/)).toBeVisible();
+  });
+
+  test("analytics rejects an invalid range and falls back to the default", async ({ page }) => {
+    await login(page);
+    await page.goto("/admin/analytics?from=2026-02-31&to=2026-03-01");
+
+    await expect(
+      page.getByRole("alert").filter({ hasText: "start date must be a valid" })
+    ).toBeVisible();
+    await expect(page.getByText(/Showing the last 30 days instead/)).toBeVisible();
+  });
 });
