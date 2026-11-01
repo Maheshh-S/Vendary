@@ -13,9 +13,20 @@ const { authMock, prismaMock, txMock, razorpayMock, rateLimitMock, refundMock, r
   vi.hoisted(() => {
     const txMock = {
       address: { create: vi.fn() },
-      order: { create: vi.fn(), updateMany: vi.fn(), findUniqueOrThrow: vi.fn() },
+      order: {
+        create: vi.fn(),
+        updateMany: vi.fn(),
+        findUnique: vi.fn(),
+        findUniqueOrThrow: vi.fn(),
+      },
       orderItem: { create: vi.fn(), createMany: vi.fn(), findMany: vi.fn() },
-      orderEvent: { create: vi.fn() },
+      orderEvent: { create: vi.fn(), findFirst: vi.fn() },
+      refund: {
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        updateMany: vi.fn(),
+      },
       product: { updateMany: vi.fn() },
     };
     const prismaMock = {
@@ -56,6 +67,7 @@ vi.mock("@/lib/product-cache", () => ({ invalidateProductCache: invalidateMock }
 vi.mock("next/cache", () => ({ revalidatePath: revalidateMock }));
 
 import { PlaceOrder, createRazorpayOrder } from "@/actions/orders";
+import { refundReasonLabel } from "@/lib/orders/refund-labels";
 import { signRazorpayPayload } from "@/lib/razorpay";
 
 const SECRET = "unit-test-razorpay-secret";
@@ -134,6 +146,18 @@ const makeOrder = (overrides: Record<string, unknown> = {}) => ({
 let orderState: { status: string; paymentId: string };
 let txState: { status: string; paymentId: string };
 
+type RefundRow = {
+  id: string;
+  orderId: string;
+  razorpayRefundId: string;
+  paymentId: string;
+  amount: string;
+  reason: string;
+  status: string;
+};
+
+let refundRows: RefundRow[];
+
 const initState = (status = "pending", paymentId = "") => {
   orderState = { status, paymentId };
   txState = { ...orderState };
@@ -145,6 +169,7 @@ beforeEach(() => {
   process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID = "rzp_test_unit";
 
   initState();
+  refundRows = [];
 
   authMock.mockResolvedValue({ user: { id: USER_ID, role: "USER" } });
   rateLimitMock.enforceRateLimit.mockResolvedValue(undefined);
@@ -208,8 +233,46 @@ beforeEach(() => {
     status: txState.status,
     paymentId: txState.paymentId,
   }));
+  txMock.order.findUnique.mockImplementation(async () => ({
+    status: txState.status,
+    paymentId: txState.paymentId,
+    items: makeOrder().items,
+  }));
   txMock.orderItem.findMany.mockResolvedValue(makeOrder().items);
   txMock.product.updateMany.mockResolvedValue({ count: 1 });
+
+  // Refund ledger store for the shared claim/finalize flow.
+  txMock.refund.findUnique.mockImplementation(
+    async (args: { where: { orderId: string } }) =>
+      refundRows.find((refund) => refund.orderId === args.where.orderId) ?? null
+  );
+  txMock.refund.create.mockImplementation(
+    async (args: { data: Omit<RefundRow, "id"> }) => {
+      const refund: RefundRow = { id: "refund_row_1", ...args.data };
+      refundRows.push(refund);
+      return { id: refund.id };
+    }
+  );
+  txMock.refund.update.mockImplementation(
+    async (args: { where: { id: string }; data: Partial<RefundRow> }) => {
+      const refund = refundRows.find((candidate) => candidate.id === args.where.id);
+      if (!refund) throw new Error("refund row missing");
+      Object.assign(refund, args.data);
+      return { id: refund.id };
+    }
+  );
+  txMock.refund.updateMany.mockImplementation(
+    async (args: { where: { id: string; status?: string }; data: Partial<RefundRow> }) => {
+      const refund = refundRows.find((candidate) => candidate.id === args.where.id);
+      if (!refund) return { count: 0 };
+      if (args.where.status !== undefined && refund.status !== args.where.status) {
+        return { count: 0 };
+      }
+      Object.assign(refund, args.data);
+      return { count: 1 };
+    }
+  );
+  txMock.orderEvent.findFirst.mockResolvedValue(null);
 
   razorpayMock.orders.create.mockResolvedValue({
     id: RAZORPAY_ORDER_ID,
@@ -455,6 +518,56 @@ describe("PlaceOrder (confirm with payment proof only)", () => {
     expect(orderState).toEqual({ status: "pending", paymentId: "" });
   });
 
+  it("refunds once through the late-capture backstop when a concurrent cancel owns the order", async () => {
+    // The customer cancel wins the confirm claim after PlaceOrder read
+    // `pending`, leaving the order cancelled with no proof recorded.
+    prismaMock.$transaction.mockImplementation(
+      async (callback: (tx: typeof txMock) => unknown) => {
+        if (txState.status === "pending") {
+          txState = { status: "cancelled", paymentId: "" };
+        }
+        const result = await callback(txMock);
+        orderState = { ...txState };
+        return result;
+      }
+    );
+
+    const result = await PlaceOrder(signedProof());
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe("PAYMENT_FAILED");
+    expect(result.message).toMatch(/refunded/i);
+
+    expect(refundMock).toHaveBeenCalledTimes(1);
+    expect(refundMock).toHaveBeenCalledWith({
+      paymentId: RAZORPAY_PAYMENT_ID,
+      amountPaise: ORDER_TOTAL_PAISE,
+      orderId: "order_1",
+      reason: "LATE_CAPTURE",
+    });
+    // The order stays cancelled; the proof and the ledger carry the refund.
+    expect(orderState).toEqual({ status: "cancelled", paymentId: RAZORPAY_PAYMENT_ID });
+    expect(refundRows).toHaveLength(1);
+    expect(refundRows[0]).toMatchObject({
+      orderId: "order_1",
+      razorpayRefundId: "rfnd_1",
+      paymentId: RAZORPAY_PAYMENT_ID,
+      amount: "216.00",
+      reason: "LATE_CAPTURE",
+      status: "processed",
+    });
+    expect(refundReasonLabel(refundRows[0].reason)).toBe("Late capture");
+
+    // Replay: the order is terminal and the proof is recorded — no second refund.
+    const replay = await PlaceOrder(signedProof());
+
+    expect(replay.ok).toBe(false);
+    if (replay.ok) return;
+    expect(replay.code).toBe("CONFLICT");
+    expect(refundMock).toHaveBeenCalledTimes(1);
+  });
+
   it("refunds the capture and returns PRICE_CHANGED when current prices drift", async () => {
     prismaMock.product.findMany.mockResolvedValue([{ id: PRODUCT.id, price: "300.00" }]);
 
@@ -471,6 +584,59 @@ describe("PlaceOrder (confirm with payment proof only)", () => {
     );
     expect(orderState).toEqual({ status: "refunded", paymentId: RAZORPAY_PAYMENT_ID });
     expect(txMock.product.updateMany).not.toHaveBeenCalled();
+
+    // The automatic refund is on the shared ledger, exactly as the order
+    // detail page and support expect.
+    expect(refundRows).toHaveLength(1);
+    expect(refundRows[0]).toMatchObject({
+      orderId: "order_1",
+      razorpayRefundId: "rfnd_1",
+      paymentId: RAZORPAY_PAYMENT_ID,
+      amount: "216.00",
+      reason: "PRICE_CHANGED",
+      status: "processed",
+    });
+    expect(refundReasonLabel(refundRows[0].reason)).toBe("Price changed");
+
+    // The refund is on the audit trail too; the `refund.processed` webhook
+    // then sees a settled ledger row and does not duplicate the event.
+    expect(txMock.orderEvent.create).toHaveBeenCalledTimes(1);
+    expect(txMock.orderEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        orderId: "order_1",
+        type: "refund_processed",
+        actorId: null,
+      }),
+    });
+  });
+
+  it("updates an existing ledger row instead of duplicating the automatic refund", async () => {
+    prismaMock.product.findMany.mockResolvedValue([{ id: PRODUCT.id, price: "300.00" }]);
+    // A webhook reconciled this order's refund first: the row must be updated,
+    // not duplicated (Refund.orderId is unique).
+    refundRows = [
+      {
+        id: "refund_row_1",
+        orderId: "order_1",
+        razorpayRefundId: "rfnd_earlier",
+        paymentId: RAZORPAY_PAYMENT_ID,
+        amount: "216.00",
+        reason: "PRICE_CHANGED",
+        status: "requested",
+      },
+    ];
+
+    const result = await PlaceOrder(signedProof());
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe("PRICE_CHANGED");
+    expect(txMock.refund.create).not.toHaveBeenCalled();
+    expect(refundRows).toHaveLength(1);
+    expect(refundRows[0]).toMatchObject({
+      razorpayRefundId: "rfnd_1",
+      status: "processed",
+    });
   });
 
   it("returns success without refunding when a concurrent confirmation wins the refund claim", async () => {

@@ -1,8 +1,10 @@
 "use client";
 import React, { useCallback, useEffect } from 'react'
 import { useLocalStorage } from '@mantine/hooks';
+import toast from 'react-hot-toast';
 import {
   CART_STORAGE_KEY,
+  MAX_CART_LINES,
   cartTotalPaise,
   clampCartQuantity,
   mergeCartItem,
@@ -18,7 +20,8 @@ type Props = {
 
 interface CartContextType {
   items: CartItem[]
-  addItem: (item: CartItem) => void
+  /** Returns false when the line cap rejected the item (the list is unchanged). */
+  addItem: (item: CartItem) => boolean
   removeItem: (productId: string) => void
   updateQuantity: (productId: string, quantity: number) => void
   clearCart: () => void
@@ -71,13 +74,23 @@ const CartProvider = ({ children }: Props) => {
     }
   }, []);
 
-  const addItem = useCallback((item: CartItem) => {
+  const addItem = useCallback((item: CartItem): boolean => {
     const [normalized] = normalizeCartItems([item]);
-    if (!normalized) return;
+    if (!normalized) return false;
 
-    setItems((prevItems) => mergeCartItem(prevItems, normalized));
+    // A 51st distinct line would be rejected by the shared server cap, so the
+    // cart is left unchanged and the drawer stays closed with an explanation.
+    // Quantity updates for an existing line are always allowed.
+    const isNewLine = !items.some((existing) => existing.id === normalized.id);
+    if (isNewLine && items.length >= MAX_CART_LINES) {
+      toast.error(`Your cart is full (${MAX_CART_LINES} items).`);
+      return false;
+    }
+
+    setItems(mergeCartItem(items, normalized));
     setIsOpen(true);
-  }, [setItems, setIsOpen]);
+    return true;
+  }, [items, setItems, setIsOpen]);
   
   const removeItem = useCallback((productId: string) => {
     setItems((prevItems) => {

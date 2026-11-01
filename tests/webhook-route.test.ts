@@ -14,7 +14,12 @@ const { prismaMock, txMock, confirmOrderMock, refundPaymentMock, revalidateMock,
     const txMock = {
       order: { findFirst: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
       orderEvent: { findFirst: vi.fn(), create: vi.fn() },
-      refund: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+      refund: {
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        updateMany: vi.fn(),
+      },
       product: { updateMany: vi.fn() },
     };
     return {
@@ -129,6 +134,7 @@ describe("razorpay webhook route", () => {
     txMock.refund.findUnique.mockResolvedValue(null);
     txMock.refund.create.mockResolvedValue({ id: "refund_row_1" });
     txMock.refund.update.mockResolvedValue({ id: "refund_row_1" });
+    txMock.refund.updateMany.mockResolvedValue({ count: 1 });
     txMock.orderEvent.findFirst.mockResolvedValue(null);
     txMock.orderEvent.create.mockResolvedValue({ id: "event_1" });
   });
@@ -459,6 +465,52 @@ describe("razorpay webhook route", () => {
       expect(revalidateMock).toHaveBeenCalledWith("/my-orders");
     });
 
+    it("refunds a capture whose confirm claim lost to a concurrent cancel", async () => {
+      // The top-level read still sees `pending`; a customer cancel wins the
+      // confirm claim in between, leaving `cancelled` with no proof recorded.
+      confirmOrderMock.mockResolvedValue({
+        status: "already",
+        current: "cancelled",
+        paymentId: "",
+      });
+
+      const first = await POST(signedRequest(capturedBody()));
+
+      expect(first.status).toBe(200);
+      expect(refundPaymentMock).toHaveBeenCalledTimes(1);
+      expect(refundPaymentMock).toHaveBeenCalledWith({
+        paymentId: PAYMENT_ID,
+        amountPaise: ORDER_TOTAL_PAISE,
+        orderId: ORDER_ID,
+        reason: "LATE_CAPTURE",
+      });
+      // The proof and the ledger row were claimed, then finalized processed.
+      expect(txMock.order.updateMany).toHaveBeenCalledWith({
+        where: { id: ORDER_ID, status: "cancelled", paymentId: "" },
+        data: { paymentId: PAYMENT_ID },
+      });
+      expect(txMock.refund.update).toHaveBeenCalledWith({
+        where: { id: "refund_row_1" },
+        data: { razorpayRefundId: "rfnd_123", status: "processed" },
+      });
+      expect(
+        txMock.orderEvent.create.mock.calls.map((call) => call[0].data.type)
+      ).toEqual(["refund_requested", "refund_processed"]);
+      expect(revalidateMock).toHaveBeenCalledWith("/my-orders");
+
+      // Replay: the proof is now recorded, so the cancelled branch no-ops.
+      prismaMock.order.findUnique.mockResolvedValue({
+        ...ORDER,
+        status: "cancelled",
+        paymentId: PAYMENT_ID,
+      });
+      const second = await POST(signedRequest(capturedBody()));
+
+      expect(second.status).toBe(200);
+      expect(refundPaymentMock).toHaveBeenCalledTimes(1);
+      expect(confirmOrderMock).toHaveBeenCalledTimes(1);
+    });
+
     it("acknowledges a failed late-capture refund and records refund_failed", async () => {
       const error = vi.spyOn(console, "error").mockImplementation(() => {});
       try {
@@ -472,8 +524,8 @@ describe("razorpay webhook route", () => {
         const res = await POST(signedRequest(capturedBody()));
 
         expect(res.status).toBe(200);
-        expect(txMock.refund.update).toHaveBeenCalledWith({
-          where: { id: "refund_row_1" },
+        expect(txMock.refund.updateMany).toHaveBeenCalledWith({
+          where: { id: "refund_row_1", status: "requested" },
           data: { status: "failed" },
         });
         expect(
@@ -488,7 +540,7 @@ describe("razorpay webhook route", () => {
           expect.arrayContaining([
             expect.objectContaining({
               level: "error",
-              event: "webhook_late_capture_refund_failed",
+              event: "late_capture_refund_failed",
               orderId: ORDER_ID,
             }),
           ])

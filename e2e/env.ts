@@ -25,10 +25,15 @@ export const serverEnv = (key: string): string => process.env[key] ?? dotEnv[key
  * Guards specs that write Prisma fixtures: only a disposable local or CI
  * database may be mutated. Production/staging URLs are skipped even when they
  * happen to be reachable from the test runner.
+ *
+ * `CI` alone is not enough — a CI job pointed at a shared database must still
+ * skip. Allowed hosts are localhost/127.0.0.1 and the docker-compose/CI
+ * service names `db`/`postgres`; anything else needs an explicit
+ * `E2E_ALLOW_REMOTE_DB=1` opt-in.
  */
 export const isLocalOrCiDatabase = (url: string): boolean => {
   if (!url) return false;
-  if (process.env.CI) return true;
+  if (process.env.E2E_ALLOW_REMOTE_DB === "1") return true;
 
   try {
     const host = new URL(url).hostname.toLowerCase();
@@ -39,6 +44,9 @@ export const isLocalOrCiDatabase = (url: string): boolean => {
       "::1",
       "[::1]",
       "host.docker.internal",
+      // docker-compose / CI service hostnames.
+      "db",
+      "postgres",
     ].includes(host);
   } catch {
     return false;

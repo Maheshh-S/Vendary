@@ -31,7 +31,9 @@ const revalidateOrderViews = (orderId: string): void => {
  * Customer-initiated cancel.
  *
  * - `pending` (nothing captured): flip to `cancelled` and record the event.
- *   No stock was ever decremented, so nothing is restored.
+ *   No stock was ever decremented, so nothing is restored. A pending order
+ *   with a recorded payment proof belongs to the money path (confirm or the
+ *   webhook late-capture backstop): it returns `PAYMENT_FAILED` for support.
  * - `confirmed` (money captured): issue a full Razorpay refund through the
  *   shared claim/call/finalize flow, then move the order to `cancelled` and
  *   restore the stock that confirmation decremented. A refund API failure
@@ -57,6 +59,13 @@ export const cancelOrder = async (orderId: string) =>
     }
 
     if (order.status === "pending") {
+      // A recorded proof means a capture (or an earlier refund attempt) owns
+      // this order. Cancelling now would race the money path; hand it to
+      // support with a precise reason instead of the generic claim race.
+      if (order.paymentId !== "") {
+        throw new AppError("PAYMENT_FAILED", "A payment is already being processed.");
+      }
+
       const cancelled = await prisma.$transaction(async (tx) => {
         // `paymentId: ""` means no capture owns this order. If a capture is in
         // flight (or a refund already recorded the proof), leave it to support.

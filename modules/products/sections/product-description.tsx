@@ -125,8 +125,13 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
         .filter((img) => img.src),
     };
 
-    // Add item to cart
-    addItem(cartItem);
+    // Add item to cart. The provider rejects a 51st distinct line (and toasts
+    // why), so never claim success when the cart was left unchanged.
+    if (!addItem(cartItem)) {
+      toast.dismiss("add-to-cart");
+      setAddingToCart(false);
+      return;
+    }
     toast.success("Added to cart", { id: "add-to-cart" });
 
     // Animate button and reset

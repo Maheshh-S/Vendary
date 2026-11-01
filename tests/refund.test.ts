@@ -20,7 +20,12 @@ const {
   const txMock = {
     order: { findUnique: vi.fn(), updateMany: vi.fn() },
     orderEvent: { findFirst: vi.fn(), create: vi.fn() },
-    refund: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+    refund: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
     product: { updateMany: vi.fn() },
   };
   const prismaMock = {
@@ -199,6 +204,18 @@ beforeEach(() => {
       if (!refund) throw new Error("refund row missing");
       Object.assign(refund, args.data);
       return { id: refund.id };
+    }
+  );
+  // Compare-and-set: status predicate and write in one synchronous step.
+  txMock.refund.updateMany.mockImplementation(
+    async (args: { where: { id: string; status?: string }; data: Partial<RefundRow> }) => {
+      const refund = refundRows.find((candidate) => candidate.id === args.where.id);
+      if (!refund) return { count: 0 };
+      if (args.where.status !== undefined && refund.status !== args.where.status) {
+        return { count: 0 };
+      }
+      Object.assign(refund, args.data);
+      return { count: 1 };
     }
   );
 

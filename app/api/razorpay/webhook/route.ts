@@ -7,15 +7,10 @@ import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
 import { confirmOrder } from "@/lib/orders/confirm-order";
 import { writeOrderEvent } from "@/lib/orders/events";
-import {
-  claimRefundInTransaction,
-  failOrderRefund,
-  finalizeOrderRefund,
-  refundAndClose,
-  restoreOrderStock,
-} from "@/lib/orders/refund";
+import { refundLateCapture } from "@/lib/orders/late-capture";
+import { refundAndClose, restoreOrderStock } from "@/lib/orders/refund";
 import { invalidateProductCache } from "@/lib/product-cache";
-import { refundPayment, type RefundReason } from "@/lib/razorpay-client";
+import type { RefundReason } from "@/lib/razorpay-client";
 import { verifyRazorpayWebhookSignature } from "@/lib/razorpay";
 import {
   webhookSchema,
@@ -125,123 +120,25 @@ const refundCapture = async (
 };
 
 /**
- * Late-capture backstop for a cancelled pending order: the customer cancelled
- * before paying, but Razorpay captured a payment anyway (e.g. a delayed UPI
- * capture). The proof claim and refund-ledger claim commit in one transaction,
- * so a DB failure leaves the order claimable on the next delivery. The refund
- * call then moves the captured amount back; the order stays `cancelled`.
- *
- * Replays see the recorded proof and no-op. A failed refund is support-led and
- * acknowledged, matching the other refund paths.
+ * Late-capture backstop for an order that is (or just became) `cancelled`:
+ * the shared helper claims the proof, refunds the captured amount and leaves
+ * the order `cancelled`. Replays and duplicate captures no-op; a failed refund
+ * is support-led and acknowledged, matching the other refund paths.
  */
 const handleCancelledLateCapture = async (
   orderId: string,
   payment: PaymentWebhookEntity
 ): Promise<NextResponse> => {
-  let claim: Awaited<ReturnType<typeof claimRefundInTransaction>> | null;
-  try {
-    claim = await prisma.$transaction(async (tx) => {
-      const proof = await tx.order.updateMany({
-        where: { id: orderId, status: "cancelled", paymentId: "" },
-        data: { paymentId: payment.id },
-      });
-      if (proof.count === 0) {
-        return null;
-      }
+  const result = await refundLateCapture({
+    orderId,
+    paymentId: payment.id,
+    amountPaise: payment.amount,
+  });
 
-      return claimRefundInTransaction(tx, {
-        orderId,
-        amountPaise: payment.amount,
-        reason: "LATE_CAPTURE",
-        allowedFrom: ["cancelled"],
-        actorId: null,
-      });
-    });
-  } catch (error) {
-    if (error instanceof AppError) {
-      // An existing refund row owns this order (processed or in flight); never
-      // issue a second refund. The transaction rolled back, so a duplicate
-      // capture is support-led.
-      logError({
-        event: "webhook_late_capture_claim_rejected",
-        orderId,
-        paymentId: payment.id,
-        code: error.code,
-        error: errorMessage(error),
-      });
-      return acknowledgment();
-    }
-    throw error;
+  if (result.outcome === "refunded") {
+    revalidateOrderViews();
   }
 
-  if (!claim) {
-    logWarn({
-      event: "webhook_late_capture_already_claimed",
-      orderId,
-      paymentId: payment.id,
-    });
-    return acknowledgment();
-  }
-
-  let refundId: string;
-  try {
-    ({ refundId } = await refundPayment({
-      paymentId: payment.id,
-      amountPaise: payment.amount,
-      orderId,
-      reason: "LATE_CAPTURE",
-    }));
-  } catch (error) {
-    logError({
-      event: "webhook_late_capture_refund_failed",
-      orderId,
-      capturedPaise: payment.amount,
-      error: errorMessage(error),
-    });
-    // Record the failure for support; the order keeps its `cancelled` status.
-    try {
-      await failOrderRefund({
-        orderId,
-        refundRowId: claim.refundRowId,
-        reason: "LATE_CAPTURE",
-        error: errorMessage(error),
-        actorId: null,
-      });
-    } catch (ledgerError) {
-      logError({
-        event: "webhook_late_capture_ledger_failed",
-        orderId,
-        error: errorMessage(ledgerError),
-      });
-    }
-    return acknowledgment();
-  }
-
-  try {
-    await finalizeOrderRefund({
-      orderId,
-      refundRowId: claim.refundRowId,
-      razorpayRefundId: refundId,
-      amountPaise: payment.amount,
-      reason: "LATE_CAPTURE",
-      // The order already moved to `cancelled`; the backstop must not move it.
-      allowedFrom: [],
-      finalStatus: "cancelled",
-      actorId: null,
-    });
-  } catch (error) {
-    // The money is back. `refund.processed` will reconcile the ledger row; a
-    // retried delivery would no-op on the recorded proof, so alert and ack.
-    logError({
-      event: "webhook_late_capture_ledger_failed",
-      orderId,
-      refundId,
-      error: errorMessage(error),
-    });
-    return acknowledgment();
-  }
-
-  revalidateOrderViews();
   return acknowledgment();
 };
 
@@ -295,6 +192,12 @@ const handlePaymentCaptured = async (payment: PaymentWebhookEntity): Promise<Nex
   try {
     const confirmation = await confirmOrder(order.id, payment.id);
     if (confirmation.status === "already") {
+      if (confirmation.current === "cancelled" && confirmation.paymentId === "") {
+        // A concurrent customer cancel won the claim while this capture was in
+        // flight: route it through the same late-capture backstop instead of
+        // acking a paid-but-cancelled order.
+        return handleCancelledLateCapture(order.id, payment);
+      }
       // A refund owns the pending order (proof already recorded) or another
       // path already confirmed it. Either way, do not refund a second time.
       logWarn({

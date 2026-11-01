@@ -11,9 +11,10 @@ import type { OrderStatus } from "@prisma/client";
  * `pending -> confirmed` is deliberate: only `confirmOrder` performs it, and
  * only after the Razorpay signature and captured amount are verified.
  *
- * `pending -> cancelled` exists only so Phase 3's cleanup job can close
- * abandoned pending rows (checkout started, never paid). Admins must use
- * `ADMIN_TRANSITIONS`, which omits both edges.
+ * `pending -> cancelled` is the customer cancel of an unpaid order (claimed
+ * with an empty payment proof). A capture that lands after that cancel is
+ * refunded by the webhook late-capture backstop, which keeps the order
+ * `cancelled`. Admins must use `ADMIN_TRANSITIONS`, which omits both edges.
  *
  * Stock is decremented only on `pending -> confirmed`, so stock is restored
  * only on `confirmed -> cancelled | refunded`. `shipped`/`delivered` orders
@@ -37,10 +38,10 @@ export const canTransition = (from: OrderStatus, to: OrderStatus): boolean =>
  * pending edges removed:
  *
  * - `pending -> confirmed` is owned by `confirmOrder` (payment verification).
- * - `pending -> cancelled` is blocked until Phase 1's refund flow exists. A
- *   capture can land after an admin cancels (the webhook acks captures for
- *   non-pending orders), which would leave the customer paid-but-cancelled
- *   with no refund. Admins may only cancel after `confirmed`.
+ * - `pending -> cancelled` is owned by the customer cancel action, which only
+ *   claims orders with no recorded payment proof. A capture that lands after
+ *   the cancel is refunded by the webhook late-capture backstop, so an admin
+ *   override would only race the customer path.
  *
  * Consequently a pending order has no admin options at all.
  */

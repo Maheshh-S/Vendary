@@ -20,7 +20,12 @@ const {
   const txMock = {
     order: { findUnique: vi.fn(), updateMany: vi.fn() },
     orderEvent: { findFirst: vi.fn(), create: vi.fn() },
-    refund: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+    refund: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
     product: { updateMany: vi.fn() },
   };
   const prismaMock = {
@@ -49,6 +54,7 @@ vi.mock("next/cache", () => ({ revalidatePath: revalidateMock }));
 
 import { cancelOrder } from "@/actions/orders/cancel";
 import type { ActionErrorCode, ActionResult } from "@/lib/action-result";
+import { failOrderRefund } from "@/lib/orders/refund";
 
 const USER_ID = "user_1";
 const ORDER_ID = "order_1";
@@ -231,6 +237,19 @@ beforeEach(() => {
       return { id: refund.id };
     }
   );
+  // Compare-and-set: the status predicate is evaluated and the write applied
+  // in one synchronous step, exactly like a single-row UPDATE ... WHERE.
+  txMock.refund.updateMany.mockImplementation(
+    async (args: { where: { id: string; status?: string }; data: Partial<RefundRow> }) => {
+      const refund = refundRows.find((candidate) => candidate.id === args.where.id);
+      if (!refund) return { count: 0 };
+      if (args.where.status !== undefined && refund.status !== args.where.status) {
+        return { count: 0 };
+      }
+      Object.assign(refund, args.data);
+      return { count: 1 };
+    }
+  );
 
   txMock.orderEvent.findFirst.mockImplementation(
     async (args: { where: { orderId: string; type: string } }) =>
@@ -316,18 +335,73 @@ describe("cancelOrder pending orders", () => {
     expect(invalidateMock).not.toHaveBeenCalled();
   });
 
-  it("refuses to cancel once a payment proof is recorded", async () => {
+  it("returns PAYMENT_FAILED with a precise reason once a payment proof is recorded", async () => {
     orderRow = makeOrder({ status: "pending", paymentId: PAYMENT_ID });
 
-    expectFailure(await cancelOrder(ORDER_ID), "CONFLICT");
+    expectFailure(
+      await cancelOrder(ORDER_ID),
+      "PAYMENT_FAILED",
+      "A payment is already being processed."
+    );
     expect(orderRow?.status).toBe("pending");
     expect(events).toEqual([]);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 
   it("returns CONFLICT when another path cancels between read and claim", async () => {
     txMock.order.updateMany.mockResolvedValueOnce({ count: 0 });
 
     expectFailure(await cancelOrder(ORDER_ID), "CONFLICT");
+    expect(events).toEqual([]);
+  });
+});
+
+describe("cancelOrder failed-refund retry safety", () => {
+  it("lets exactly one of two concurrent retries proceed", async () => {
+    refundRows = [
+      makeRefund({ status: "failed", razorpayRefundId: "pending:old" }),
+    ];
+
+    // No rollback: the losing claim writes nothing, so there is nothing to undo.
+    prismaMock.$transaction.mockImplementation(
+      async (callback: (tx: typeof txMock) => unknown) => callback(txMock)
+    );
+
+    const results = await Promise.all([cancelOrder(ORDER_ID), cancelOrder(ORDER_ID)]);
+
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    const conflicts = results.filter((result) => !result.ok);
+    expect(conflicts).toHaveLength(1);
+    if (!conflicts[0].ok) {
+      expect(conflicts[0].code).toBe("CONFLICT");
+    }
+
+    // Only the compare-and-set winner reached Razorpay.
+    expect(refundPaymentMock).toHaveBeenCalledTimes(1);
+    expect(refundRows).toHaveLength(1);
+    expect(refundRows[0]).toMatchObject({
+      status: "processed",
+      razorpayRefundId: "rfnd_1",
+    });
+  });
+
+  it("does not clobber a processed refund or add an event on a late failure", async () => {
+    refundRows = [
+      makeRefund({ status: "processed", razorpayRefundId: "rfnd_1" }),
+    ];
+
+    await failOrderRefund({
+      orderId: ORDER_ID,
+      refundRowId: "refund_row_1",
+      reason: "CUSTOMER_CANCEL",
+      error: "razorpay timeout after the refund settled",
+      actorId: USER_ID,
+    });
+
+    expect(refundRows[0]).toMatchObject({
+      status: "processed",
+      razorpayRefundId: "rfnd_1",
+    });
     expect(events).toEqual([]);
   });
 });

@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth-guards";
 import { prisma } from "@/lib/db/prisma";
 import { formatINR } from "@/lib/format-inr";
 import { isAllowedImageUrl } from "@/lib/images";
+import { refundReasonLabel } from "@/lib/orders/refund-labels";
 import CancelOrderButton from "@/modules/orders/components/cancel-order-button";
 import OrderTimeline from "@/modules/orders/components/order-timeline";
 
@@ -57,7 +58,9 @@ export default async function OrderDetailPage({ params }: Props) {
     include: {
       items: true,
       address: true,
-      events: { orderBy: { createdAt: "asc" } },
+      // `id` breaks same-millisecond ties: one finalize transaction can write
+      // several events at the same instant, and the timeline must be stable.
+      events: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
       refunds: { orderBy: { createdAt: "desc" } },
     },
   });
@@ -231,7 +234,7 @@ export default async function OrderDetailPage({ params }: Props) {
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      {refund.reason} · {formatTimestamp(refund.createdAt)}
+                      {refundReasonLabel(refund.reason)} · {formatTimestamp(refund.createdAt)}
                     </p>
                   </li>
                 ))}

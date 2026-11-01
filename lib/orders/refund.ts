@@ -30,6 +30,75 @@ const isUniqueConstraintViolation = (error: unknown): boolean =>
   (error as { code?: unknown }).code === "P2002";
 
 /**
+ * Records an automatic (Phase 0) refund on the shared ledger.
+ *
+ * `Refund.orderId` is unique, so this converges on the single row for the
+ * order: a row created by the webhook or an earlier attempt is updated to
+ * `processed` with the real Razorpay id instead of inserting a duplicate. A
+ * concurrent insert that loses the unique race is retried as an update.
+ *
+ * The `refund_processed` event is written here (once, guarded by a lookup)
+ * because the ledger row now marks the refund as settled before Razorpay's
+ * `refund.processed` delivery arrives — the webhook then skips the event as
+ * already reconciled.
+ */
+const recordAutomaticRefund = async (input: {
+  orderId: string;
+  paymentId: string;
+  razorpayRefundId: string;
+  amountPaise: number;
+  reason: RefundReason;
+}): Promise<void> => {
+  const write = async (): Promise<void> =>
+    prisma.$transaction(async (tx) => {
+      const existing = await tx.refund.findUnique({ where: { orderId: input.orderId } });
+      const data = {
+        razorpayRefundId: input.razorpayRefundId,
+        paymentId: input.paymentId,
+        amount: toRupees(input.amountPaise),
+        reason: input.reason,
+        status: "processed",
+      };
+
+      if (existing) {
+        await tx.refund.update({ where: { id: existing.id }, data });
+      } else {
+        await tx.refund.create({
+          data: { orderId: input.orderId, ...data },
+        });
+      }
+
+      const processedEvent = await tx.orderEvent.findFirst({
+        where: { orderId: input.orderId, type: "refund_processed" },
+        select: { id: true },
+      });
+      if (!processedEvent) {
+        await writeOrderEvent(tx, {
+          orderId: input.orderId,
+          type: "refund_processed",
+          actorId: null,
+          metadata: {
+            refundId: input.razorpayRefundId,
+            amountPaise: input.amountPaise,
+            reason: input.reason,
+          },
+        });
+      }
+    });
+
+  try {
+    await write();
+  } catch (error) {
+    if (!isUniqueConstraintViolation(error)) {
+      throw error;
+    }
+    // A concurrent path inserted the row between the read and the insert;
+    // converge on that row.
+    await write();
+  }
+};
+
+/**
  * Refunds a capture we cannot fulfil and closes the order.
  *
  * The claim (`pending` + empty proof → record proof) is what makes refund and
@@ -43,6 +112,9 @@ const isUniqueConstraintViolation = (error: unknown): boolean =>
  * support, never mark it refunded. Callers decide how loud that is: the
  * checkout action returns `PAYMENT_FAILED`; the webhook acknowledges the event
  * and alerts support, because the recorded proof makes a retry a no-op.
+ *
+ * A successful call also writes the `Refund` ledger row, so automatic refunds
+ * are visible to support and on the order detail page like every other refund.
  */
 export const refundAndClose = async (
   orderId: string,
@@ -67,8 +139,9 @@ export const refundAndClose = async (
     return { outcome: "already_handled", status: current.status };
   }
 
+  let refundId: string;
   try {
-    await refundPayment({ paymentId, amountPaise, orderId, reason });
+    ({ refundId } = await refundPayment({ paymentId, amountPaise, orderId, reason }));
   } catch (error) {
     console.error(
       JSON.stringify({
@@ -85,6 +158,31 @@ export const refundAndClose = async (
       "Your payment was captured but we couldn't complete your order. Please contact support with your payment reference.",
       undefined,
       error
+    );
+  }
+
+  // The money is back: record it on the shared ledger before closing the
+  // order. A ledger failure is loud but must not stop the close — the refund
+  // itself already succeeded and `refund.processed` reconciles the row.
+  try {
+    await recordAutomaticRefund({
+      orderId,
+      paymentId,
+      razorpayRefundId: refundId,
+      amountPaise,
+      reason,
+    });
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        event: "order_refund_ledger_failed",
+        orderId,
+        paymentId,
+        reason,
+        refundId,
+        error: errorMessage(error),
+      })
     );
   }
 
@@ -160,7 +258,8 @@ export type ClaimedRefund = {
  *
  * `Refund.orderId` is unique, so this is the race guard: of two concurrent
  * cancels exactly one creates the row (the loser gets a mapped CONFLICT), and
- * a later retry of a `failed` row updates it instead of creating a second.
+ * a later retry of a `failed` row compare-and-sets it back to `requested`
+ * instead of creating a second — exactly one concurrent retry wins.
  * The placeholder Razorpay id keeps the unique column populated until the
  * `payments.refund` call returns the real id.
  */
@@ -197,9 +296,11 @@ export const claimRefundInTransaction = async (
     if (existing.status === "requested") {
       throw new AppError("CONFLICT", "A refund for this order is already in progress.");
     }
-    // A failed attempt may be retried against the same ledger row.
-    const retried = await tx.refund.update({
-      where: { id: existing.id },
+    // A failed attempt may be retried against the same ledger row, but only
+    // through a compare-and-set: of two concurrent retries exactly one flips
+    // `failed → requested`, so only one can issue a Razorpay refund.
+    const retried = await tx.refund.updateMany({
+      where: { id: existing.id, status: "failed" },
       data: {
         razorpayRefundId: placeholderId,
         paymentId: order.paymentId,
@@ -207,9 +308,11 @@ export const claimRefundInTransaction = async (
         reason: options.reason,
         status: "requested",
       },
-      select: { id: true },
     });
-    refundRowId = retried.id;
+    if (retried.count === 0) {
+      throw new AppError("CONFLICT", "A refund is already being processed.");
+    }
+    refundRowId = existing.id;
   } else {
     const created = await tx.refund.create({
       data: {
@@ -370,7 +473,14 @@ export const finalizeOrderRefund = async (
     };
   });
 
-/** Records a failed refund attempt without touching the order status. */
+/**
+ * Records a failed refund attempt without touching the order status.
+ *
+ * Compare-and-set on `requested → failed`: a failure that surfaces after the
+ * refund was already finalized (an ambiguous Razorpay timeout whose
+ * `refund.processed` arrived first) must not clobber the `processed` row, and
+ * writes no `refund_failed` event.
+ */
 export const failOrderRefund = async (options: {
   orderId: string;
   refundRowId: string;
@@ -379,10 +489,14 @@ export const failOrderRefund = async (options: {
   actorId: string | null;
 }): Promise<void> =>
   prisma.$transaction(async (tx) => {
-    await tx.refund.update({
-      where: { id: options.refundRowId },
+    const failed = await tx.refund.updateMany({
+      where: { id: options.refundRowId, status: "requested" },
       data: { status: "failed" },
     });
+    if (failed.count === 0) {
+      return;
+    }
+
     await writeOrderEvent(tx, {
       orderId: options.orderId,
       type: "refund_failed",

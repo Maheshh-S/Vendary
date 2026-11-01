@@ -12,6 +12,7 @@ import { AppError } from "@/lib/errors";
 import { computeOrderTotals } from "@/lib/money";
 import { confirmOrder } from "@/lib/orders/confirm-order";
 import { writeOrderEvent } from "@/lib/orders/events";
+import { refundLateCapture } from "@/lib/orders/late-capture";
 import { refundAndClose, restoreOrderStock, type RefundOutcome } from "@/lib/orders/refund";
 import { canAdminTransition } from "@/lib/orders/status";
 import { invalidateProductCache } from "@/lib/product-cache";
@@ -396,6 +397,33 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
           "PAYMENT_FAILED",
           "We're still processing this payment. Please contact support with your payment reference."
         );
+      }
+      if (confirmation.current === "cancelled" && confirmation.paymentId === "") {
+        // A concurrent cancel won the claim between our read and the confirm
+        // transaction: the capture belongs to the late-capture backstop, not
+        // to this checkout. Refund it once through the shared helper.
+        const lateCapture = await refundLateCapture({
+          orderId: order.id,
+          paymentId: proof.razorpayPaymentId,
+          amountPaise: paidAmountPaise,
+        });
+        if (lateCapture.outcome === "refunded") {
+          revalidatePath("/my-orders");
+          revalidatePath("/admin");
+          throw new AppError(
+            "PAYMENT_FAILED",
+            "Your order was cancelled, so the payment has been refunded. Please contact support if you need help."
+          );
+        }
+        if (lateCapture.outcome === "refund_failed") {
+          revalidatePath("/my-orders");
+          revalidatePath("/admin");
+          throw new AppError(
+            "PAYMENT_FAILED",
+            "Your order was cancelled. We couldn't refund this payment automatically — please contact support with your payment reference."
+          );
+        }
+        throw new AppError("CONFLICT", "This order can no longer be confirmed.");
       }
       if (confirmation.current === "cancelled" || confirmation.current === "refunded") {
         throw new AppError("CONFLICT", "This order can no longer be confirmed.");
