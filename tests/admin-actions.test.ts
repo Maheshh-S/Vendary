@@ -17,7 +17,7 @@ const { authMock, prismaMock, invalidateMock, revalidateMock, rateLimitMock } = 
       delete: vi.fn(),
     },
     category: { findUnique: vi.fn() },
-    image: { createMany: vi.fn() },
+    image: { createMany: vi.fn(), count: vi.fn() },
   };
 
   return {
@@ -108,6 +108,7 @@ const expectNoDatabaseAccess = () => {
   expect(prismaMock.product.delete).not.toHaveBeenCalled();
   expect(prismaMock.category.findUnique).not.toHaveBeenCalled();
   expect(prismaMock.image.createMany).not.toHaveBeenCalled();
+  expect(prismaMock.image.count).not.toHaveBeenCalled();
 };
 
 beforeEach(() => {
@@ -120,6 +121,7 @@ beforeEach(() => {
   prismaMock.product.create.mockResolvedValue({ id: "prod_new" });
   prismaMock.category.findUnique.mockResolvedValue({ id: FORM_VALUES.categoryId });
   prismaMock.image.createMany.mockResolvedValue({ count: 1 });
+  prismaMock.image.count.mockResolvedValue(0);
 });
 
 afterEach(() => {
@@ -412,6 +414,9 @@ describe("addImagesToProduct", () => {
       select: { id: true },
     });
     expect(prismaMock.product.findUnique.mock.calls[0][0].where).not.toHaveProperty("userId");
+    expect(prismaMock.image.count).toHaveBeenCalledWith({
+      where: { productId: PRODUCT_ID },
+    });
     expect(prismaMock.image.createMany).toHaveBeenCalledWith({
       data: [
         { productId: PRODUCT_ID, url: ALLOWED_URL, isMain: true },
@@ -454,5 +459,39 @@ describe("addImagesToProduct", () => {
       "VALIDATION"
     );
     expect(prismaMock.image.createMany).not.toHaveBeenCalled();
+  });
+
+  it("accepts a request that reaches exactly the 8-image cap", async () => {
+    prismaMock.image.count.mockResolvedValue(6);
+
+    const data = expectSuccess(
+      await addImagesToProduct(PRODUCT_ID, {
+        images: [
+          { url: ALLOWED_URL, isMain: false },
+          { url: `${ALLOWED_URL}-2`, isMain: false },
+        ],
+      })
+    );
+
+    expect(data).toEqual({ productId: PRODUCT_ID, added: 2 });
+    expect(prismaMock.image.createMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects images that would push the product past 8 in total", async () => {
+    prismaMock.image.count.mockResolvedValue(7);
+
+    expectFailure(
+      await addImagesToProduct(PRODUCT_ID, {
+        images: [
+          { url: ALLOWED_URL, isMain: false },
+          { url: `${ALLOWED_URL}-2`, isMain: false },
+        ],
+      }),
+      "VALIDATION",
+      "A product can have at most 8 images."
+    );
+    expect(prismaMock.image.createMany).not.toHaveBeenCalled();
+    expect(invalidateMock).not.toHaveBeenCalled();
+    expect(revalidateMock).not.toHaveBeenCalled();
   });
 });

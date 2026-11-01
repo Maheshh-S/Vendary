@@ -11,6 +11,7 @@ import { runAction } from "@/lib/run-action"
 import { parseInput } from "@/lib/validation"
 import {
   addImagesInputSchema,
+  MAX_PRODUCT_IMAGES,
   type ImageFormValues,
 } from "@/schemas/admin/products/add-image-schema"
 
@@ -33,6 +34,15 @@ export const addImagesToProduct = async (productId: string, imageData: ImageForm
     })
     if (!product) {
       throw new AppError("NOT_FOUND", "Product not found.")
+    }
+
+    // The per-request schema caps `images`, but the product total must stay
+    // bounded too: count what is already stored before appending.
+    const existingImages = await prisma.image.count({
+      where: { productId: product.id },
+    })
+    if (existingImages + input.images.length > MAX_PRODUCT_IMAGES) {
+      throw new AppError("VALIDATION", `A product can have at most ${MAX_PRODUCT_IMAGES} images.`)
     }
 
     await prisma.image.createMany({

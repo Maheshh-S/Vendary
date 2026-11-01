@@ -36,6 +36,8 @@ export default async function AdminPage() {
     videos: true,
   },
    orderBy: { name: 'asc' },
+   // Bound the admin list; the single-store catalog is far smaller than this.
+   take: 200,
  })).map(serializePrismaObject);
 
  const orders = (await prisma.order.findMany({
@@ -50,6 +52,8 @@ export default async function AdminPage() {
     address: true,
   },
   orderBy: { createdAt: 'desc' },
+  // Bound the admin list; recent orders are what the dashboard acts on.
+  take: 200,
  })).map(serializePrismaObject);
 
 
