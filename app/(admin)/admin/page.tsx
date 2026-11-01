@@ -11,15 +11,41 @@ import { formatINR } from "@/lib/format-inr";
 import DeleteProductButton from "@/modules/admin/components/delete-product-button";
 import OrderStatusSelect from "@/modules/admin/components/order-status-select";
 import RefundOrderButton from "@/modules/admin/components/refund-order-button";
+import AdminSearchControls from "@/modules/admin/components/admin-search-controls";
 import PriceEdit from "@/modules/admin/edit/price";
 import DescriptionForm from "@/modules/admin/edit/description-form";
+import {
+  ADMIN_PAGE_SIZE,
+  adminHref,
+  adminSkip,
+  buildAdminOrderWhere,
+  buildAdminProductWhere,
+  parseAdminSearchQuery,
+} from "@/lib/admin/search";
+import {
+  Pagination,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 function truncateText(text: string | null, maxLength: number = 100) {
   if (!text) return ''
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
 }
 
-export default async function AdminPage() {
+const totalPagesFor = (count: number): number =>
+  Math.max(1, Math.ceil(count / ADMIN_PAGE_SIZE));
+
+type SearchParams = {
+  q?: string | string[];
+  page?: string | string[];
+};
+
+type Props = {
+  searchParams: Promise<SearchParams>;
+};
+
+export default async function AdminPage({ searchParams }: Props) {
   const session = await auth();
   if (!session) {
     redirect("/");
@@ -28,38 +54,67 @@ export default async function AdminPage() {
     redirect("/");
   }
 
-  // Single-store admin: every ADMIN sees the whole catalog. Product.userId is
-  // creator audit only and must never scope visibility or edits.
- const products = (await prisma.product.findMany({
-  include: {
-    category: true,
-    images: true,
-    videos: true,
-  },
-   orderBy: { name: 'asc' },
-   // Bound the admin list; the single-store catalog is far smaller than this.
-   take: 200,
- })).map(serializePrismaObject);
+  const { q, page } = parseAdminSearchQuery(await searchParams);
 
- const orders = (await prisma.order.findMany({
-  include: {
-    user: {
-      select: {
-        email: true,
+  // Single-store admin: every ADMIN sees the whole catalog and every order.
+  // Product.userId is creator audit only and must never scope visibility or
+  // edits (`buildAdminProductWhere` has no userId predicate).
+  const productWhere = buildAdminProductWhere(q);
+  const orderWhere = buildAdminOrderWhere(q);
+  const [productCount, orderCount] = await Promise.all([
+    prisma.product.count({ where: productWhere }),
+    prisma.order.count({ where: orderWhere }),
+  ]);
+  const productPages = totalPagesFor(productCount);
+  const orderPages = totalPagesFor(orderCount);
+  // Both tables share the URL's `page`; clamping keeps a stale page number
+  // from rendering an empty table after a search narrows the results.
+  const productPage = Math.min(page, productPages);
+  const orderPage = Math.min(page, orderPages);
+
+  const [products, orders] = await Promise.all([
+    prisma.product.findMany({
+      where: productWhere,
+      include: {
+        category: true,
+        images: true,
+        videos: true,
+        // Creator audit only — visibility is never scoped by it.
+        user: { select: { email: true } },
       },
-    },
-    // Snapshots survive product deletion; never join Product for the line name.
-    items: true,
-    address: true,
-  },
-  orderBy: { createdAt: 'desc' },
-  // Bound the admin list; recent orders are what the dashboard acts on.
-  take: 200,
- })).map(serializePrismaObject);
+      orderBy: { name: 'asc' },
+      take: ADMIN_PAGE_SIZE,
+      skip: adminSkip(productPage),
+    }),
+    prisma.order.findMany({
+      where: orderWhere,
+      include: {
+        user: {
+          select: {
+            email: true,
+          },
+        },
+        // Snapshots survive product deletion; never join Product for the line name.
+        items: true,
+        address: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: ADMIN_PAGE_SIZE,
+      skip: adminSkip(orderPage),
+    }),
+  ]);
+  const serializedProducts = products.map(serializePrismaObject);
+  const serializedOrders = orders.map(serializePrismaObject);
 
 
   return (
     <div className="px-4 sm:px-6 min-h-screen lg:px-8 my-8">
+      <AdminSearchControls q={q} />
+      <p className="mt-2 text-sm text-gray-500" data-testid="admin-search-summary">
+        {q
+          ? `${productCount} product${productCount === 1 ? "" : "s"} and ${orderCount} order${orderCount === 1 ? "" : "s"} matching “${q}”.`
+          : `${productCount} product${productCount === 1 ? "" : "s"} · ${orderCount} order${orderCount === 1 ? "" : "s"}.`}
+      </p>
       <div className="sm:flex sm:items-center">
         <div className="sm:flex-auto">
           <h1 className="text-xl font-semibold text-gray-900">Products</h1>
@@ -80,7 +135,7 @@ export default async function AdminPage() {
       <div className="mt-8 flow-root overflow-x-auto">
         <div className="inline-block min-w-full py-2 align-middle">
           <div className="overflow-hidden ring-1 shadow-sm ring-black/5 sm:rounded-lg">
-            <table className="min-w-full">
+            <table className="min-w-full" data-testid="admin-products-table">
               <thead>
                 <tr>
                   <th className="py-3.5 pr-3 pl-4 text-left text-sm font-semibold text-gray-900 sm:pl-6">
@@ -94,6 +149,9 @@ export default async function AdminPage() {
                   </th>
                   <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
                     Category
+                  </th>
+                  <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                    Created by
                   </th>
                   <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
                     Images
@@ -110,14 +168,14 @@ export default async function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {products.length === 0 ? (
+                {serializedProducts.length === 0 ? (
                   <tr className="">
-                    <td colSpan={8} className="py-4 px-3 text-sm text-center text-gray-500">
+                    <td colSpan={9} className="py-4 px-3 text-sm text-center text-gray-500">
                       No products found
                     </td>
                   </tr>
                 ) : (
-                  products.map((product) => (
+                  serializedProducts.map((product) => (
                     <tr key={product.id} className={cn(product.images.length === 0 && "bg-red-100")}>
                       <td className="py-4 pr-3 pl-4 text-sm font-medium whitespace-nowrap text-gray-900 sm:pl-6">
                         <Link href={`/products/${product.id}`} className="text-blue-700 hover:text-blue-900 hover:underline">{truncateText(product.name, 30)}</Link>
@@ -130,6 +188,9 @@ export default async function AdminPage() {
                       </td>
                       <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
                         {product.category?.name || "N/A"}
+                      </td>
+                      <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500" data-testid="product-creator">
+                        {product.user?.email ?? "N/A"}
                       </td>
                       <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
                         {product.images.length === 0 ? <AddImages product={product} /> : product.images.length}
@@ -151,6 +212,17 @@ export default async function AdminPage() {
           </div>
         </div>
       </div>
+      {productPages > 1 && (
+        <Pagination className="mt-4 items-center justify-between">
+          <PaginationPrevious href={productPage > 1 ? adminHref(productPage - 1, q) : null} />
+          <span className="text-sm text-gray-600">
+            Page {productPage} of {productPages} · {productCount} products
+          </span>
+          <PaginationNext
+            href={productPage < productPages ? adminHref(productPage + 1, q) : null}
+          />
+        </Pagination>
+      )}
       <div className="mt-12 sm:flex sm:items-center">
         <div className="sm:flex-auto">
           <h1 className="text-xl font-semibold text-gray-900">Orders</h1>
@@ -162,10 +234,13 @@ export default async function AdminPage() {
       <div className="mt-8 flow-root overflow-x-auto">
         <div className="inline-block min-w-full py-2 align-middle">
           <div className="overflow-hidden ring-1 shadow-sm ring-black/5 sm:rounded-lg">
-            <table className="min-w-full">
+            <table className="min-w-full" data-testid="admin-orders-table">
               <thead>
                 <tr>
                   <th className="py-3.5 pr-3 pl-4 text-left text-sm font-semibold text-gray-900 sm:pl-6">
+                    Order
+                  </th>
+                  <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
                     Customer
                   </th>
                   <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
@@ -183,16 +258,19 @@ export default async function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {orders.length === 0 ? (
+                {serializedOrders.length === 0 ? (
                   <tr className="">
-                    <td colSpan={5} className="py-4 px-3 text-sm text-center text-gray-500">
+                    <td colSpan={6} className="py-4 px-3 text-sm text-center text-gray-500">
                       No orders yet
                     </td>
                   </tr>
                 ) : (
-                  orders.map((order) => (
+                  serializedOrders.map((order) => (
                     <tr key={order.id}>
                       <td className="py-4 pr-3 pl-4 text-sm font-medium whitespace-nowrap text-gray-900 sm:pl-6">
+                        #{String(order.id).slice(0, 8)}
+                      </td>
+                      <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
                         {order.user?.email ?? "N/A"}
                       </td>
                       <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
@@ -225,6 +303,17 @@ export default async function AdminPage() {
           </div>
         </div>
       </div>
+      {orderPages > 1 && (
+        <Pagination className="mt-4 items-center justify-between">
+          <PaginationPrevious href={orderPage > 1 ? adminHref(orderPage - 1, q) : null} />
+          <span className="text-sm text-gray-600">
+            Page {orderPage} of {orderPages} · {orderCount} orders
+          </span>
+          <PaginationNext
+            href={orderPage < orderPages ? adminHref(orderPage + 1, q) : null}
+          />
+        </Pagination>
+      )}
     </div>
   );
 }
