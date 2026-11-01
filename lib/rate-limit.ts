@@ -45,6 +45,8 @@ export const RATE_LIMITS = {
   passwordResetEmail: { limit: 3, windowMs: 60 * 60_000 },
   /** A single IP can try ten different addresses per hour. */
   passwordResetIp: { limit: 10, windowMs: 60 * 60_000 },
+  /** CSP violation reports: bursts are normal, sustained floods are not. */
+  cspReport: { limit: 30, windowMs: 60_000 },
 } as const;
 
 type MemoryWindow = { count: number; expiresAt: number };
@@ -58,10 +60,7 @@ const FALLBACK_WARNING_INTERVAL_MS = 60_000;
  * One warning per minute per process. `reason` is a fixed code so a Redis
  * error message (which may contain a URL or host) is never logged.
  */
-const warnFallback = (
-  reason: "redis_disabled" | "redis_error" | "timeout",
-  now: number
-): void => {
+const warnFallback = (reason: "redis_disabled" | "redis_error" | "timeout", now: number): void => {
   if (now - lastFallbackWarningAt < FALLBACK_WARNING_INTERVAL_MS) {
     return;
   }
@@ -134,16 +133,10 @@ class RedisTimeoutError extends Error {}
  * `timeoutMs`. The timer is always cleared, and `Promise.race` keeps a handler
  * on `operation`, so a late rejection after the deadline is not unhandled.
  */
-const withTimeout = async <T>(
-  operation: Promise<T>,
-  timeoutMs: number
-): Promise<T> => {
+const withTimeout = async <T>(operation: Promise<T>, timeoutMs: number): Promise<T> => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new RedisTimeoutError("redis call timed out")),
-      timeoutMs
-    );
+    timer = setTimeout(() => reject(new RedisTimeoutError("redis call timed out")), timeoutMs);
   });
   try {
     return await Promise.race([operation, deadline]);
@@ -175,17 +168,11 @@ export const checkRateLimit = async ({
   }
 
   try {
-    return await withTimeout(
-      checkRedis(key, limit, windowMs, now, expiresAt),
-      timeoutMs
-    );
+    return await withTimeout(checkRedis(key, limit, windowMs, now, expiresAt), timeoutMs);
   } catch (error) {
     // A timed-out INCR may still land in Redis later; the memory window is
     // authoritative for this hit so the caller is never blocked past the bound.
-    warnFallback(
-      error instanceof RedisTimeoutError ? "timeout" : "redis_error",
-      now
-    );
+    warnFallback(error instanceof RedisTimeoutError ? "timeout" : "redis_error", now);
     return checkMemory(key, limit, now, expiresAt);
   }
 };
