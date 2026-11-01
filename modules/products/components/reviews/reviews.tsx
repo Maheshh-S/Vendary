@@ -2,9 +2,11 @@ import { StarIcon } from '@heroicons/react/20/solid';
 import AddReview from './add-review';
 import type { Session } from 'next-auth';
 import { cn } from '@/lib/utils';
+import type { RatingSummary } from '@/lib/reviews/summary';
 import { ExtendedReviewType } from '../../types/reviews';
 import { Avatar } from '@/components/ui/avatar';
 import NoReviewsState from './no-reviews-state';
+import ReviewActions from './review-actions';
 
 function classNames(...classes: string[]) {
   return classes.filter(Boolean).join(' ');
@@ -12,18 +14,30 @@ function classNames(...classes: string[]) {
 
 interface ReviewsProps {
   reviews: ExtendedReviewType[];
+  /** The signed-in user's review, even when it is older than the loaded ten. */
+  myReview?: ExtendedReviewType | null;
+  /** Aggregate over every review in the database, not just `reviews`. */
+  ratingSummary: RatingSummary;
   session: Session | null;
   productId: string;
 }
 
-export default function Reviews({ reviews, session, productId }: ReviewsProps) {
-  const totalReviews = reviews.length;
-  const averageRating = totalReviews > 0 ? reviews.reduce((sum, review) => sum + review.rating, 0) / totalReviews : 0;
+export default function Reviews({
+  reviews,
+  myReview = null,
+  ratingSummary,
+  session,
+  productId,
+}: ReviewsProps) {
+  const totalReviews = ratingSummary.count;
+  const averageRating = ratingSummary.average;
+  const ratingCounts = ratingSummary.counts;
 
-  const ratingCounts = [0, 0, 0, 0, 0]; // Initialize counts for 1-5 stars
-  reviews.forEach((review) => {
-    ratingCounts[review.rating - 1]++;
-  });
+  // Own review first when it fell outside the newest-ten window.
+  const displayReviews =
+    myReview && !reviews.some((review) => review.id === myReview.id)
+      ? [myReview, ...reviews]
+      : reviews;
 
   return (
     <div className='border-t mt-6 border-gray-200'>
@@ -92,7 +106,13 @@ export default function Reviews({ reviews, session, productId }: ReviewsProps) {
               If you’ve used this product, share your thoughts with other customers
             </p>
 
-            <AddReview session={session} productId={productId} />
+            {myReview ? (
+              <p className="mt-4 text-sm text-gray-600">
+                You&apos;ve reviewed this product. Use Edit on your review to update it.
+              </p>
+            ) : (
+              <AddReview session={session} productId={productId} />
+            )}
           </div>
         </div>
 
@@ -101,13 +121,13 @@ export default function Reviews({ reviews, session, productId }: ReviewsProps) {
 
 
           <div className="space-y-8 p-6">
-            { reviews && reviews.length === 0 && <NoReviewsState session={session} productId={productId} />}
-            {reviews.map((review) => (
+            {totalReviews === 0 && <NoReviewsState session={session} productId={productId} />}
+            {displayReviews.map((review) => (
               <div
                 key={review.id}
                 className="p-6 border-b border-gray-200 transition-all"
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <Avatar src={review.user.profilePic || "/default-profile-pic.png"} className="h-12 w-12 border border-gray-300" />
                     <div>
@@ -126,8 +146,21 @@ export default function Reviews({ reviews, session, productId }: ReviewsProps) {
                           />
                         ))}
                       </div>
+                      {review.verifiedPurchase && (
+                        <span
+                          data-testid="verified-purchase"
+                          className="mt-1 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                        >
+                          Verified purchase
+                        </span>
+                      )}
                     </div>
                   </div>
+                  {session?.user?.id === review.userId && (
+                    <ReviewActions
+                      review={{ id: review.id, rating: review.rating, review: review.review }}
+                    />
+                  )}
                 </div>
                 <p className="mt-4 ml-8 text-gray-600 text-base italic leading-relaxed">
                   {review.review}

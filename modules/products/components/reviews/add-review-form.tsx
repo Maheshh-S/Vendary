@@ -3,6 +3,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { Loader2, Star } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import {
   AddReviewInput,
@@ -31,6 +32,7 @@ export default function AddReviewForm({
   });
 
   const [rating, setRating] = useState(5);
+  const router = useRouter();
 
   /** Surfaces server field errors under their inputs; returns the first. */
   const applyServerFieldErrors = (
@@ -66,6 +68,7 @@ export default function AddReviewForm({
       }
       toast.success("Review added successfully", { id: "add-review" });
       setIsOpen(false);
+      router.refresh();
     },
     onError: () => {
       toast.error("Failed to add review", { id: "add-review" });
