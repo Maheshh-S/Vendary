@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { login, addFirstProductToCart } from "./helpers";
+import { login, loginThroughForm, addFirstProductToCart } from "./helpers";
 
 test.describe("storefront smoke", () => {
   test("home shows the seeded catalog", async ({ page }) => {
@@ -47,7 +47,7 @@ test.describe("storefront smoke", () => {
   });
 
   test("login with the seeded demo admin reaches the storefront", async ({ page }) => {
-    await login(page);
+    await loginThroughForm(page);
     // The session survives navigation: a protected page renders for us.
     await page.goto("/my-orders");
     await expect(page.getByRole("heading", { name: "My Orders" })).toBeVisible();
