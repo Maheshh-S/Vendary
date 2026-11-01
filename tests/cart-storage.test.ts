@@ -99,6 +99,19 @@ describe("normalizeCartItems", () => {
 
     expect(item.unitPaise).toBe(1234);
   });
+
+  it("trims a stored cart to the shared distinct-line cap", () => {
+    const items = normalizeCartItems(
+      Array.from({ length: MAX_CART_LINES + 5 }, (_, index) => ({
+        id: `p_${index}`,
+        unitPaise: 100,
+        quantity: 1,
+      }))
+    );
+
+    expect(items).toHaveLength(MAX_CART_LINES);
+    expect(items[0].id).toBe("p_0");
+  });
 });
 
 describe("cartTotalPaise", () => {

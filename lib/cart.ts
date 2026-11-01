@@ -75,7 +75,8 @@ const readImages = (value: unknown): CartImage[] => {
 /**
  * Normalizes an untrusted localStorage value into the current cart shape.
  * Corrupt rows are dropped (price/quantity unusable), quantities are clamped
- * to 1..99, and duplicate product ids are merged so totals stay honest.
+ * to 1..99, duplicate product ids are merged, and the result is trimmed to the
+ * server's distinct-line cap so totals stay honest and checkout stays valid.
  */
 export function normalizeCartItems(value: unknown): CartItem[] {
   if (!Array.isArray(value)) return [];
@@ -106,7 +107,9 @@ export function normalizeCartItems(value: unknown): CartItem[] {
     byId.set(id, { id, name, unitPaise, quantity, images });
   }
 
-  return Array.from(byId.values());
+  // A corrupt/legacy cart can exceed the server line cap; trim it on read so
+  // the quote (and therefore the payment button) can recover.
+  return Array.from(byId.values()).slice(0, MAX_CART_LINES);
 }
 
 /** Clamps a user-driven quantity change into the server-valid range. */
