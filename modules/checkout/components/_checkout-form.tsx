@@ -278,7 +278,7 @@ export default function CheckoutForm({ checkoutSession } : { checkoutSession : C
                 <FormLabel>Postal Code</FormLabel>
                 <FormControl>
                   <Input 
-                    placeholder="10001"
+                    placeholder="560001"
                     className="bg-transparent"
                     {...field} 
                   />

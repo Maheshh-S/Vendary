@@ -52,9 +52,10 @@ const SearchForm = ({ setIsOpen } : {setIsOpen : (arg0: boolean) => void}) => {
 
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    const formData = new FormData(e.currentTarget)
-    const query = formData.get("search") as string
-    setSearchTerm(query)
+    // The shared input has no `name`, so FormData is empty; read the DOM value
+    // and mirror the server's 64-character cap.
+    const query = e.currentTarget.querySelector("input")?.value ?? ""
+    setSearchTerm(query.slice(0, 64))
   }
 
   return (

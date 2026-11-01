@@ -39,15 +39,21 @@ Take a verified `pg_dump` backup before scheduling the window.
 1. Freeze checkout (maintenance page or disable the create-order action) **or**
    drain open Razorpay checkouts first: no `pending` order may be paid while
    the migrations run.
-2. Deploy 0.4 and 0.5 as one release. The previous release writes text
-   statuses, which the enum cast rejects after commit — never mix versions.
-3. Apply migrations in order, single instance or in the maintenance window:
+2. Apply migrations in order while checkout is frozen, single instance or in
+   the maintenance window:
    `20261101000000_order_integrity` → `20261101001000_review_integrity` →
    `20261101002000_drop_analytics`
    (`npm run db:migrate`, i.e. `prisma migrate deploy`).
-4. Confirm `prisma migrate status` is clean, then re-open checkout.
-5. Verify the backfill: `SELECT COUNT(*) FROM "OrderItem" WHERE "productName" IS NULL;`
-   must be 0; the `'Unknown product'` count should match the pre-flight estimate.
+   The previous release keeps running during this step; with checkout frozen it
+   creates no new order items, and its status writes are enum-valid strings.
+3. Confirm `prisma migrate status` is clean, then verify the backfill:
+   `SELECT COUNT(*) FROM "OrderItem" WHERE "productName" IS NULL;` must be 0;
+   the `'Unknown product'` count should match the pre-flight estimate.
+4. Deploy 0.4 and 0.5 as one release. The new client selects the snapshot
+   columns, so deploying before the migration would 500 order reads; the old
+   release writes text statuses the enum cast rejects after commit — never mix
+   versions.
+5. Re-open checkout.
 
 ## 3. Environment
 
