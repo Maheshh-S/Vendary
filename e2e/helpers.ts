@@ -17,7 +17,10 @@ export const DEMO_ADMIN = {
  * form. This helper still uses the real provider (authorize + JWT session),
  * just without the UI round trip.
  */
-export async function login(page: Page) {
+export async function loginWith(
+  page: Page,
+  credentials: { email: string; password: string }
+) {
   const csrfResponse = await page.request.get("/api/auth/csrf");
   if (!csrfResponse.ok()) {
     throw new Error(`Login failed: csrf endpoint returned ${csrfResponse.status()}`);
@@ -27,8 +30,8 @@ export async function login(page: Page) {
   const response = await page.request.post("/api/auth/callback/credentials", {
     form: {
       csrfToken,
-      email: DEMO_ADMIN.email,
-      password: DEMO_ADMIN.password,
+      email: credentials.email,
+      password: credentials.password,
       callbackUrl: "/",
     },
     maxRedirects: 0,
@@ -43,6 +46,10 @@ export async function login(page: Page) {
   if (!/\/my-orders(?:\/|$)/.test(new URL(page.url()).pathname)) {
     throw new Error("Login succeeded but the session cookie was not accepted");
   }
+}
+
+export async function login(page: Page) {
+  await loginWith(page, DEMO_ADMIN);
 }
 
 /** The real credentials form (rate limited); covered by the smoke test. */
