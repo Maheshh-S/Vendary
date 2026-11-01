@@ -20,6 +20,9 @@ export type OrderTotals = {
   totalPaise: number;
 };
 
+/** Decimal-string rupees (for Prisma Decimal filters); paise are integral. */
+export const paiseToRupees = (paise: number): string => (paise / 100).toFixed(2);
+
 export function computeOrderTotals(lines: PricedLine[]): OrderTotals {
   const subtotalPaise = lines.reduce(
     (acc, line) => acc + line.unitPaise * line.quantity,

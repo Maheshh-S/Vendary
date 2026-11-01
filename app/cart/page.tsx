@@ -17,6 +17,7 @@ import {
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import useCart from "@/hooks/use-cart";
+import { useCartQuote } from "@/hooks/use-cart-quote";
 import { ShoppingBagIcon, ArrowRightIcon } from "@heroicons/react/20/solid";
 import { Logo } from "@/components/global/logo";
 import SignInForm from "@/modules/auth/components/sign-in-component";
@@ -26,36 +27,56 @@ import { CheckoutSession } from "@/modules/products/types/checkout";
 import { formatPrice } from "@/lib/locales";
 import { useLocale } from "@/providers/locale-provider";
 import { computeOrderTotals, GST_RATE } from "@/lib/money";
+import { MAX_CART_QUANTITY } from "@/lib/cart";
+import { hasBlockingQuoteIssue } from "@/schemas/cart/quote-schema";
+import QuoteBanner from "@/modules/checkout/components/_quote-banner";
 
 export default function CartPage() {
-  const { items: cartItems, updateQuantity, removeItem, cartTotal } = useCart();
+  const { items: cartItems, updateQuantity, removeItem } = useCart();
   const { locale } = useLocale();
   const fmt = (amount: number | string) => formatPrice(amount, locale);
+  const fmtPaise = (paise: number) => fmt(paise / 100);
   const [checkoutConfirm, setCheckoutConfirm] = useState(false);
-  const { taxPaise, totalPaise } = computeOrderTotals(
-    cartItems.map((item) => ({
-      unitPaise: Math.round(item.price * 100),
-      quantity: item.quantity,
-    }))
-  );
-  const taxRate = GST_RATE;
-  const taxAmount = taxPaise / 100;
-  const totalAmount = totalPaise / 100;
 
-  const checkoutSession : CheckoutSession = {
-    line_items: cartItems.map((item) => ({
-      productId: item.id,
-      price_data: {
-        currency: "inr",
-        product_data: {
-          name: item.name,
-          images: [item.images[0].src],
+  const quoteQuery = useCartQuote(
+    cartItems.map((item) => ({ productId: item.id, quantity: item.quantity }))
+  );
+  const quote = quoteQuery.quote;
+  const blocking = hasBlockingQuoteIssue(quote);
+  const quoteByProductId = new Map(
+    (quote?.lines ?? []).map((line) => [line.productId, line])
+  );
+
+  // The server quote is authoritative whenever it is available; before it
+  // resolves (or if it fails) the local paise cart renders a best-effort total.
+  const totals =
+    quote ??
+    computeOrderTotals(
+      cartItems.map((item) => ({
+        unitPaise: item.unitPaise,
+        quantity: item.quantity,
+      }))
+    );
+
+  const checkoutSession: CheckoutSession = {
+    line_items: cartItems.map((item) => {
+      const quoteLine = quoteByProductId.get(item.id);
+      const image = quoteLine?.image ?? item.images[0]?.src;
+      return {
+        productId: item.id,
+        price_data: {
+          currency: "inr",
+          product_data: {
+            name: quoteLine?.name || item.name,
+            images: image ? [image] : [],
+          },
+          // Display only — the server never charges this value.
+          unit_amount: quoteLine?.unitPaise ?? item.unitPaise,
         },
-        unit_amount: item.price * 100,
-      },
-      quantity: item.quantity,
-    })),
-  }
+        quantity: item.quantity,
+      };
+    }),
+  };
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900">
@@ -112,18 +133,32 @@ export default function CartPage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+          <>
+            <QuoteBanner
+              quote={quote}
+              localLines={cartItems.map((item) => ({
+                productId: item.id,
+                unitPaise: item.unitPaise,
+              }))}
+              errorMessage={quoteQuery.errorMessage}
+            />
+
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
             <div className="lg:col-span-8">
               <div className="rounded-xl bg-white shadow-sm ring-1 ring-zinc-950/10 dark:bg-zinc-800 dark:ring-white/10">
                 <ul className="divide-y divide-zinc-200 dark:divide-zinc-700">
-                  {cartItems.map((item) => (
+                  {cartItems.map((item) => {
+                    const quoteLine = quoteByProductId.get(item.id);
+                    const unitPaise = quoteLine?.unitPaise ?? item.unitPaise;
+                    const imageSrc = quoteLine?.image ?? item.images[0]?.src;
+                    return (
                     <li key={item.id} className="flex py-6 px-6">
                       <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700">
                         <Image
                           height={100}
                           width={100}
-                          src={item.images[0].src}
-                          alt={item.name}
+                          src={imageSrc || "/assets/empty-cart.png"}
+                          alt={quoteLine?.name || item.name}
                           className="h-full w-full object-cover object-center"
                         />
                       </div>
@@ -136,15 +171,15 @@ export default function CartPage() {
                                 href={`/products/${item.id}`}
                                 className="hover:text-blue-600 dark:hover:text-blue-400"
                               >
-                                {item.name}
+                                {quoteLine?.name || item.name}
                               </Link>
                             </h3>
                             <p className="ml-4">
-                              {fmt(item.price * item.quantity)}
+                              {fmtPaise(unitPaise * item.quantity)}
                             </p>
                           </div>
                           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                            {fmt(item.price)} each
+                            {fmtPaise(unitPaise)} each
                           </p>
                         </div>
                         <div className="flex flex-1 items-end justify-between text-sm">
@@ -172,6 +207,7 @@ export default function CartPage() {
                                 onClick={() =>
                                   updateQuantity(item.id, item.quantity + 1)
                                 }
+                                disabled={item.quantity >= MAX_CART_QUANTITY}
                               >
                                 +
                               </button>
@@ -184,7 +220,8 @@ export default function CartPage() {
                         </div>
                       </div>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               </div>
 
@@ -208,32 +245,38 @@ export default function CartPage() {
                 <DescriptionList className="mt-6">
                   <DescriptionTerm>Subtotal</DescriptionTerm>
                   <DescriptionDetails>
-                    {fmt(cartTotal)}
+                    {fmtPaise(totals.subtotalPaise)}
                   </DescriptionDetails>
 
                   <DescriptionTerm>Shipping</DescriptionTerm>
                   <DescriptionDetails>Free</DescriptionDetails>
 
-                  <DescriptionTerm>Tax ({(taxRate * 100).toFixed(0)}%)</DescriptionTerm>
+                  <DescriptionTerm>Tax ({(GST_RATE * 100).toFixed(0)}%)</DescriptionTerm>
                   <DescriptionDetails>
-                    {fmt(taxAmount)}
+                    {fmtPaise(totals.taxPaise)}
                   </DescriptionDetails>
 
                   <DescriptionTerm className="!border-t-2 pt-4 font-medium text-zinc-900 dark:text-white">
                     Total
                   </DescriptionTerm>
                   <DescriptionDetails className="!border-t-2 pt-4 font-medium text-zinc-900 dark:text-white">
-                    {fmt(totalAmount)}
+                    {fmtPaise(totals.totalPaise)}
                   </DescriptionDetails>
                 </DescriptionList>
 
                 <Button
-                  className="mt-6 w-full py-2.5"
+                  className="mt-6 w-full py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
                   color="sky"
+                  disabled={blocking}
                   onClick={() => setCheckoutConfirm(true)}
                 >
                   Proceed to Checkout
                 </Button>
+                {blocking && (
+                  <p className="mt-2 text-center text-xs text-red-600 dark:text-red-400">
+                    Fix the items above to continue.
+                  </p>
+                )}
 
                 <div className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
                   <p>Payments powered by Razorpay — UPI, cards and netbanking</p>
@@ -241,6 +284,7 @@ export default function CartPage() {
               </div>
             </div>
           </div>
+          </>
         )}
 
         {/* Improved checkout confirmation dialog */}
@@ -255,15 +299,15 @@ export default function CartPage() {
                 <h3 className="font-medium text-blue-800 dark:text-blue-300">Order Summary</h3>
                 <div className="mt-2 flex justify-between text-sm">
                   <span>Items ({cartItems.length}):</span>
-                  <span className="font-medium">{fmt(cartTotal)}</span>
+                  <span className="font-medium">{fmtPaise(totals.subtotalPaise)}</span>
                 </div>
                 <div className="mt-1 flex justify-between text-sm">
                   <span>Tax:</span>
-                  <span className="font-medium">{fmt(taxAmount)}</span>
+                  <span className="font-medium">{fmtPaise(totals.taxPaise)}</span>
                 </div>
                 <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700 flex justify-between font-medium">
                   <span>Total:</span>
-                  <span className="text-lg">{fmt(totalAmount)}</span>
+                  <span className="text-lg">{fmtPaise(totals.totalPaise)}</span>
                 </div>
               </div>
               

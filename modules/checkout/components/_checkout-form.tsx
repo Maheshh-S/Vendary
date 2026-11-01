@@ -21,7 +21,7 @@ import { placeOrderSchema, PlaceOrderSchema } from "@/schemas/checkout/place-ord
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import useCart from "@/hooks/use-cart";
-import { CheckoutSession } from "@/modules/products/types/checkout";
+import type { CheckoutLineItems, CheckoutSession } from "@/modules/products/types/checkout";
 import { PlaceOrder, createRazorpayOrder } from "@/actions/orders";
 import { useLocale } from "@/providers/locale-provider";
 import type { Country } from "react-phone-number-input";
@@ -39,7 +39,14 @@ declare global {
   }
 }
 
-export default function CheckoutForm({ checkoutSession } : { checkoutSession : CheckoutSession }) {
+export default function CheckoutForm({
+  checkoutSession,
+  blocked = false,
+}: {
+  checkoutSession: CheckoutSession;
+  /** True when the server quote reports an unavailable/under-stocked line. */
+  blocked?: boolean;
+}) {
   const [, setCountryName] = useState<string>('');
   const [stateName, setStateName] = useState<string>('');
   const [isRazorpayLoaded, setIsRazorpayLoaded] = useState(false);
@@ -109,8 +116,15 @@ export default function CheckoutForm({ checkoutSession } : { checkoutSession : C
       toast.loading("Initializing payment...", { id: "razorpay-init" });
 
       // Create the Razorpay order and the durable pending order on the server.
+      // Prices are deliberately dropped: the charge path re-prices from the DB.
+      const chargeSession: CheckoutLineItems = {
+        line_items: checkoutSession.line_items.map(({ productId, quantity }) => ({
+          productId,
+          quantity,
+        })),
+      };
       const init = await createRazorpayOrder({
-        checkoutSession,
+        checkoutSession: chargeSession,
         orderData
       });
 
@@ -167,6 +181,10 @@ export default function CheckoutForm({ checkoutSession } : { checkoutSession : C
   };
 
   function onSubmit(values: PlaceOrderSchema) {
+    if (blocked) {
+      toast.error("Please fix the items in your cart before paying.", { id: "checkout-blocked" });
+      return;
+    }
     // Instead of directly placing order, initialize Razorpay payment
     initializeRazorpayPayment(values);
   }
@@ -332,11 +350,16 @@ export default function CheckoutForm({ checkoutSession } : { checkoutSession : C
         
         <Button 
           type="submit" 
-          disabled={isPending || !isRazorpayLoaded}
+          disabled={isPending || !isRazorpayLoaded || blocked}
           className="w-full mt-8 bg-blue-600 hover:bg-blue-700 transition-colors"
         >
           {isPending ? "Processing..." : "Proceed to Payment"}
         </Button>
+        {blocked && (
+          <p className="mt-2 text-center text-xs text-red-600 dark:text-red-400">
+            Some items in your cart are unavailable. Go back to the cart to fix them.
+          </p>
+        )}
       </form>
     </Form>
   );

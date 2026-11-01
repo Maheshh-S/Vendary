@@ -1,19 +1,18 @@
-"use client"
-import React, { useCallback } from 'react'
+"use client";
+import React, { useCallback, useEffect } from 'react'
 import { useLocalStorage } from '@mantine/hooks';
+import {
+  CART_STORAGE_KEY,
+  cartTotalPaise,
+  clampCartQuantity,
+  normalizeCartItems,
+  type CartItem,
+} from '@/lib/cart';
+
+export type { CartItem } from '@/lib/cart';
 
 type Props = {
     children: React.ReactNode
-}
-
-export interface CartItem {
-  id: string
-  name: string
-  price: number
-  quantity: number
-  images: {
-    src: string
-  }[]
 }
 
 interface CartContextType {
@@ -24,36 +23,70 @@ interface CartContextType {
   clearCart: () => void
   isOpen: boolean
   setIsOpen: (isOpen: boolean) => void
-  cartTotal: number
+  /** Sum of every line in integer paise (the server quote's unit). */
+  cartTotalPaise: number
 }
 
 export const CartContext = React.createContext<CartContextType | undefined>(undefined)
 
+const parseStoredCart = (raw: string | undefined): CartItem[] => {
+  if (!raw) return [];
+  try {
+    return normalizeCartItems(JSON.parse(raw));
+  } catch {
+    // Corrupt storage is treated as an empty cart; the write-back below
+    // replaces it with a valid (empty) array.
+    return [];
+  }
+};
+
 const CartProvider = ({ children }: Props) => {
   const [items, setItems] = useLocalStorage<CartItem[]>({
-    key: 'cart-items',
-    defaultValue: []
+    key: CART_STORAGE_KEY,
+    defaultValue: [],
+    // Accepts both the paise shape and the legacy rupee `price` shape.
+    deserialize: parseStoredCart,
+    serialize: (value) => JSON.stringify(value),
   });
-  
+
   const [isOpen, setIsOpen] = useLocalStorage<boolean>({
     key: 'cart-is-open',
     defaultValue: false
   });
 
+  // One-time write-back so a legacy `price` cart is persisted in the paise
+  // shape after the first read (the migrator itself is pure).
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(CART_STORAGE_KEY);
+      if (!raw) return;
+      const parsed: unknown = JSON.parse(raw);
+      const normalized = normalizeCartItems(parsed);
+      if (JSON.stringify(parsed) !== JSON.stringify(normalized)) {
+        window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(normalized));
+      }
+    } catch {
+      // Storage unavailable or corrupt: the in-memory cart is already safe.
+    }
+  }, []);
+
   const addItem = useCallback((item: CartItem) => {
+    const [normalized] = normalizeCartItems([item]);
+    if (!normalized) return;
+
     setItems((prevItems) => {
-      const existingItem = prevItems.find((prevItem) => item.id === prevItem.id);
+      const existingItem = prevItems.find((prevItem) => normalized.id === prevItem.id);
       if (existingItem) {
         return prevItems.map((prevItem) =>
-          prevItem.id === item.id
+          prevItem.id === normalized.id
             ? {
                 ...prevItem,
-                quantity: prevItem.quantity + item.quantity,
+                quantity: clampCartQuantity(prevItem.quantity + normalized.quantity),
               }
             : prevItem
         );
       } else {
-        return [...prevItems, item];
+        return [...prevItems, normalized];
       }
     });
     setIsOpen(true);
@@ -82,7 +115,7 @@ const CartProvider = ({ children }: Props) => {
           prevItem.id === productId
             ? {
                 ...prevItem,
-                quantity: quantity,
+                quantity: clampCartQuantity(quantity),
               }
             : prevItem
         );
@@ -96,10 +129,10 @@ const CartProvider = ({ children }: Props) => {
     setIsOpen(false);
   }, [setItems, setIsOpen]);
 
-  const cartTotal = items.reduce((total, item) => total + item.price * item.quantity, 0);
+  const totalPaise = cartTotalPaise(items);
 
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, updateQuantity, clearCart, isOpen, setIsOpen, cartTotal }}>
+    <CartContext.Provider value={{ items, addItem, removeItem, updateQuantity, clearCart, isOpen, setIsOpen, cartTotalPaise: totalPaise }}>
       {children}
     </CartContext.Provider>
   );

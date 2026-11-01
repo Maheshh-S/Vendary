@@ -22,7 +22,7 @@ const EcommerceNavbar = ({ session } : {session : Session | null}) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const {
     items: cartItems,
-    cartTotal: totalPrice
+    cartTotalPaise: totalPricePaise
   } = useCart();
 
   const totalItems = cartItems.reduce((acc, item) => acc + item.quantity, 0);
@@ -134,7 +134,7 @@ const EcommerceNavbar = ({ session } : {session : Session | null}) => {
                     <h3 className="font-medium">{item.name}</h3>
                     <p className="text-sm text-zinc-500">Qty: {item.quantity}</p>
                   </div>
-                  <p className="font-medium">{formatINR(item.price * item.quantity)}</p>
+                  <p className="font-medium">{formatINR((item.unitPaise * item.quantity) / 100)}</p>
                 </div>
               ))
             ) : (
@@ -147,7 +147,7 @@ const EcommerceNavbar = ({ session } : {session : Session | null}) => {
                 
                 <div className="flex items-center justify-between">
                   <p className="font-medium">Total</p>
-                  <p className="font-bold">{formatINR(totalPrice)}</p>
+                  <p className="font-bold">{formatINR(totalPricePaise / 100)}</p>
                 </div>
               </>
             )}

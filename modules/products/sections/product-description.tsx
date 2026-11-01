@@ -115,7 +115,8 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
       name:
         product.name +
         (selectedOptionObj ? ` - ${selectedOptionObj.name}` : ""),
-      price: product.price,
+      // Cart storage is paise-native; the product price is a rupee Decimal.
+      unitPaise: Math.round(Number(product.price) * 100),
       quantity: quantity,
       images: images
         .map((img) => ({

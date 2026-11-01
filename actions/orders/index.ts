@@ -25,7 +25,7 @@ import {
   placeOrderSchema,
   type PlaceOrderSchema,
 } from "@/schemas/checkout/place-order-schema";
-import { CheckoutSession } from "@/modules/products/types/checkout";
+import type { CheckoutLineItems } from "@/modules/products/types/checkout";
 
 // Razorpay rejects order amounts below 100 paise (₹1).
 const MIN_RAZORPAY_AMOUNT_PAISE = 100;
@@ -155,7 +155,8 @@ export const createRazorpayOrder = async ({
   checkoutSession,
   orderData,
 }: {
-  checkoutSession: CheckoutSession;
+  // Ids and quantities only: display prices must never reach the charge path.
+  checkoutSession: CheckoutLineItems;
   orderData: PlaceOrderSchema;
 }) =>
   runAction("orders.createRazorpayOrder", async () => {
