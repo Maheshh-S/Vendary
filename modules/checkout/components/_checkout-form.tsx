@@ -25,6 +25,8 @@ import type { CheckoutLineItems, CheckoutSession } from "@/modules/products/type
 import { PlaceOrder, createRazorpayOrder } from "@/actions/orders";
 import { useLocale } from "@/providers/locale-provider";
 import type { Country } from "react-phone-number-input";
+import SavedAddressSelector from "./saved-address-selector";
+import type { SavedAddressView } from "@/modules/account/types";
 
 type RazorpaySuccessResponse = {
   razorpay_order_id: string;
@@ -52,6 +54,9 @@ export default function CheckoutForm({
 }) {
   const [, setCountryName] = useState<string>('');
   const [stateName, setStateName] = useState<string>('');
+  const [savedLocation, setSavedLocation] = useState<{ country: string; state: string } | null>(
+    null
+  );
   const [isRazorpayLoaded, setIsRazorpayLoaded] = useState(false);
   const { clearCart } = useCart();
   const { countryCode } = useLocale();
@@ -206,6 +211,25 @@ export default function CheckoutForm({
     }
   };
 
+  /**
+   * Fills the checkout fields from a saved address. The submitted shape is
+   * still `PlaceOrderSchema` — nothing about the saved row reaches the order
+   * except as form values, which the server snapshots into a new `Address`.
+   */
+  const applySavedAddress = (address: SavedAddressView) => {
+    form.setValue("fName", address.firstName);
+    form.setValue("lName", address.lastName);
+    // The catalog stores the bare 10-digit number; PhoneInput expects E.164.
+    form.setValue("mobile", address.phone ? `+91${address.phone}` : "");
+    form.setValue("address", address.line1);
+    form.setValue("area", address.area);
+    form.setValue("pinCode", address.postalCode);
+    form.setValue("landmark", address.landmark ?? "");
+    form.setValue("country", [address.country, address.state]);
+    setStateName(address.state);
+    setSavedLocation({ country: address.country, state: address.state });
+  };
+
   function onSubmit(values: PlaceOrderSchema) {
     if (blocked) {
       toast.error(
@@ -222,7 +246,9 @@ export default function CheckoutForm({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-6">
         <h2 className="text-2xl font-medium mb-6">Shipping Information</h2>
-        
+
+        <SavedAddressSelector onSelect={applySavedAddress} />
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField
             control={form.control}
@@ -362,6 +388,8 @@ export default function CheckoutForm({
               <FormLabel>Location</FormLabel>
               <FormControl>
                 <LocationSelector
+                  initialCountryName={savedLocation?.country}
+                  initialStateName={savedLocation?.state}
                   onCountryChange={(country) => {
                     setCountryName(country?.name || '');
                     form.setValue(field.name, [country?.name || '', stateName || '']);

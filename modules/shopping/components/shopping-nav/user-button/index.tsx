@@ -23,9 +23,23 @@ const UserButton = ({ session }: Props) => {
             className="rounded-full"
             priority
         />
+        {session?.user?.name ? (
+          <span
+            data-testid="header-user-name"
+            className="hidden max-w-40 truncate text-sm font-medium md:inline"
+          >
+            {session.user.name}
+          </span>
+        ) : null}
         <ChevronDownIcon />
       </DropdownButton>
       <DropdownMenu>
+        <DropdownItem href="/account">
+          <span>Account settings</span>
+        </DropdownItem>
+        <DropdownItem href="/account/addresses">
+          <span>Saved addresses</span>
+        </DropdownItem>
         <DropdownItem href="/my-orders">
           <span>My Orders</span>
         </DropdownItem>

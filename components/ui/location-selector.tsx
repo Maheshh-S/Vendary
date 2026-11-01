@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Check, ChevronsUpDown, Search } from "lucide-react"
 import { Input } from "./input"
 import { Dropdown, DropdownButton, DropdownMenu, DropdownItem, DropdownHeader } from "./dropdown"
@@ -58,11 +58,20 @@ interface StateProps {
 
 interface LocationSelectorProps {
   disabled?: boolean
+  /** Display-only prefill (e.g. a saved address); does not fire callbacks. */
+  initialCountryName?: string
+  initialStateName?: string
   onCountryChange?: (country: CountryProps | null) => void
   onStateChange?: (state: StateProps | null) => void
 }
 
-const LocationSelector = ({ disabled, onCountryChange, onStateChange }: LocationSelectorProps) => {
+const LocationSelector = ({
+  disabled,
+  initialCountryName,
+  initialStateName,
+  onCountryChange,
+  onStateChange,
+}: LocationSelectorProps) => {
   const [selectedCountry, setSelectedCountry] = useState<CountryProps | null>(null)
   const [selectedState, setSelectedState] = useState<StateProps | null>(null)
   const [, setOpenCountryDropdown] = useState(false)
@@ -86,6 +95,20 @@ const LocationSelector = ({ disabled, onCountryChange, onStateChange }: Location
   const filteredStates = availableStates.filter((state) =>
     state.name.toLowerCase().includes(stateSearchQuery.toLowerCase()),
   )
+
+  // Reflect a saved address in the dropdown labels. The form values are set by
+  // the caller; this effect only keeps the visible selection in sync.
+  useEffect(() => {
+    if (!initialCountryName) return
+    const country = countriesData.find((candidate) => candidate.name === initialCountryName) ?? null
+    if (!country) return
+    setSelectedCountry(country)
+    setSelectedState(
+      statesData.find(
+        (state) => state.country_id === country.id && state.name === initialStateName
+      ) ?? null
+    )
+  }, [initialCountryName, initialStateName, countriesData, statesData])
 
   const handleCountrySelect = (country: CountryProps | null) => {
     setSelectedCountry(country)

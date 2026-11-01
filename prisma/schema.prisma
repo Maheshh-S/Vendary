@@ -75,8 +75,34 @@ model User {
   orders         Order[]
   reviews        Review[]
   products       Product[]
+  savedAddresses SavedAddress[]
 
   @@map("users")
+}
+
+/// Editable address book. Deliberately unrelated to `Order`: order addresses
+/// are immutable snapshots copied at checkout, so editing or deleting a saved
+/// address can never rewrite order history.
+model SavedAddress {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label      String?
+  firstName  String
+  lastName   String   @default("")
+  phone      String
+  line1      String
+  line2      String?
+  area       String
+  landmark   String?
+  state      String
+  postalCode String
+  country    String
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model Product {
