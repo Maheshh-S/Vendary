@@ -22,6 +22,7 @@ export default function AddReviewForm({
   const {
     register,
     handleSubmit,
+    setError,
     setValue,
     formState: { errors },
   } = useForm<AddReviewInput>({
@@ -31,6 +32,26 @@ export default function AddReviewForm({
 
   const [rating, setRating] = useState(5);
 
+  /** Surfaces server field errors under their inputs; returns the first. */
+  const applyServerFieldErrors = (
+    fieldErrors?: Record<string, string[]>
+  ): string | undefined => {
+    if (!fieldErrors) return undefined;
+
+    let firstMessage: string | undefined;
+    for (const [field, messages] of Object.entries(fieldErrors)) {
+      const message = messages[0];
+      if (!message) continue;
+      firstMessage ??= message;
+      if (field === "review" || field === "rating" || field === "productId") {
+        setError(field, { type: "server", message });
+      } else if (field === "_form") {
+        setError("root", { type: "server", message });
+      }
+    }
+    return firstMessage;
+  };
+
   const addReviewMutation = useMutation({
     mutationKey: ["add-review"],
     mutationFn: addReview,
@@ -39,7 +60,8 @@ export default function AddReviewForm({
     },
     onSuccess: (res) => {
       if (!res.ok) {
-        toast.error(res.message, { id: "add-review" });
+        const detail = applyServerFieldErrors(res.fieldErrors);
+        toast.error(detail ?? res.message, { id: "add-review" });
         return;
       }
       toast.success("Review added successfully", { id: "add-review" });
@@ -83,6 +105,9 @@ export default function AddReviewForm({
         />
         {errors.review && (
           <p className="text-red-500">{errors.review.message}</p>
+        )}
+        {errors.root && (
+          <p className="text-red-500">{errors.root.message}</p>
         )}
 
         <div className="flex items-center justify-between">

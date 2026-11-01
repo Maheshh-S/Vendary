@@ -21,7 +21,8 @@ const PriceEdit = ({ price, productId }: Props) => {
         mutationFn: editPrice,
         onSuccess: (res) => {
             if (!res.ok) {
-                toast.error(res.message)
+                const detail = res.fieldErrors?.price?.[0]
+                toast.error(detail ?? res.message)
                 setPriceState(savedPrice)
                 return
             }

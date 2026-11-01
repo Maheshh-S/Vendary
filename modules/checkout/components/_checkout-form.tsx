@@ -108,6 +108,28 @@ export default function CheckoutForm({
     }
   });
 
+  /**
+   * Maps the server's `fieldErrors` onto the form so "First name is required"
+   * etc. appear under the offending input; returns the first message for the
+   * toast when the summary copy is too generic.
+   */
+  const applyServerFieldErrors = (
+    fieldErrors?: Record<string, string[]>
+  ): string | undefined => {
+    if (!fieldErrors) return undefined;
+
+    let firstMessage: string | undefined;
+    for (const [field, messages] of Object.entries(fieldErrors)) {
+      const message = messages[0];
+      if (!message) continue;
+      firstMessage ??= message;
+      if (field in placeOrderSchema.shape) {
+        form.setError(field as keyof PlaceOrderSchema, { type: "server", message });
+      }
+    }
+    return firstMessage;
+  };
+
   // Initialize and open Razorpay payment
   const initializeRazorpayPayment = async (orderData: PlaceOrderSchema) => {
     if (!isRazorpayLoaded) {
@@ -132,7 +154,8 @@ export default function CheckoutForm({
       });
 
       if (!init.ok) {
-        toast.error(init.message, { id: "razorpay-init" });
+        const fieldMessage = applyServerFieldErrors(init.fieldErrors);
+        toast.error(fieldMessage ?? init.message, { id: "razorpay-init" });
         return;
       }
 

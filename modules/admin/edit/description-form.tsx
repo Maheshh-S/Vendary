@@ -34,7 +34,7 @@ const DescriptionForm = ({ description, shortDescription, productId }: Props) =>
     mutationFn: editShortDescription,
     onSuccess: (res) => {
       if (!res.ok) {
-        toast.error(res.message);
+        toast.error(res.fieldErrors?.shortDescription?.[0] ?? res.message);
         return;
       }
       toast.success("Short Description Updated");
@@ -52,7 +52,7 @@ const DescriptionForm = ({ description, shortDescription, productId }: Props) =>
     mutationFn: editLongDescription,
     onSuccess: (res) => {
       if (!res.ok) {
-        toast.error(res.message);
+        toast.error(res.fieldErrors?.longDescription?.[0] ?? res.message);
         return;
       }
       toast.success("Long Description Updated");
