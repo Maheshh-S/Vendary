@@ -11,8 +11,8 @@ import {
   computeCouponDiscount,
   couponRejectionMessage,
   INVALID_COUPON_MESSAGE,
-  MIN_PAYABLE_AMOUNT_MESSAGE,
   MIN_PAYABLE_AMOUNT_PAISE,
+  minPayableAmountMessage,
 } from "@/lib/coupons";
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
@@ -20,7 +20,10 @@ import { logger } from "@/lib/logger";
 import { sendOrderEmail } from "@/lib/mail";
 import { computeTotalsWithDiscount } from "@/lib/money";
 import { confirmOrder } from "@/lib/orders/confirm-order";
-import { releaseCouponForOrder } from "@/lib/orders/coupon-redemption";
+import {
+  callerHoldsAbandonedRedemption,
+  releaseCouponForOrder,
+} from "@/lib/orders/coupon-redemption";
 import { writeOrderEvent } from "@/lib/orders/events";
 import { refundLateCapture } from "@/lib/orders/late-capture";
 import { refundAndClose, restoreOrderStock, type RefundOutcome } from "@/lib/orders/refund";
@@ -243,7 +246,15 @@ export const createRazorpayOrder = async ({
       if (!coupon) {
         throw new AppError("VALIDATION", INVALID_COUPON_MESSAGE);
       }
-      const discount = computeCouponDiscount(coupon, subtotalPaise, new Date());
+      let discount = computeCouponDiscount(coupon, subtotalPaise, new Date());
+      if (!discount.ok && discount.reason === "USAGE_LIMIT") {
+        // The last use may be held by this customer's own abandoned checkout.
+        // The transaction below still releases it under a guarded cancel before
+        // claiming a new use, so a paid/confirmed order keeps the rejection.
+        if (await callerHoldsAbandonedRedemption(prisma, coupon.id, session.user.id)) {
+          discount = computeCouponDiscount({ ...coupon, usedCount: 0 }, subtotalPaise, new Date());
+        }
+      }
       if (!discount.ok) {
         throw new AppError("VALIDATION", couponRejectionMessage(discount.reason));
       }
@@ -253,7 +264,7 @@ export const createRazorpayOrder = async ({
     // GST is charged on the discounted subtotal, never on the listed price.
     const totals = computeTotalsWithDiscount(subtotalPaise, discountPaise);
     if (totals.totalPaise < MIN_PAYABLE_AMOUNT_PAISE) {
-      throw new AppError("VALIDATION", MIN_PAYABLE_AMOUNT_MESSAGE);
+      throw new AppError("VALIDATION", minPayableAmountMessage(Boolean(code)));
     }
 
     const razorpay = getRazorpayClient();

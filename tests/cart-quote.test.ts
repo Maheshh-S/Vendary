@@ -8,15 +8,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * real so the ActionResult contract is exercised as shipped.
  */
 
-const { prismaMock } = vi.hoisted(() => ({
+const { prismaMock, authMock } = vi.hoisted(() => ({
   prismaMock: {
     product: {
       findMany: vi.fn(),
     },
   },
+  authMock: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
+vi.mock("@/auth", () => ({ auth: authMock }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: prismaMock }));
 
 import { Prisma } from "@prisma/client";
@@ -59,6 +61,7 @@ const expectFailure = (result: ActionResult<unknown>, code: ActionErrorCode): vo
 
 beforeEach(() => {
   vi.clearAllMocks();
+  authMock.mockResolvedValue(null);
   prismaMock.product.findMany.mockResolvedValue([]);
 });
 

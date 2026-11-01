@@ -163,7 +163,7 @@ const ItemsSummary = ({ checkoutSession, quote, coupon }: Props) => {
               <CouponForm
                 value={coupon.value}
                 appliedCode={coupon.appliedCode}
-                error={quote?.couponError ?? null}
+                error={quote?.couponCode ? quote.couponError : null}
                 isValidating={coupon.isValidating}
                 discountPaise={discountPaise}
                 onChange={coupon.onChange}

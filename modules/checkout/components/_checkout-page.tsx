@@ -59,6 +59,9 @@ const CheckoutPageComponent = ({ checkoutSession }: Props) => {
   );
   const blockingIssue = hasBlockingQuoteIssue(quoteQuery.quote);
   const couponError = quoteQuery.quote?.couponError ?? null;
+  // The floor message can block a coupon-less cart too; only tell the shopper
+  // to fix a coupon when one was actually applied.
+  const couponApplied = Boolean(quoteQuery.quote?.couponCode);
   // Loading, failed quotes and a rejected coupon block payment exactly like an
   // unavailable line. The server revalidates the coupon before charging anyway.
   const blocked = shouldBlockCheckout({
@@ -71,7 +74,9 @@ const CheckoutPageComponent = ({ checkoutSession }: Props) => {
     : quoteQuery.errorMessage
       ? "We couldn't verify current prices. Retry above before paying."
       : couponError
-        ? `${couponError} Remove or correct the coupon to continue.`
+        ? couponApplied
+          ? `${couponError} Remove or correct the coupon to continue.`
+          : couponError
         : blockingIssue
           ? "Some items in your cart are unavailable. Go back to the cart to fix them."
           : !quoteQuery.quote

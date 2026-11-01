@@ -26,6 +26,7 @@ const { authMock, prismaMock, txMock, razorpayMock, rateLimitMock, revalidateMoc
     const prismaMock = {
       product: { findMany: vi.fn(), findUnique: vi.fn() },
       coupon: { findUnique: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
+      couponRedemption: { findUnique: vi.fn() },
       order: { findFirst: vi.fn() },
       $transaction: vi.fn(),
     };
@@ -68,6 +69,7 @@ import {
   computeCouponDiscount,
   couponRejectionMessage,
   MIN_PAYABLE_AMOUNT_MESSAGE,
+  MIN_PAYABLE_AMOUNT_MESSAGE_NO_COUPON,
   normalizeCouponCode,
   rupeesToPaise,
   type CouponLike,
@@ -166,6 +168,7 @@ beforeEach(() => {
   prismaMock.coupon.findUnique.mockResolvedValue(couponRow());
   prismaMock.coupon.create.mockResolvedValue({ id: "coupon_new", code: "SAVE20" });
   prismaMock.coupon.updateMany.mockResolvedValue({ count: 1 });
+  prismaMock.couponRedemption.findUnique.mockResolvedValue(null);
   prismaMock.order.findFirst.mockResolvedValue(null);
   prismaMock.$transaction.mockImplementation(async (callback: (tx: typeof txMock) => unknown) =>
     callback(txMock)
@@ -360,6 +363,70 @@ describe("getCartQuote with a coupon", () => {
       }),
       "VALIDATION",
       MIN_PAYABLE_AMOUNT_MESSAGE
+    );
+    expect(razorpayMock.orders.create).not.toHaveBeenCalled();
+  });
+
+  it("quotes an exhausted coupon when the caller's own abandoned order holds the last use", async () => {
+    // Mirrors the charge path: the quote must not keep payment disabled for the
+    // retry the server would accept.
+    prismaMock.coupon.findUnique.mockResolvedValue(couponRow({ usageLimit: 5, usedCount: 5 }));
+    prismaMock.couponRedemption.findUnique.mockResolvedValue({
+      order: { status: "pending", paymentId: "" },
+    });
+
+    const data = expectSuccess(
+      await getCartQuote([{ productId: PRODUCT.id, quantity: 1 }], "SAVE10")
+    );
+
+    expect(data.discountPaise).toBe(2_000);
+    expect(data.totalPaise).toBe(19_440);
+    expect(data.couponError).toBeNull();
+    expect(authMock).toHaveBeenCalled();
+    expect(prismaMock.couponRedemption.findUnique).toHaveBeenCalledWith({
+      where: { couponId_userId: { couponId: "coupon_1", userId: USER_ID } },
+      select: { order: { select: { status: true, paymentId: true } } },
+    });
+  });
+
+  it("keeps the exhausted-coupon rejection when the last use is not abandoned", async () => {
+    prismaMock.coupon.findUnique.mockResolvedValue(couponRow({ usageLimit: 5, usedCount: 5 }));
+    prismaMock.couponRedemption.findUnique.mockResolvedValue({
+      order: { status: "confirmed", paymentId: "pay_123" },
+    });
+
+    const paid = expectSuccess(
+      await getCartQuote([{ productId: PRODUCT.id, quantity: 1 }], "SAVE10")
+    );
+    expect(paid.discountPaise).toBe(0);
+    expect(paid.couponError).toBe("This coupon is no longer available.");
+
+    // Another customer (no redemption of their own) is rejected too.
+    prismaMock.couponRedemption.findUnique.mockResolvedValue(null);
+    const other = expectSuccess(
+      await getCartQuote([{ productId: PRODUCT.id, quantity: 1 }], "SAVE10")
+    );
+    expect(other.discountPaise).toBe(0);
+    expect(other.couponError).toBe("This coupon is no longer available.");
+  });
+
+  it("blocks a coupon-less cart below the ₹1 floor without blaming a discount", async () => {
+    // ₹0.50 + 8% GST = 54p, below Razorpay's 100p minimum with no coupon at all.
+    prismaMock.product.findMany.mockResolvedValue([{ ...PRODUCT, price: "0.50" }]);
+
+    const data = expectSuccess(await getCartQuote([{ productId: PRODUCT.id, quantity: 1 }]));
+
+    expect(data.subtotalPaise).toBe(50);
+    expect(data.totalPaise).toBe(54);
+    expect(data.couponCode).toBeNull();
+    expect(data.couponError).toBe(MIN_PAYABLE_AMOUNT_MESSAGE_NO_COUPON);
+    expect(MIN_PAYABLE_AMOUNT_MESSAGE_NO_COUPON).toBe("Order total must be at least ₹1.");
+
+    // The charge path refuses the same coupon-less cart with matching copy.
+    expectFailure(
+      await createRazorpayOrder({ checkoutSession: CHECKOUT, orderData: ADDRESS }),
+      "VALIDATION",
+      MIN_PAYABLE_AMOUNT_MESSAGE_NO_COUPON
     );
     expect(razorpayMock.orders.create).not.toHaveBeenCalled();
   });
@@ -581,6 +648,85 @@ describe("createRazorpayOrder coupon redemption", () => {
       "You have already used this coupon."
     );
     expect(txMock.couponRedemption.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("reuses a coupon whose final use is held by the caller's abandoned order", async () => {
+    // usageLimit 5, usedCount 5: the exhausted coupon's last use belongs to
+    // this customer's still-pending, unpaid checkout. The charge path releases
+    // that redemption in-transaction and claims a fresh use for the new order.
+    prismaMock.coupon.findUnique.mockResolvedValue(couponRow({ usageLimit: 5, usedCount: 5 }));
+    prismaMock.couponRedemption.findUnique.mockResolvedValue({
+      order: { status: "pending", paymentId: "" },
+    });
+    txMock.couponRedemption.findUnique
+      .mockResolvedValueOnce({ orderId: "order_old" })
+      .mockResolvedValueOnce({ id: "redemption_old", couponId: "coupon_1" });
+    txMock.order.findUnique.mockResolvedValue({ status: "pending", paymentId: "" });
+
+    const data = expectSuccess(
+      await createRazorpayOrder({
+        checkoutSession: CHECKOUT,
+        orderData: ADDRESS,
+        couponCode: "SAVE10",
+      })
+    );
+
+    // The discount is still the normal 10% (₹20) — only the usage check was waived.
+    expect(data.amountPaise).toBe(19_440);
+    expect(prismaMock.couponRedemption.findUnique).toHaveBeenCalledWith({
+      where: { couponId_userId: { couponId: "coupon_1", userId: USER_ID } },
+      select: { order: { select: { status: true, paymentId: true } } },
+    });
+    expect(txMock.order.updateMany).toHaveBeenCalledWith({
+      where: { id: "order_old", status: "pending", paymentId: "" },
+      data: { status: "cancelled" },
+    });
+    expect(txMock.coupon.updateMany).toHaveBeenCalledWith({
+      where: { id: "coupon_1", usedCount: { gt: 0 } },
+      data: { usedCount: { decrement: 1 } },
+    });
+    expect(txMock.coupon.updateMany).toHaveBeenCalledWith({
+      where: { id: "coupon_1", usedCount: { lt: 5 } },
+      data: { usedCount: { increment: 1 } },
+    });
+    expect(txMock.couponRedemption.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ couponId: "coupon_1", orderId: "order_1" }),
+    });
+  });
+
+  it("keeps the usage-limit rejection when the caller's redemption was paid", async () => {
+    prismaMock.coupon.findUnique.mockResolvedValue(couponRow({ usageLimit: 5, usedCount: 5 }));
+    prismaMock.couponRedemption.findUnique.mockResolvedValue({
+      order: { status: "confirmed", paymentId: "pay_123" },
+    });
+
+    expectFailure(
+      await createRazorpayOrder({
+        checkoutSession: CHECKOUT,
+        orderData: ADDRESS,
+        couponCode: "SAVE10",
+      }),
+      "VALIDATION",
+      "This coupon is no longer available."
+    );
+    expect(razorpayMock.orders.create).not.toHaveBeenCalled();
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("keeps the usage-limit rejection when another customer holds the final use", async () => {
+    prismaMock.coupon.findUnique.mockResolvedValue(couponRow({ usageLimit: 5, usedCount: 5 }));
+    prismaMock.couponRedemption.findUnique.mockResolvedValue(null);
+
+    expectFailure(
+      await createRazorpayOrder({
+        checkoutSession: CHECKOUT,
+        orderData: ADDRESS,
+        couponCode: "SAVE10",
+      }),
+      "VALIDATION",
+      "This coupon is no longer available."
+    );
+    expect(razorpayMock.orders.create).not.toHaveBeenCalled();
   });
 
   it("keeps the plain path untouched when no coupon is sent", async () => {

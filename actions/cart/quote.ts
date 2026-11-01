@@ -1,15 +1,17 @@
 "use server";
 
+import { auth } from "@/auth";
 import type { ActionResult } from "@/lib/action-result";
 import {
   computeCouponDiscount,
   couponRejectionMessage,
   INVALID_COUPON_MESSAGE,
-  MIN_PAYABLE_AMOUNT_MESSAGE,
   MIN_PAYABLE_AMOUNT_PAISE,
+  minPayableAmountMessage,
 } from "@/lib/coupons";
 import { prisma } from "@/lib/db/prisma";
 import { computeTotalsWithDiscount } from "@/lib/money";
+import { callerHoldsAbandonedRedemption } from "@/lib/orders/coupon-redemption";
 import { runAction } from "@/lib/run-action";
 import { parseInput } from "@/lib/validation";
 import {
@@ -101,7 +103,18 @@ export const getCartQuote = async (
       if (!coupon) {
         couponError = INVALID_COUPON_MESSAGE;
       } else {
-        const result = computeCouponDiscount(coupon, subtotalPaise, new Date());
+        let result = computeCouponDiscount(coupon, subtotalPaise, new Date());
+        if (!result.ok && result.reason === "USAGE_LIMIT") {
+          // Mirror the charge path: the last use may belong to this customer's
+          // own abandoned checkout, which the charge transaction will release.
+          // Without this the quote would keep payment disabled for the retry
+          // the server would accept.
+          const session = await auth();
+          const userId = session?.user?.id;
+          if (userId && (await callerHoldsAbandonedRedemption(prisma, coupon.id, userId))) {
+            result = computeCouponDiscount({ ...coupon, usedCount: 0 }, subtotalPaise, new Date());
+          }
+        }
         if (result.ok) {
           discountPaise = result.discountPaise;
         } else {
@@ -112,10 +125,13 @@ export const getCartQuote = async (
 
     const totals = computeTotalsWithDiscount(subtotalPaise, discountPaise);
     // Razorpay refuses amounts below ₹1. Surface the same refusal on the quote
-    // (while the coupon is still valid) so payment is disabled before checkout
-    // rather than failing after the address form is filled in.
-    if (code && !couponError && totals.totalPaise < MIN_PAYABLE_AMOUNT_PAISE) {
-      couponError = MIN_PAYABLE_AMOUNT_MESSAGE;
+    // so payment is disabled before checkout rather than failing after the
+    // address form is filled in. Line issues own the message when present:
+    // an unavailable cart must not be reported as a pricing problem. The copy
+    // only blames the discount when a coupon was actually sent.
+    const hasLineIssue = quoteLines.some((line) => line.issue !== null);
+    if (!hasLineIssue && !couponError && totals.totalPaise < MIN_PAYABLE_AMOUNT_PAISE) {
+      couponError = minPayableAmountMessage(Boolean(code));
     }
 
     return {

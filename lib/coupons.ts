@@ -39,6 +39,12 @@ export const INVALID_COUPON_MESSAGE = "Invalid coupon code.";
  */
 export const MIN_PAYABLE_AMOUNT_PAISE = 100;
 export const MIN_PAYABLE_AMOUNT_MESSAGE = "Order total must be at least ₹1 after the discount.";
+/** Same floor for a cart that never had a coupon to discount. */
+export const MIN_PAYABLE_AMOUNT_MESSAGE_NO_COUPON = "Order total must be at least ₹1.";
+
+/** Floor copy must not blame a discount that was never applied. */
+export const minPayableAmountMessage = (hasCoupon: boolean): string =>
+  hasCoupon ? MIN_PAYABLE_AMOUNT_MESSAGE : MIN_PAYABLE_AMOUNT_MESSAGE_NO_COUPON;
 
 /** Codes are stored uppercase; this is the only normalization applied. */
 export const normalizeCouponCode = (code: string): string => code.trim().toUpperCase();
