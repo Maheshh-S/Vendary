@@ -54,13 +54,14 @@ const OrderStatusSelect = ({ orderId, status }: Props) => {
   const options: OrderStatus[] = [current, ...nextStates];
 
   // Cancelling or refunding here is a record-only override: no money moves.
-  // Make the admin acknowledge that before the mutation runs.
+  // Make the admin acknowledge that before the mutation runs; the order table's
+  // Refund button is the path that issues the Razorpay refund.
   const handleChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const next = e.target.value;
     if (
       (next === "cancelled" || next === "refunded") &&
       !window.confirm(
-        "This changes the order status only and does NOT issue a Razorpay refund. Continue?"
+        "This changes the order status only and does NOT issue a Razorpay refund. Use the Refund button to move money. Continue?"
       )
     ) {
       // Keep the current selection. A controlled select normally snaps back on
@@ -76,7 +77,7 @@ const OrderStatusSelect = ({ orderId, status }: Props) => {
       value={current}
       disabled={isPending || nextStates.length === 0}
       aria-label="Order status"
-      title="Phase 0: status changes are record-only; no Razorpay refund is issued."
+      title="Status changes are record-only; use the Refund button to issue a Razorpay refund."
       onChange={handleChange}
     >
       {options.map((s) => (

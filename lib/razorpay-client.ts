@@ -23,7 +23,19 @@ export const getRazorpayClient = (): Razorpay => {
   return client;
 };
 
-export type RefundReason = "AMOUNT_MISMATCH" | "PRICE_CHANGED" | "OUT_OF_STOCK";
+/**
+ * Stable refund reasons. The first three are automatic checkout refunds; the
+ * rest are customer/admin-initiated refunds or the cancelled-order
+ * late-capture backstop. They are stored on the `Refund` ledger and passed as
+ * Razorpay notes (never as free-form customer input).
+ */
+export type RefundReason =
+  | "AMOUNT_MISMATCH"
+  | "PRICE_CHANGED"
+  | "OUT_OF_STOCK"
+  | "CUSTOMER_CANCEL"
+  | "ADMIN_REFUND"
+  | "LATE_CAPTURE";
 
 /**
  * Refunds a captured payment in full. Throws on any Razorpay failure so the

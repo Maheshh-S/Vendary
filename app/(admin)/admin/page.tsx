@@ -10,6 +10,7 @@ import { serializePrismaObject } from "@/lib/db/serializer";
 import { formatINR } from "@/lib/format-inr";
 import DeleteProductButton from "@/modules/admin/components/delete-product-button";
 import OrderStatusSelect from "@/modules/admin/components/order-status-select";
+import RefundOrderButton from "@/modules/admin/components/refund-order-button";
 import PriceEdit from "@/modules/admin/edit/price";
 import DescriptionForm from "@/modules/admin/edit/description-form";
 
@@ -212,6 +213,8 @@ export default async function AdminPage() {
                         <div className="flex items-center gap-2">
                           <span>{order.status}</span>
                           <OrderStatusSelect orderId={order.id} status={order.status} />
+                          {["confirmed", "shipped", "delivered"].includes(order.status) &&
+                            order.paymentId && <RefundOrderButton orderId={order.id} />}
                         </div>
                       </td>
                     </tr>

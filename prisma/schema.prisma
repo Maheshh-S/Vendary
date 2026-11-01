@@ -216,7 +216,9 @@ model OrderItem {
 model Refund {
   id               String   @id @default(cuid())
   order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderId          String
+  /// Phase 1 supports one full refund per order (partial refunds are deferred);
+  /// the unique constraint is the refund claim's race guard.
+  orderId          String   @unique
   razorpayRefundId String   @unique
   paymentId        String
   amount           Decimal  @db.Decimal(10, 2)
@@ -224,8 +226,6 @@ model Refund {
   status           String   @default("created")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
-
-  @@index([orderId])
 }
 
 /// Append-only audit trail for an order. `type` is a stable string (e.g.

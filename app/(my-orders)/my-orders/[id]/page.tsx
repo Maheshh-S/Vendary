@@ -5,6 +5,8 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth-guards";
 import { prisma } from "@/lib/db/prisma";
 import { formatINR } from "@/lib/format-inr";
+import { isAllowedImageUrl } from "@/lib/images";
+import CancelOrderButton from "@/modules/orders/components/cancel-order-button";
 import OrderTimeline from "@/modules/orders/components/order-timeline";
 
 type Props = {
@@ -94,11 +96,14 @@ export default async function OrderDetailPage({ params }: Props) {
             Placed {formatTimestamp(order.createdAt)}
           </p>
         </div>
-        <span
-          className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium capitalize ${statusPillClass(order.status)}`}
-        >
-          {order.status}
-        </span>
+        <div className="flex flex-wrap items-center gap-3">
+          <CancelOrderButton orderId={order.id} status={order.status} />
+          <span
+            className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium capitalize ${statusPillClass(order.status)}`}
+          >
+            {order.status}
+          </span>
+        </div>
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-3">
@@ -109,11 +114,17 @@ export default async function OrderDetailPage({ params }: Props) {
           <ul className="mt-3 divide-y divide-gray-200 rounded-lg border border-gray-200 dark:divide-gray-800 dark:border-gray-800">
             {order.items.map((item) => {
               const unitPaise = Math.round(Number(item.price) * 100);
+              // Snapshot URLs can outlive the allowlist; never hand next/image
+              // a host it cannot render.
+              const imageSrc =
+                item.productImage && isAllowedImageUrl(item.productImage)
+                  ? item.productImage
+                  : null;
               return (
                 <li key={item.id} className="flex items-center gap-4 p-4">
-                  {item.productImage ? (
+                  {imageSrc ? (
                     <Image
-                      src={item.productImage}
+                      src={imageSrc}
                       alt={item.productName}
                       width={64}
                       height={64}
