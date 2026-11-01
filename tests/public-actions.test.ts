@@ -10,6 +10,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 const { authMock, prismaMock, rateLimitMock, clientKeyMock, redisMock, revalidateMock } =
   vi.hoisted(() => {
     const prismaMock = {
+      $queryRaw: vi.fn(),
       product: {
         findMany: vi.fn(),
         findUnique: vi.fn(),
@@ -133,6 +134,7 @@ beforeEach(() => {
   prismaMock.product.count.mockResolvedValue(0);
   prismaMock.orderItem.findFirst.mockResolvedValue(null);
   prismaMock.review.create.mockResolvedValue(REVIEW_ROW);
+  prismaMock.$queryRaw.mockResolvedValue([]);
 
   redisMock.get.mockResolvedValue(null);
   redisMock.set.mockResolvedValue("OK");
@@ -154,8 +156,8 @@ afterAll(() => {
 });
 
 describe("searchProducts", () => {
-  it("rate-limits, trims the term and runs one bounded, minimal query", async () => {
-    prismaMock.product.findMany.mockResolvedValue([
+  it("rate-limits, trims the term and runs one bounded, ranked, parameterized query", async () => {
+    prismaMock.$queryRaw.mockResolvedValue([
       {
         id: "prod_1",
         name: "Pashmina Shawl",
@@ -184,23 +186,23 @@ describe("searchProducts", () => {
     });
     expect(clientKeyMock).toHaveBeenCalledWith("search");
 
-    expect(prismaMock.product.findMany).toHaveBeenCalledTimes(1);
-    const [args] = prismaMock.product.findMany.mock.calls[0];
-    expect(args.take).toBe(10);
-    expect(args.select).toEqual({
-      id: true,
-      name: true,
-      thumbnail: true,
-      price: true,
-    });
-    expect(args.where).toEqual({
-      OR: [
-        { name: { contains: "shawl", mode: "insensitive" } },
-        { category: { name: { contains: "shawl", mode: "insensitive" } } },
-        { description: { contains: "shawl", mode: "insensitive" } },
-        { tag: { contains: "shawl", mode: "insensitive" } },
-      ],
-    });
+    // One raw aggregate query; the ILIKE fallback stays untouched.
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(prismaMock.product.findMany).not.toHaveBeenCalled();
+
+    const [strings, ...values] = prismaMock.$queryRaw.mock.calls[0] as [
+      TemplateStringsArray,
+      ...unknown[],
+    ];
+    const sql = strings.join("?");
+    expect(sql).toMatch(/similarity\(/);
+    expect(sql).toMatch(/ORDER BY/);
+    expect(sql).toMatch(/LIMIT/);
+    // Term is trimmed, every interpolation is a bound parameter, take is 10.
+    expect(values).toContain("%shawl%");
+    expect(values).toContain("shawl%");
+    expect(values).toContain(10);
+    expect(JSON.stringify(values)).not.toContain("  shawl  ");
   });
 
   it("returns RATE_LIMITED without touching the database", async () => {
@@ -209,6 +211,7 @@ describe("searchProducts", () => {
     );
 
     expectFailure(await searchProducts("shawl"), "RATE_LIMITED");
+    expect(prismaMock.$queryRaw).not.toHaveBeenCalled();
     expect(prismaMock.product.findMany).not.toHaveBeenCalled();
   });
 
@@ -219,6 +222,7 @@ describe("searchProducts", () => {
     { label: "1000 characters", term: "x".repeat(1000) },
   ])("rejects a $label query with VALIDATION before querying", async ({ term }) => {
     expectFailure(await searchProducts(term), "VALIDATION");
+    expect(prismaMock.$queryRaw).not.toHaveBeenCalled();
     expect(prismaMock.product.findMany).not.toHaveBeenCalled();
   });
 });
