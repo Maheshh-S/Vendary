@@ -10,6 +10,18 @@ const optionalString = z.preprocess(
   z.string().min(1).optional()
 );
 
+/** Optional URL: blank means "not configured", a value must be well-formed. */
+const optionalUrl = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.string().url().optional()
+);
+
+/** Log severity filter; blank falls back to the logger's `info` default. */
+const optionalLogLevel = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.enum(["debug", "info", "warn", "error"]).optional()
+);
+
 /**
  * Server environment contract. Kept as a pure schema plus helpers — nothing is
  * parsed at module import time, so `next build` and Docker builds that only
@@ -35,6 +47,12 @@ export const serverEnvSchema = z
     SELLER_GSTIN: optionalString,
     REDIS_URL: z.string().url().optional().or(z.literal("")),
     NEXT_PUBLIC_SITE_URL: z.string().url().default("http://localhost:3000"),
+    /** Optional Sentry DSN; monitoring is disabled when blank/absent. */
+    SENTRY_DSN: optionalUrl,
+    /** debug|info|warn|error; blank means the logger's `info` default. */
+    LOG_LEVEL: optionalLogLevel,
+    /** Shared secret for `/api/cron/cleanup`; the route 501s when unset. */
+    CRON_SECRET: optionalString,
   })
   .refine((e) => Boolean(e.AUTH_GOOGLE_ID) === Boolean(e.AUTH_GOOGLE_SECRET), {
     message: "AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET must be set together",

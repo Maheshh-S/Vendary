@@ -25,6 +25,9 @@ const MANAGED_KEYS: readonly string[] = [
   "RESEND_API_KEY",
   "REDIS_URL",
   "NEXT_PUBLIC_SITE_URL",
+  "SENTRY_DSN",
+  "LOG_LEVEL",
+  "CRON_SECRET",
   "NEXT_PHASE",
   "NEXT_RUNTIME",
   "SKIP_ENV_VALIDATION",
@@ -113,9 +116,9 @@ describe("serverEnvSchema", () => {
 
     expect(parsed.success).toBe(false);
     if (parsed.success) return;
-    expect(parsed.error.issues.some((issue) => issue.message.includes("must be set together"))).toBe(
-      true
-    );
+    expect(
+      parsed.error.issues.some((issue) => issue.message.includes("must be set together"))
+    ).toBe(true);
   });
 
   it("rejects an unpaired AUTH_GOOGLE_SECRET", () => {
@@ -126,9 +129,9 @@ describe("serverEnvSchema", () => {
 
     expect(parsed.success).toBe(false);
     if (parsed.success) return;
-    expect(parsed.error.issues.some((issue) => issue.message.includes("must be set together"))).toBe(
-      true
-    );
+    expect(
+      parsed.error.issues.some((issue) => issue.message.includes("must be set together"))
+    ).toBe(true);
   });
 
   it.each([
@@ -159,6 +162,46 @@ describe("serverEnvSchema", () => {
     expect(parsed.success).toBe(false);
     if (parsed.success) return;
     expect(parsed.error.issues.some((issue) => issue.path[0] === "REDIS_URL")).toBe(true);
+  });
+
+  it("treats blank observability/ops variables as unset", () => {
+    const parsed = serverEnvSchema.safeParse({
+      ...BASE_ENV,
+      SENTRY_DSN: "",
+      LOG_LEVEL: "",
+      CRON_SECRET: "",
+    });
+
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.SENTRY_DSN).toBeUndefined();
+    expect(parsed.data.LOG_LEVEL).toBeUndefined();
+    expect(parsed.data.CRON_SECRET).toBeUndefined();
+  });
+
+  it("accepts a Sentry DSN, a known log level and a cron secret", () => {
+    const parsed = serverEnvSchema.safeParse({
+      ...BASE_ENV,
+      SENTRY_DSN: "https://key@sentry.example.com/1",
+      LOG_LEVEL: "warn",
+      CRON_SECRET: "cron-secret",
+    });
+
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.LOG_LEVEL).toBe("warn");
+    expect(parsed.data.CRON_SECRET).toBe("cron-secret");
+  });
+
+  it.each([
+    ["LOG_LEVEL", { LOG_LEVEL: "verbose" }],
+    ["SENTRY_DSN", { SENTRY_DSN: "not-a-url" }],
+  ])("rejects an invalid %s", (name, override) => {
+    const parsed = serverEnvSchema.safeParse({ ...BASE_ENV, ...override });
+
+    expect(parsed.success).toBe(false);
+    if (parsed.success) return;
+    expect(parsed.error.issues.some((issue) => issue.path[0] === name)).toBe(true);
   });
 
   it("rejects an AUTH_SECRET shorter than 32 characters", () => {

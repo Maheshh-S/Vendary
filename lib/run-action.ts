@@ -2,6 +2,8 @@ import "server-only";
 
 import type { ActionResult } from "./action-result";
 import { AppError } from "./errors";
+import { logger } from "./logger";
+import { captureException } from "./monitoring";
 
 /**
  * `redirect()`, `notFound()`, and the HTTP fallbacks signal control flow by
@@ -21,6 +23,7 @@ const isNextControlFlowError = (e: unknown): e is { digest: string } => {
  * may carry payload data) never reaches the client.
  */
 export async function runAction<T>(name: string, fn: () => Promise<T>): Promise<ActionResult<T>> {
+  const startedAt = Date.now();
   try {
     return { ok: true, data: await fn() };
   } catch (e) {
@@ -31,14 +34,20 @@ export async function runAction<T>(name: string, fn: () => Promise<T>): Promise<
       return { ok: false, code: e.code, message: e.userMessage, fieldErrors: e.fieldErrors };
     }
     const requestId = crypto.randomUUID();
-    console.error(
-      JSON.stringify({
-        level: "error",
-        action: name,
-        requestId,
-        error: e instanceof Error ? e.message : String(e),
-      })
-    );
-    return { ok: false, code: "INTERNAL", message: `Something went wrong. Reference: ${requestId}` };
+    // The logger masks the error to a truncated, redacted message; the stack
+    // never reaches the log line. Monitoring gets the raw error, keyed by the
+    // same reference the user is shown.
+    logger.error("action_failed", {
+      action: name,
+      requestId,
+      durationMs: Date.now() - startedAt,
+      error: e,
+    });
+    captureException(e, { action: name, requestId, code: "INTERNAL" });
+    return {
+      ok: false,
+      code: "INTERNAL",
+      message: `Something went wrong. Reference: ${requestId}`,
+    };
   }
 }

@@ -1,7 +1,13 @@
 import { assertRuntimeEnv, getEnvProblems } from "@/lib/env";
+import { initMonitoring } from "@/lib/monitoring";
 
 /**
  * Next.js instrumentation hook. Runs once when a server instance starts.
+ *
+ * `initMonitoring()` is awaited first so an exception thrown while validating
+ * or warming dependencies is already reportable. It is a no-op unless
+ * `SENTRY_DSN` is set and only runs on the node runtime (the edge bundle has no
+ * Prisma/monitoring dependencies).
  *
  * Production fails fast on missing or invalid configuration, except while
  * `next build` is running (CI/Docker only pass placeholders) and when
@@ -12,6 +18,10 @@ import { assertRuntimeEnv, getEnvProblems } from "@/lib/env";
  * importing it here is safe for build workers.
  */
 export async function register(): Promise<void> {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    await initMonitoring();
+  }
+
   if (process.env.SKIP_ENV_VALIDATION === "1") {
     return;
   }
