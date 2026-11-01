@@ -106,7 +106,8 @@ stock, so an abandoned checkout does not move it.
 1. Compare the product row with the paid order lines:
    ```sql
    SELECT p.id, p.name, p."stockQty", p.availability,
-          COUNT(oi.id) AS paid_lines, COALESCE(SUM(oi.quantity), 0) AS paid_qty
+          COUNT(o.id) AS paid_lines,
+          COALESCE(SUM(oi.quantity) FILTER (WHERE o.id IS NOT NULL), 0) AS paid_qty
    FROM "Product" p
    LEFT JOIN "OrderItem" oi ON oi."productId" = p.id
    LEFT JOIN "Order" o ON o.id = oi."orderId"
@@ -114,6 +115,10 @@ stock, so an abandoned checkout does not move it.
    WHERE p.id = '<product_id>'
    GROUP BY p.id;
    ```
+   Only lines whose order is `confirmed`/`shipped`/`delivered` count: `o.id`
+   is null for items of pending, cancelled or refunded orders, and both
+   aggregates ignore those rows. (A `LEFT JOIN` without the `o.id` guard would
+   report every `OrderItem` ever created as a paid line.)
 2. Check the product's order history and refunds:
    `pending`/`cancelled` orders without payment did not move stock;
    `refunded` orders restored it only if they were `confirmed` at refund time.
@@ -201,7 +206,12 @@ Collect, with timestamps in UTC:
 - Razorpay payment/refund ids and dashboard status; webhook delivery attempts.
 - `OrderEvent` and `Refund` rows for the affected order(s).
 - Vercel log excerpts around the incident (`webhook_*`, `[env]`,
-  `redis_client_error`, `search_trigram_fallback`, unhandled 500s).
+  `redis_client_error`, `search_trigram_fallback`, `order_email_failed`,
+  `password_reset_email_*`, unhandled 500s).
+- Mail evidence: Resend delivery status and the configured `EMAIL_FROM` sender
+  (never the API key). All transactional mail — verification, reset and order —
+  sends from `EMAIL_FROM` and is skipped, not queued, when `RESEND_API_KEY` or
+  `EMAIL_FROM` is missing.
 - Deployment SHA/URL and the last successful deploy time.
 - Reproduction steps, affected customer/order counts, and whether money or
   stock is wrong.

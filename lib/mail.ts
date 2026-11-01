@@ -32,7 +32,14 @@ const DEVELOPMENT_SENDER = "onboarding@resend.dev";
 
 type MailConfig = { from: string; resend: Resend };
 
-export const getOrderMailConfig = (): MailConfig | null => {
+/**
+ * Shared transport for every transactional email — verification, password
+ * reset and order lifecycle. The sender is always `EMAIL_FROM`, so mail never
+ * leaves from a hardcoded/unverified address; the shared Resend test sender is
+ * only a local-development fallback. Returns null (send skipped, never thrown)
+ * when the key or the sender is missing.
+ */
+export const getMailConfig = (): MailConfig | null => {
   const configuredFrom = process.env.EMAIL_FROM?.trim();
   const from = configuredFrom || (process.env.NODE_ENV === "development" ? DEVELOPMENT_SENDER : "");
   const resend = getResendClient();
@@ -43,13 +50,13 @@ const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
 export const sendVerificationEmail = async (email: string, token: string): Promise<void> => {
-  const resend = getResendClient();
-  if (!resend) return;
+  const config = getMailConfig();
+  if (!config) return;
 
   const confirmLink = `${process.env.BASE_URL || BASE_URL}/new-verification?token=${token}`;
 
-  await resend.emails.send({
-    from: "Acme <onboarding@resend.dev>",
+  await config.resend.emails.send({
+    from: config.from,
     to: [email],
     subject: `Confirm Your Email for ${PROJECT_NAME}`,
     html: onboardingmail(confirmLink),
@@ -70,11 +77,8 @@ export const sendPasswordResetEmail = async (
   token: string
 ): Promise<PasswordResetEmailResult> => {
   try {
-    const resend = getResendClient();
-    const from =
-      process.env.EMAIL_FROM?.trim() ||
-      (process.env.NODE_ENV === "development" ? DEVELOPMENT_SENDER : "");
-    if (!resend || !from) {
+    const config = getMailConfig();
+    if (!config) {
       console.info(
         JSON.stringify({
           level: "info",
@@ -90,8 +94,8 @@ export const sendPasswordResetEmail = async (
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || BASE_URL;
     const resetLink = `${siteUrl}/password/reset?token=${encodeURIComponent(token)}`;
 
-    const { error } = await resend.emails.send({
-      from,
+    const { error } = await config.resend.emails.send({
+      from: config.from,
       to: [email],
       subject: `Reset Password for ${PROJECT_NAME}`,
       html: `
@@ -234,7 +238,7 @@ export const sendOrderEmail = async (
   kind: OrderEmailKind
 ): Promise<OrderEmailResult> => {
   try {
-    const config = getOrderMailConfig();
+    const config = getMailConfig();
     if (!config) {
       return { status: "skipped", reason: "not_configured" };
     }

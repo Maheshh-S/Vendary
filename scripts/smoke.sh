@@ -8,7 +8,8 @@
 # The only write-shaped call is an unknown-event webhook with a valid HMAC.
 # It is skipped unless RAZORPAY_WEBHOOK_SECRET is exported; the route
 # acknowledges unknown events with 200 and performs no side effects. The secret
-# is never printed.
+# is never printed and never passed as an argv: node reads it from the
+# inherited environment, so it cannot be seen in `ps`.
 #
 # Exit status: 0 when every check passed, 1 otherwise.
 
@@ -28,6 +29,7 @@ Usage: scripts/smoke.sh [--base-url URL | URL]
 Environment:
   RAZORPAY_WEBHOOK_SECRET   Optional. When set, sends one signed unknown-event
                             webhook and expects HTTP 200. Skipped otherwise.
+                            The HMAC is computed with node (no argv exposure).
 EOF
 }
 
@@ -128,9 +130,30 @@ rm -f "$status_file"
 
 if [ -z "${RAZORPAY_WEBHOOK_SECRET:-}" ]; then
   skip "Signed webhook (RAZORPAY_WEBHOOK_SECRET is not set)"
+elif ! command -v node >/dev/null 2>&1; then
+  skip "Signed webhook (node is required to compute the HMAC)"
 else
   payload='{"event":"smoke.test","payload":{}}'
-  signature="$(printf '%s' "$payload" | openssl dgst -sha256 -hmac "$RAZORPAY_WEBHOOK_SECRET" | awk '{print $NF}')"
+  # The secret is read inside node from the inherited environment and the body
+  # arrives on stdin, so neither ever appears in an argv (visible via `ps`).
+  signature="$(
+    printf '%s' "$payload" | node -e '
+      const crypto = require("node:crypto");
+      let body = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk) => {
+        body += chunk;
+      });
+      process.stdin.on("end", () => {
+        process.stdout.write(
+          crypto
+            .createHmac("sha256", process.env.RAZORPAY_WEBHOOK_SECRET || "")
+            .update(body)
+            .digest("hex")
+        );
+      });
+    ' 2>/dev/null
+  )"
   webhook_status="$(
     curl -sS --max-time "$CURL_MAX_TIME" -o /dev/null -w '%{http_code}' \
       -X POST "$BASE_URL/api/razorpay/webhook" \
@@ -139,7 +162,9 @@ else
       --data-binary "$payload" 2>/dev/null
   )" || webhook_status="000"
 
-  if [ "$webhook_status" = "200" ]; then
+  if [ -z "$signature" ]; then
+    fail "Signed webhook (could not compute the HMAC)"
+  elif [ "$webhook_status" = "200" ]; then
     pass "Signed webhook (unknown event -> 200, no side effects)"
   else
     fail "Signed webhook (expected 200, got HTTP $webhook_status)"

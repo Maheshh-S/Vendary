@@ -33,7 +33,7 @@ vi.mock("resend", () => ({
   },
 }));
 
-import { sendOrderEmail } from "@/lib/mail";
+import { sendOrderEmail, sendPasswordResetEmail, sendVerificationEmail } from "@/lib/mail";
 
 const ORDER_ID = "order_1";
 const USER_EMAIL = "ada@example.test";
@@ -309,5 +309,65 @@ describe("sendOrderEmail", () => {
       expect(result).toEqual({ status: "sent" });
       expect(sentPayload().subject.toLowerCase()).toContain(kind === "refunded" ? "refund" : kind);
     }
+  });
+});
+
+/**
+ * Verification and password-reset mail share the order-mail transport, so the
+ * sender is `EMAIL_FROM` instead of a hardcoded unverified address (deploy
+ * runbook: the verified domain is what makes those sends deliverable).
+ */
+describe("verification and reset senders", () => {
+  it("sends the verification email from EMAIL_FROM", async () => {
+    await sendVerificationEmail(USER_EMAIL, "verify_token");
+
+    const payload = sentPayload();
+    expect(payload.from).toBe(FROM_ADDRESS);
+    expect(payload.to).toEqual([USER_EMAIL]);
+    expect(payload.subject).toMatch(/Confirm Your Email/);
+    expect(payload.html).toContain("/new-verification?token=verify_token");
+  });
+
+  it("sends the reset email from EMAIL_FROM", async () => {
+    const result = await sendPasswordResetEmail(USER_EMAIL, "reset_token");
+
+    expect(result).toEqual({ status: "sent" });
+    const payload = sentPayload();
+    expect(payload.from).toBe(FROM_ADDRESS);
+    expect(payload.html).toContain("/password/reset?token=reset_token");
+  });
+
+  it("falls back to Resend's shared sender in development only", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("EMAIL_FROM", "");
+
+    await sendVerificationEmail(USER_EMAIL, "verify_token");
+
+    expect(sentPayload().from).toBe("onboarding@resend.dev");
+  });
+
+  it("skips verification without throwing when no key or sender is configured", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("EMAIL_FROM", undefined);
+
+    await expect(sendVerificationEmail(USER_EMAIL, "verify_token")).resolves.toBeUndefined();
+
+    vi.stubEnv("EMAIL_FROM", FROM_ADDRESS);
+    vi.stubEnv("RESEND_API_KEY", undefined);
+
+    await expect(sendVerificationEmail(USER_EMAIL, "verify_token")).resolves.toBeUndefined();
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("skips the reset email without throwing when no key is configured", async () => {
+    vi.stubEnv("RESEND_API_KEY", undefined);
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await expect(sendPasswordResetEmail(USER_EMAIL, "reset_token")).resolves.toEqual({
+      status: "skipped",
+      reason: "not_configured",
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(info).toHaveBeenCalled();
   });
 });

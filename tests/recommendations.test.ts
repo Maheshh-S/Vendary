@@ -57,6 +57,19 @@ const fallbackRow = (overrides: Record<string, unknown> = {}) => ({
 
 const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
+/** Structured log events emitted on the error channel (the logger's sink). */
+const loggedEvents = (): string[] =>
+  consoleError.mock.calls.flatMap((call) => {
+    try {
+      const parsed = JSON.parse(String(call[0])) as { event?: unknown };
+      return typeof parsed.event === "string" ? [parsed.event] : [];
+    } catch {
+      return [];
+    }
+  });
+
+const loggedText = (): string => consoleError.mock.calls.flat().join(" ");
+
 beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.$queryRaw.mockResolvedValue([]);
@@ -234,6 +247,9 @@ describe("getAlsoBought", () => {
     expect(cards.map((card) => card.id)).toEqual(["prod_1"]);
     expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
     expect(redisMock.setWithTtl).toHaveBeenCalledTimes(1);
+    // Fixed reason code only — the raw cache error/host never reaches the log.
+    expect(loggedEvents()).toContain("recommendations_cache_read_failed");
+    expect(loggedText()).not.toContain("redis down");
   });
 
   it("survives a cache write outage and still returns the fresh list", async () => {
@@ -241,6 +257,8 @@ describe("getAlsoBought", () => {
     prismaMock.$queryRaw.mockResolvedValue([coPurchaseRow()]);
 
     await expect(getAlsoBought(PRODUCT_ID)).resolves.toHaveLength(1);
+    expect(loggedEvents()).toContain("recommendations_cache_write_failed");
+    expect(loggedText()).not.toContain("redis down");
   });
 
   it("falls back when the co-occurrence query fails", async () => {
@@ -249,6 +267,9 @@ describe("getAlsoBought", () => {
 
     const cards = await getAlsoBought(PRODUCT_ID);
     expect(cards.map((card) => card.id)).toEqual(["fallback_1"]);
+    expect(loggedEvents()).toContain("recommendations_query_failed");
+    // Only the reason code is logged; SQL/host text from the error is dropped.
+    expect(loggedText()).not.toContain("similarity unavailable");
   });
 
   it("hides recommendations when both the query and the fallback fail", async () => {
@@ -257,6 +278,11 @@ describe("getAlsoBought", () => {
 
     await expect(getAlsoBought(PRODUCT_ID)).resolves.toEqual([]);
     expect(redisMock.setWithTtl).not.toHaveBeenCalled();
+    expect(loggedEvents()).toEqual([
+      "recommendations_query_failed",
+      "recommendations_fallback_failed",
+    ]);
+    expect(loggedText()).not.toContain("db down");
   });
 
   it("rejects an empty or oversized product id before any I/O", async () => {

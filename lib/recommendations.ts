@@ -3,6 +3,7 @@ import "server-only";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
+import { logger } from "@/lib/logger";
 import { CACHE_TTL_SECONDS, recommendationsKey } from "@/lib/product-cache";
 import { redis } from "@/lib/redis";
 
@@ -166,9 +167,13 @@ const readCached = async (key: string): Promise<RecommendationCard[] | null> => 
     }
     const parsed: unknown = JSON.parse(cached);
     return Array.isArray(parsed) ? (parsed as RecommendationCard[]) : null;
-  } catch (cacheError) {
+  } catch {
     // A malformed entry or a cache outage must fall through to the database.
-    console.error("Recommendations cache read failed:", cacheError);
+    // Fixed reason code only: cache errors can echo the key/host.
+    logger.error("recommendations_cache_read_failed", {
+      event: "recommendations_cache_read_failed",
+      reason: "cache_read_failed",
+    });
     return null;
   }
 };
@@ -176,9 +181,12 @@ const readCached = async (key: string): Promise<RecommendationCard[] | null> => 
 const writeCached = async (key: string, cards: RecommendationCard[]): Promise<void> => {
   try {
     await redis.setWithTtl(key, JSON.stringify(cards), CACHE_TTL_SECONDS.recommendations);
-  } catch (cacheError) {
+  } catch {
     // The page still renders from the fresh result.
-    console.error("Recommendations cache write failed:", cacheError);
+    logger.error("recommendations_cache_write_failed", {
+      event: "recommendations_cache_write_failed",
+      reason: "cache_write_failed",
+    });
   }
 };
 
@@ -205,14 +213,21 @@ export const getAlsoBought = async (
   try {
     const ranked = rankCoPurchases(await queryCoPurchases(db, id), id, RECOMMENDATION_LIMIT);
     cards = ranked.length > 0 ? ranked.map(toCard) : await queryFallback(db, id);
-  } catch (error) {
+  } catch {
     // A broken co-occurrence query (or a cold table) still has the featured
-    // fallback; only a total database failure hides the section.
-    console.error("Recommendations query failed:", error);
+    // fallback; only a total database failure hides the section. The raw error
+    // can carry SQL and host details, so only a fixed reason code is logged.
+    logger.error("recommendations_query_failed", {
+      event: "recommendations_query_failed",
+      reason: "co_purchase_query_failed",
+    });
     try {
       cards = await queryFallback(db, id);
-    } catch (fallbackError) {
-      console.error("Recommendations fallback failed:", fallbackError);
+    } catch {
+      logger.error("recommendations_fallback_failed", {
+        event: "recommendations_fallback_failed",
+        reason: "fallback_query_failed",
+      });
       return [];
     }
   }

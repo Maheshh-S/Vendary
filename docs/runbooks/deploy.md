@@ -15,7 +15,7 @@ you attach in Vercel.
 | Vercel (Next.js 15, Node 22.x) | App, server actions, webhook route, cron target | `output: "standalone"` is also used by the Docker image |
 | Neon Postgres | Orders, catalog, auth, coupons, refunds | `pg_trgm` recommended for ranked search |
 | Upstash Redis | Product/featured/recommendation cache, rate limiting | Optional; every cache read falls back to Postgres |
-| Resend | Verification + order lifecycle email | Requires a verified sending domain for production |
+| Resend | Verification, password-reset + order lifecycle email | Requires a verified sending domain for production |
 | Razorpay | Payments + refunds + webhook backstop | Start in test mode; live mode requires KYC |
 | External scheduler | `POST /api/cron/cleanup` with `CRON_SECRET` | Not configured by this repo |
 
@@ -32,7 +32,7 @@ repeat for Preview with **separate** infrastructure).
 
 | Variable | Required | Example / notes |
 |---|---|---|
-| `DATABASE_URL` | yes | Neon **pooled** connection string (`...-pooler...`, `sslmode=require`) used by the app |
+| `DATABASE_URL` | yes | Neon **pooled** connection string (`...-pooler...`, `sslmode=require&pgbouncer=true&connection_limit=1`) used by the app |
 | `AUTH_SECRET` | yes | ≥ 32 chars, `openssl rand -base64 32`; rotating it signs everyone out |
 | `AUTH_TRUST_HOST` | yes on Vercel | `true` |
 | `NEXT_PUBLIC_RAZORPAY_KEY_ID` | yes | Razorpay key id (safe for the browser) |
@@ -42,8 +42,8 @@ repeat for Preview with **separate** infrastructure).
 | `BASE_URL` | optional | Overrides the email link origin; defaults to `NEXT_PUBLIC_SITE_URL` |
 | `REDIS_URL` | recommended | Upstash TLS URL (`rediss://...`); blank disables cache/central rate limiting |
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | optional | Set both or neither; redirect URI `https://<your-domain>/api/auth/callback/google` |
-| `RESEND_API_KEY` | optional | Required for verification/order email |
-| `EMAIL_FROM` | optional | e.g. `Vendary <orders@your-domain>`; domain must be verified in Resend |
+| `RESEND_API_KEY` | optional | Required for verification/reset/order email |
+| `EMAIL_FROM` | optional | e.g. `Vendary <orders@your-domain>`; sender for **all** transactional mail, domain must be verified in Resend |
 | `ORDER_NOTIFICATION_EMAIL` | optional | Store inbox copy of order emails |
 | `SELLER_GSTIN` | optional | Printed on invoices; omitted when blank |
 | `SENTRY_DSN` | optional | Enables the SDK in `initMonitoring`; no build plugin is wired |
@@ -61,14 +61,21 @@ data.
 
 1. Create a project/database (Postgres 16+). Copy the **pooled** connection
    string for `DATABASE_URL` and keep the **direct** (non-pooler) host for
-   migrations.
-2. Ensure the role can create extensions, or pre-create `pg_trgm` as the
+   migrations — `prisma migrate deploy` must not go through PgBouncer.
+2. On the pooled URL append `pgbouncer=true` (Neon's pooler runs PgBouncer in
+   transaction mode; Prisma then disables prepared statements) and
+   `connection_limit=1` (one connection per serverless instance, which is what
+   keeps a fan-out of Vercel lambdas inside Neon's connection budget). Raise the
+   limit only if one instance must hold several connections at once, e.g.
+   overlapping interactive transactions:
+   `postgresql://...-pooler.../vendary?sslmode=require&pgbouncer=true&connection_limit=1`
+3. Ensure the role can create extensions, or pre-create `pg_trgm` as the
    database owner:
    `CREATE EXTENSION IF NOT EXISTS pg_trgm;`
    The migration `20270101002000_search_trgm` is guarded: without the extension
    it logs a NOTICE, skips the GIN indexes and still applies. Search then uses
    the ILIKE fallback instead of trigram ranking.
-3. Take a backup or a Neon branch before the first production migration.
+4. Take a backup or a Neon branch before the first production migration.
 
 ### Upstash
 
@@ -79,8 +86,10 @@ per-instance memory window (approximate across Vercel instances).
 ### Resend
 
 Add and verify the sending domain, then set `RESEND_API_KEY` and `EMAIL_FROM`.
-Unverified domains/`onboarding@resend.dev` are for local testing only; production
-order emails are skipped when `EMAIL_FROM` is blank.
+Every transactional email (verification, password reset and order lifecycle)
+sends from `EMAIL_FROM`; `onboarding@resend.dev` is a local-development
+fallback only. Production sends are skipped when `EMAIL_FROM` is blank, so an
+unverified domain can never silently send from the shared test sender.
 
 ### Razorpay
 
@@ -151,7 +160,8 @@ webhook secret is supplied, one signed unknown-event webhook that must return
 Manual, in a signed-out browser:
 
 1. Home, catalog (pagination/sort/price filter) and a product detail page render;
-   "Customers also bought" shows four in-stock products (featured fallback).
+   "Customers also bought" shows 1–4 in-stock products (the featured fallback
+   fills four on a cold catalog; real co-purchases can yield fewer).
 2. Search `madhuani` returns the Madhubani product; a category name returns its
    products.
 3. Add to cart, open `/cart`: quote agrees with the total; a sub-₹1 cart shows
@@ -211,7 +221,8 @@ rollback button.
   The route 501s until `CRON_SECRET` is set.
 - **Invoices are printable HTML,** not generated PDFs; use the browser's
   print-to-PDF.
-- **Emails need a verified Resend domain.** Order/verification email is skipped
-  when Resend or `EMAIL_FROM` is missing.
+- **Emails need a verified Resend domain.** Verification, password-reset and
+  order email all send from `EMAIL_FROM` and are skipped when Resend or
+  `EMAIL_FROM` is missing.
 - **`SKIP_ENV_VALIDATION` must never be set** on a real deployment; it disables
   the startup fail-fast.
