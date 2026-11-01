@@ -5,6 +5,7 @@ import { formatPrice } from "@/lib/locales";
 import { useLocale } from "@/providers/locale-provider";
 import Image from "next/image";
 import Link from "next/link";
+import WishlistButton from "./wishlist-button";
 
 export type ProductCardData = {
   id: string;
@@ -15,15 +16,34 @@ export type ProductCardData = {
   imageAlt: string | null;
 };
 
+export type ProductCardWishlist = {
+  isAuthenticated: boolean;
+  inWishlist: boolean;
+};
+
 function truncateText(text: string | null, maxLength: number = 20) {
   if (!text) return "";
   return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
 }
 
-export default function ProductCard({ product }: { product: ProductCardData }) {
+export default function ProductCard({
+  product,
+  wishlist,
+}: {
+  product: ProductCardData;
+  wishlist?: ProductCardWishlist;
+}) {
   const { locale } = useLocale();
   return (
     <div className="group relative">
+      {wishlist ? (
+        <WishlistButton
+          productId={product.id}
+          initialInWishlist={wishlist.inWishlist}
+          isAuthenticated={wishlist.isAuthenticated}
+          className="absolute right-2 top-2 z-10"
+        />
+      ) : null}
       <div className="h-42 w-full overflow-hidden rounded-md group-hover:opacity-75 lg:h-52 xl:h-64">
         <Image
           height={300}

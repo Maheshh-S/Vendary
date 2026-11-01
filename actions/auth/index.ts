@@ -1,5 +1,5 @@
 "use server";
-import { DEFAULT_LOGIN_REDIRECT } from "@/routes";
+import { DEFAULT_LOGIN_REDIRECT, safeInternalPath } from "@/routes";
 import { AuthError } from "next-auth";
 import { signIn, signOut } from "@/auth";
 import * as z from "zod";
@@ -74,6 +74,10 @@ export const Login = async (credentials: z.infer<typeof LoginSchema>) => {
   });
 
   const { email, password } = data;
+  // Internal-only, so a crafted `callbackUrl` cannot turn login into an open
+  // redirect. Guests land back where they came from (e.g. the product page
+  // whose wishlist heart they clicked).
+  const redirectTo = safeInternalPath(data.callbackUrl) ?? DEFAULT_LOGIN_REDIRECT;
 
   const existingUser = await GetUserByEmail(email);
 
@@ -102,7 +106,7 @@ export const Login = async (credentials: z.infer<typeof LoginSchema>) => {
     await signIn("credentials", {
       email,
       password,
-      redirectTo: DEFAULT_LOGIN_REDIRECT,
+      redirectTo,
     });
   } catch (error) {
     if (error instanceof AuthError) {

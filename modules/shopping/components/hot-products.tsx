@@ -1,4 +1,6 @@
 import { GetFeaturedProducts } from "@/actions/products/hot-products";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/db/prisma";
 import { Badge } from "@/components/ui/badge";
 import ProductCard from "@/modules/products/components/product-card";
 import { formatINR } from "@/lib/format-inr";
@@ -15,6 +17,15 @@ export default async function HotProducts() {
     take: 4,
     skip: 0,
   });
+
+  const session = await auth();
+  const wishlistRows: { productId: string }[] = session?.user?.id
+    ? await prisma.wishlistItem.findMany({
+        where: { userId: session.user.id },
+        select: { productId: true },
+      })
+    : [];
+  const wishlistIds = new Set(wishlistRows.map((row) => row.productId));
 
   if (!products || products.length === 0) {
     return (
@@ -58,7 +69,14 @@ export default async function HotProducts() {
     <div className="mx-auto pt-6 max-w-2xl lg:max-w-7xl">
       <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-6 md:grid-cols-4 md:gap-y-0 lg:gap-x-8">
         {products.map((product) => (
-          <ProductCard key={product.id} product={product} />
+          <ProductCard
+            key={product.id}
+            product={product}
+            wishlist={{
+              isAuthenticated: Boolean(session?.user?.id),
+              inWishlist: wishlistIds.has(product.id),
+            }}
+          />
         ))}
       </div>
     </div>

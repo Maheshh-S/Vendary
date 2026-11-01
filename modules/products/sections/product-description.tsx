@@ -13,18 +13,23 @@ import toast from "react-hot-toast";
 import { formatINR } from "@/lib/format-inr";
 import { ExtendedProduct } from "../types/product";
 import { notFound } from "next/navigation";
+import WishlistButton from "../components/wishlist-button";
 
 type Props = {
   product: ExtendedProduct;
   images: Image[];
   basicDetails: Product;
+  wishlist: {
+    isAuthenticated: boolean;
+    inWishlist: boolean;
+  };
 };
 
 const formatPrice = (price: number) => {
   return formatINR(price);
 };
 
-const ProductDescription = ({ product, images, basicDetails }: Props) => {
+const ProductDescription = ({ product, images, basicDetails, wishlist }: Props) => {
   const [selectedOption, setSelectedOption] = useState(product.options[0]?.id || "");
   const [quantity, setQuantity] = useState(1);
   const [expandedSection, setExpandedSection] = useState<string | null>("description");
@@ -209,9 +214,17 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
               )}
             </div>
 
-            <Heading level={1} className="text-2xl lg:text-3xl font-bold mb-2">
-              {basicDetails.name}
-            </Heading>
+            <div className="flex items-start justify-between gap-3">
+              <Heading level={1} className="text-2xl lg:text-3xl font-bold mb-2">
+                {basicDetails.name}
+              </Heading>
+              <WishlistButton
+                productId={product.id}
+                initialInWishlist={wishlist.inWishlist}
+                isAuthenticated={wishlist.isAuthenticated}
+                className="mt-1 shrink-0"
+              />
+            </div>
 
             {product.shortDescription && (
               <Text className="text-zinc-600 dark:text-zinc-300 mb-3">

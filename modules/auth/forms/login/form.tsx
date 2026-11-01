@@ -17,9 +17,11 @@ import GoogleSignInButton from "@/modules/auth/components/google-sign-in-button"
 
 type Props = {
   onSuccess?: () => void;
+  /** Internal path to return to after login (validated server-side). */
+  callbackUrl?: string;
 };
 
-export default function FormSignIn({ onSuccess }: Props) {
+export default function FormSignIn({ onSuccess, callbackUrl }: Props) {
   const {
     handleSubmit,
     formState: { errors },
@@ -46,7 +48,7 @@ export default function FormSignIn({ onSuccess }: Props) {
   });
 
   const onSubmit = (data: LoginSchemaType) => {
-    login(data);
+    login({ ...data, callbackUrl });
   };
   return (
     <div className="mx-auto w-full max-w-md rounded-none p-4 md:p-8">

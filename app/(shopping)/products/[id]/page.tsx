@@ -51,7 +51,7 @@ const ProductPage = async ({ params }: Props) => {
 
   // The average and star distribution cover every review; `product.reviews`
   // is only the newest ten rendered in the list.
-  const [ratingSummary, myReview] = await Promise.all([
+  const [ratingSummary, myReview, wishlistedRow] = await Promise.all([
     getRatingSummary(product.id),
     session?.user?.id
       ? prisma.review.findUnique({
@@ -72,6 +72,17 @@ const ProductPage = async ({ params }: Props) => {
           },
         })
       : Promise.resolve(null),
+    session?.user?.id
+      ? prisma.wishlistItem.findUnique({
+          where: {
+            userId_productId: {
+              userId: session.user.id,
+              productId: product.id,
+            },
+          },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
   ]);
 
   const serializedProduct = serializePrismaObject(product);
@@ -83,6 +94,10 @@ const ProductPage = async ({ params }: Props) => {
         basicDetails={serializedBasicDetails}
         product={serializedProduct}
         images={serializePrismaObject(product.images)}
+        wishlist={{
+          isAuthenticated: Boolean(session?.user?.id),
+          inWishlist: wishlistedRow !== null,
+        }}
       />
       <Reviews
         productId={product.id}

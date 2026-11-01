@@ -1,4 +1,6 @@
 import { GetProducts } from "@/actions/products/products";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/db/prisma";
 import {
   Pagination,
   PaginationGap,
@@ -129,6 +131,17 @@ export default async function ProductsPage({ searchParams }: Props) {
     maxPricePaise,
   });
 
+  // One user-scoped query paints every heart; guests see the empty set and are
+  // redirected to login on click.
+  const session = await auth();
+  const wishlistRows: { productId: string }[] = session?.user?.id
+    ? await prisma.wishlistItem.findMany({
+        where: { userId: session.user.id },
+        select: { productId: true },
+      })
+    : [];
+  const wishlistIds = new Set(wishlistRows.map((row) => row.productId));
+
   const heading = category
     ? `${category.charAt(0).toUpperCase()}${category.slice(1)}`
     : "All Products";
@@ -184,7 +197,14 @@ export default async function ProductsPage({ searchParams }: Props) {
             className="mt-4 grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-6 md:grid-cols-3 md:gap-y-0 lg:grid-cols-4 lg:gap-x-8"
           >
             {items.map((product) => (
-              <ProductCard key={product.id} product={product} />
+              <ProductCard
+                key={product.id}
+                product={product}
+                wishlist={{
+                  isAuthenticated: Boolean(session?.user?.id),
+                  inWishlist: wishlistIds.has(product.id),
+                }}
+              />
             ))}
           </div>
         </>

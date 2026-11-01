@@ -39,3 +39,17 @@ export const publicRoutes = [
   "/success",
   "/cart",
 ];
+
+// Every route not listed above is protected by the middleware, including
+// `/wishlist`, `/account`, `/my-orders` and `/checkout`.
+
+/**
+ * Accepts only same-origin absolute paths for post-login redirects. A
+ * protocol-relative `//evil.example` or a backslash-smuggled path is rejected,
+ * so `callbackUrl` can never become an open redirect.
+ */
+export const safeInternalPath = (value: string | null | undefined): string | undefined => {
+  if (!value || !value.startsWith("/")) return undefined;
+  if (value.startsWith("//") || value.startsWith("/\\")) return undefined;
+  return value;
+};

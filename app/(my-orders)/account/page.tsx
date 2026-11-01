@@ -44,6 +44,12 @@ export default async function AccountPage() {
             Saved addresses
           </Link>
           <Link
+            href="/wishlist"
+            className="font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
+          >
+            Wishlist
+          </Link>
+          <Link
             href="/my-orders"
             className="font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
           >
