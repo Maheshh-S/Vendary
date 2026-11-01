@@ -27,18 +27,18 @@ model Account {
 }
 
 model VerificationToken {
-  id     String   @id @default(cuid())
-  email  String
-  token  String   @unique
+  id      String   @id @default(cuid())
+  email   String
+  token   String   @unique
   expires DateTime
 
   @@unique([email, token])
 }
 
 model PasswordResetToken {
-  id     String   @id @default(cuid())
-  email  String
-  token  String   @unique
+  id      String   @id @default(cuid())
+  email   String
+  token   String   @unique
   expires DateTime
 
   @@unique([email, token])
@@ -60,22 +60,24 @@ enum UserRole {
 }
 
 model User {
-  id             String    @id @default(cuid())
-  name           String?
-  email          String?   @unique
-  emailVerified  DateTime? @map("email_verified")
-  firstName      String?
-  lastName       String?
-  profilePic     String?
-  image          String?
-  password       String?
-  role           UserRole  @default(USER)
-  accounts       Account[]
-  sessions       Session[]
-  orders         Order[]
-  reviews        Review[]
-  products       Product[]
-  savedAddresses SavedAddress[]
+  id                String             @id @default(cuid())
+  name              String?
+  email             String?            @unique
+  emailVerified     DateTime?          @map("email_verified")
+  firstName         String?
+  lastName          String?
+  profilePic        String?
+  image             String?
+  password          String?
+  role              UserRole           @default(USER)
+  accounts          Account[]
+  sessions          Session[]
+  orders            Order[]
+  reviews           Review[]
+  products          Product[]
+  savedAddresses    SavedAddress[]
+  couponRedemptions CouponRedemption[]
+  wishlistItems     WishlistItem[]
 
   @@map("users")
 }
@@ -101,37 +103,38 @@ model SavedAddress {
   isDefault  Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-
-  @@index([userId])
   // NOTE: migration `20261201001000_saved_address_default_unique` adds a
   // partial unique index on (`userId`) WHERE `isDefault`. Prisma cannot express
   // partial indexes here; a plain `@@unique([userId, isDefault])` would wrongly
   // forbid multiple non-default addresses, so it is deliberately absent.
+
+  @@index([userId])
 }
 
 model Product {
-  id               String       @id @default(cuid())
+  id               String         @id @default(cuid())
   name             String
   description      String?
   shortDescription String?
-  price            Decimal      @db.Decimal(10, 2)
+  price            Decimal        @db.Decimal(10, 2)
   thumbnail        String?
   images           Image[]
   videos           Video[]
-  category         Category     @relation(fields: [categoryId], references: [id])
+  category         Category       @relation(fields: [categoryId], references: [id])
   categoryId       String
   tag              String?
   orderItems       OrderItem[]
   options          Option[]
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
-  availability     Availability @default(OUT_OF_STOCK)
-  stockQty         Int          @default(25)
-  shippingTime     String       @default("7-10 business days")
-  isFeatured       Boolean      @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  availability     Availability   @default(OUT_OF_STOCK)
+  stockQty         Int            @default(25)
+  shippingTime     String         @default("7-10 business days")
+  isFeatured       Boolean        @default(false)
   reviews          Review[]
   userId           String
-  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wishlistItems    WishlistItem[]
 
   @@index([availability, createdAt])
   @@index([availability, isFeatured, createdAt])
@@ -156,19 +159,19 @@ model Option {
 }
 
 model Image {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   url         String
   description String?
-  isMain      Boolean  @default(false)
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  isMain      Boolean @default(false)
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   productId   String
 }
 
 model Video {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   url         String
   description String?
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   productId   String
 }
 
@@ -190,41 +193,45 @@ enum OrderStatus {
 }
 
 model Order {
-  id            String      @id @default(cuid())
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId        String
-  status        OrderStatus @default(pending)
-  total         Decimal     @db.Decimal(10, 2)
-  taxAmount     Decimal     @default(0) @db.Decimal(10, 2)
-  items         OrderItem[]
-  address       Address?    @relation(fields: [addressId], references: [id])
-  addressId     String      @unique
-  paymentMethod String
-  paymentId     String      @default("")
-  transactionId String      @unique
-  events        OrderEvent[]
-  refunds       Refund[]
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id               String            @id @default(cuid())
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           String
+  status           OrderStatus       @default(pending)
+  total            Decimal           @db.Decimal(10, 2)
+  taxAmount        Decimal           @default(0) @db.Decimal(10, 2)
+  /// Coupon discount applied before GST; `total`/`taxAmount` are already net of it.
+  discountAmount   Decimal           @default(0) @db.Decimal(10, 2)
+  couponCode       String?
+  items            OrderItem[]
+  address          Address?          @relation(fields: [addressId], references: [id])
+  addressId        String            @unique
+  paymentMethod    String
+  paymentId        String            @default("")
+  transactionId    String            @unique
+  events           OrderEvent[]
+  refunds          Refund[]
+  couponRedemption CouponRedemption?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
 }
 
 model Address {
-  id        String   @id @default(cuid())
-  firstName String
-  lastName  String
-  phone String
-  address   String
-  area      String
+  id         String   @id @default(cuid())
+  firstName  String
+  lastName   String
+  phone      String
+  address    String
+  area       String
   postalCode String
   landmark   String
-  state     String
-  country   String
-  order     Order?   @relation
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  state      String
+  country    String
+  order      Order?   @relation
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model OrderItem {
@@ -290,4 +297,64 @@ model Review {
 
   @@unique([userId, productId])
   @@index([productId, createdAt])
+}
+
+enum CouponType {
+  PERCENT
+  FIXED
+}
+
+/// A discount code. `value` is a percentage for PERCENT (10 = 10%) and rupee
+/// amount for FIXED; all money math happens in paise in `lib/coupons.ts`.
+/// Redemption usage is claimed with a conditional increment, never a read-then-write.
+model Coupon {
+  id          String             @id @default(cuid())
+  code        String             @unique
+  type        CouponType
+  value       Decimal            @db.Decimal(10, 2)
+  minSubtotal Decimal            @default(0) @db.Decimal(10, 2)
+  maxDiscount Decimal?           @db.Decimal(10, 2)
+  startsAt    DateTime           @default(now())
+  endsAt      DateTime
+  usageLimit  Int?
+  usedCount   Int                @default(0)
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  redemptions CouponRedemption[]
+
+  @@index([isActive, startsAt, endsAt])
+}
+
+/// One redemption per order and one per (coupon, user). Created when the
+/// pending order is initialized and released if that order is cancelled before
+/// payment; a paid order keeps its redemption forever.
+model CouponRedemption {
+  id        String   @id @default(cuid())
+  coupon    Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  couponId  String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId   String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  amount    Decimal  @db.Decimal(10, 2)
+  createdAt DateTime @default(now())
+
+  @@unique([couponId, userId])
+  @@index([userId])
+}
+
+/// Saved products. User-specific and never cached; the compound unique makes
+/// toggling idempotent and a double-submit a no-op.
+model WishlistItem {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([userId, createdAt])
+  @@index([productId])
 }
