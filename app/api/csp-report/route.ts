@@ -128,6 +128,13 @@ export async function POST(request: Request) {
     return new NextResponse(null, { status: 204 });
   }
 
+  // Refuse an oversized body before buffering it; the post-read length check
+  // below still covers chunked requests without a content-length header.
+  const declaredLength = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+    return new NextResponse(null, { status: 204 });
+  }
+
   const raw = await request.text();
   if (raw.length > MAX_BODY_BYTES) {
     return new NextResponse(null, { status: 204 });
