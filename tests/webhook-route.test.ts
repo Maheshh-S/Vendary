@@ -12,7 +12,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { prismaMock, txMock, confirmOrderMock, refundPaymentMock, revalidateMock, invalidateMock } =
   vi.hoisted(() => {
     const txMock = {
-      order: { findFirst: vi.fn(), updateMany: vi.fn() },
+      order: { findFirst: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
+      orderEvent: { findFirst: vi.fn(), create: vi.fn() },
+      refund: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
       product: { updateMany: vi.fn() },
     };
     return {
@@ -51,6 +53,7 @@ const ORDER_TOTAL_PAISE = 21600;
 const ORDER = {
   id: ORDER_ID,
   status: "pending",
+  paymentId: "",
   total: "216.00",
   items: [{ productId: "prod_1" }, { productId: null }],
 };
@@ -117,7 +120,17 @@ describe("razorpay webhook route", () => {
     invalidateMock.mockResolvedValue(undefined);
 
     txMock.order.updateMany.mockResolvedValue({ count: 1 });
+    txMock.order.findUnique.mockResolvedValue({
+      status: "cancelled",
+      paymentId: PAYMENT_ID,
+      items: [{ productId: "prod_1", quantity: 2 }],
+    });
     txMock.product.updateMany.mockResolvedValue({ count: 1 });
+    txMock.refund.findUnique.mockResolvedValue(null);
+    txMock.refund.create.mockResolvedValue({ id: "refund_row_1" });
+    txMock.refund.update.mockResolvedValue({ id: "refund_row_1" });
+    txMock.orderEvent.findFirst.mockResolvedValue(null);
+    txMock.orderEvent.create.mockResolvedValue({ id: "event_1" });
   });
 
   describe("trust boundary", () => {
@@ -222,7 +235,7 @@ describe("razorpay webhook route", () => {
       }
     });
 
-    it.each(["confirmed", "shipped", "delivered", "refunded", "cancelled"])(
+    it.each(["confirmed", "shipped", "delivered", "refunded"])(
       "is an idempotent no-op when the order is already %s",
       async (status) => {
         prismaMock.order.findUnique.mockResolvedValue({ ...ORDER, status });
@@ -236,6 +249,21 @@ describe("razorpay webhook route", () => {
         expect(invalidateMock).not.toHaveBeenCalled();
       }
     );
+
+    it("is a no-op for a cancelled order whose capture proof is already recorded", async () => {
+      prismaMock.order.findUnique.mockResolvedValue({
+        ...ORDER,
+        status: "cancelled",
+        paymentId: PAYMENT_ID,
+      });
+
+      const res = await POST(signedRequest(capturedBody()));
+
+      expect(res.status).toBe(200);
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      expect(refundPaymentMock).not.toHaveBeenCalled();
+      expect(revalidateMock).not.toHaveBeenCalled();
+    });
 
     it("refunds once and marks the order refunded when the captured amount is wrong", async () => {
       const capturedPaise = ORDER_TOTAL_PAISE - 1;
@@ -379,6 +407,98 @@ describe("razorpay webhook route", () => {
     });
   });
 
+  describe("payment.captured late-capture backstop", () => {
+    it("refunds a capture on a cancelled pending order and keeps it cancelled", async () => {
+      prismaMock.order.findUnique.mockResolvedValue({
+        ...ORDER,
+        status: "cancelled",
+        paymentId: "",
+      });
+
+      const res = await POST(signedRequest(capturedBody()));
+
+      expect(res.status).toBe(200);
+      expect(confirmOrderMock).not.toHaveBeenCalled();
+      expect(refundPaymentMock).toHaveBeenCalledTimes(1);
+      expect(refundPaymentMock).toHaveBeenCalledWith({
+        paymentId: PAYMENT_ID,
+        amountPaise: ORDER_TOTAL_PAISE,
+        orderId: ORDER_ID,
+        reason: "LATE_CAPTURE",
+      });
+
+      // The proof claim and the refund-ledger claim commit together.
+      expect(txMock.order.updateMany).toHaveBeenCalledTimes(1);
+      expect(txMock.order.updateMany).toHaveBeenCalledWith({
+        where: { id: ORDER_ID, status: "cancelled", paymentId: "" },
+        data: { paymentId: PAYMENT_ID },
+      });
+      expect(txMock.refund.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            orderId: ORDER_ID,
+            paymentId: PAYMENT_ID,
+            amount: "216.00",
+            reason: "LATE_CAPTURE",
+            status: "requested",
+            razorpayRefundId: expect.stringMatching(/^pending:/),
+          }),
+        })
+      );
+      expect(txMock.refund.update).toHaveBeenCalledWith({
+        where: { id: "refund_row_1" },
+        data: { razorpayRefundId: "rfnd_123", status: "processed" },
+      });
+      expect(
+        txMock.orderEvent.create.mock.calls.map((call) => call[0].data.type)
+      ).toEqual(["refund_requested", "refund_processed"]);
+      // Stock was never decremented for a pending order: no restore, but the
+      // order views still refresh.
+      expect(txMock.product.updateMany).not.toHaveBeenCalled();
+      expect(revalidateMock).toHaveBeenCalledWith("/admin");
+      expect(revalidateMock).toHaveBeenCalledWith("/my-orders");
+    });
+
+    it("acknowledges a failed late-capture refund and records refund_failed", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        prismaMock.order.findUnique.mockResolvedValue({
+          ...ORDER,
+          status: "cancelled",
+          paymentId: "",
+        });
+        refundPaymentMock.mockRejectedValue(new Error("razorpay unavailable"));
+
+        const res = await POST(signedRequest(capturedBody()));
+
+        expect(res.status).toBe(200);
+        expect(txMock.refund.update).toHaveBeenCalledWith({
+          where: { id: "refund_row_1" },
+          data: { status: "failed" },
+        });
+        expect(
+          txMock.orderEvent.create.mock.calls.map((call) => call[0].data.type)
+        ).toEqual(["refund_requested", "refund_failed"]);
+        // The order stays cancelled; only the proof and ledger changed.
+        expect(txMock.order.updateMany).toHaveBeenCalledTimes(1);
+        expect(revalidateMock).not.toHaveBeenCalled();
+
+        const entries = error.mock.calls.map((call) => JSON.parse(String(call[0])));
+        expect(entries).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              level: "error",
+              event: "webhook_late_capture_refund_failed",
+              orderId: ORDER_ID,
+            }),
+          ])
+        );
+      } finally {
+        error.mockRestore();
+      }
+    });
+  });
+
   describe("payment.failed", () => {
     it("logs a structured warning without changing any state", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -437,14 +557,48 @@ describe("razorpay webhook route", () => {
       expect(revalidateMock).toHaveBeenCalledWith("/my-orders");
     });
 
-    it("is a no-op on replay once the order is refunded", async () => {
+    it("updates a requested ledger row and writes refund_processed", async () => {
+      txMock.order.findFirst.mockResolvedValue(orderWithItems("confirmed"));
+      txMock.refund.findUnique.mockResolvedValue({
+        id: "refund_row_1",
+        status: "requested",
+        razorpayRefundId: "pending:abc",
+      });
+
+      const res = await POST(signedRequest(refundBody()));
+
+      expect(res.status).toBe(200);
+      expect(txMock.refund.update).toHaveBeenCalledWith({
+        where: { id: "refund_row_1" },
+        data: { razorpayRefundId: "rfnd_123", status: "processed" },
+      });
+      expect(txMock.orderEvent.create).toHaveBeenCalledTimes(1);
+      expect(txMock.orderEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          orderId: ORDER_ID,
+          type: "refund_processed",
+          fromStatus: "confirmed",
+          toStatus: "refunded",
+          actorId: null,
+        }),
+      });
+    });
+
+    it("does not duplicate the event when the ledger row already recorded this refund", async () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       try {
         txMock.order.findFirst.mockResolvedValue(orderWithItems("refunded"));
+        txMock.refund.findUnique.mockResolvedValue({
+          id: "refund_row_1",
+          status: "processed",
+          razorpayRefundId: "rfnd_123",
+        });
 
         const res = await POST(signedRequest(refundBody()));
 
         expect(res.status).toBe(200);
+        expect(txMock.refund.update).not.toHaveBeenCalled();
+        expect(txMock.orderEvent.create).not.toHaveBeenCalled();
         expect(txMock.order.updateMany).not.toHaveBeenCalled();
         expect(txMock.product.updateMany).not.toHaveBeenCalled();
         expect(revalidateMock).not.toHaveBeenCalled();

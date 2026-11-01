@@ -6,9 +6,16 @@ import type { OrderStatus } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
 import { confirmOrder } from "@/lib/orders/confirm-order";
-import { refundAndClose, restoreOrderStock } from "@/lib/orders/refund";
+import { writeOrderEvent } from "@/lib/orders/events";
+import {
+  claimRefundInTransaction,
+  failOrderRefund,
+  finalizeOrderRefund,
+  refundAndClose,
+  restoreOrderStock,
+} from "@/lib/orders/refund";
 import { invalidateProductCache } from "@/lib/product-cache";
-import type { RefundReason } from "@/lib/razorpay-client";
+import { refundPayment, type RefundReason } from "@/lib/razorpay-client";
 import { verifyRazorpayWebhookSignature } from "@/lib/razorpay";
 import {
   webhookSchema,
@@ -22,10 +29,13 @@ import {
  * reconciled here:
  *
  * - `payment.captured` confirms a pending order through the same stock-safe
- *   claim as the client path, refunding any capture we cannot fulfil.
+ *   claim as the client path, refunding any capture we cannot fulfil. A
+ *   capture that lands after a pending order was cancelled is refunded in
+ *   full and leaves the order `cancelled` (late-capture backstop).
  * - `payment.failed` is log-only: another attempt may still succeed.
- * - `refund.processed` is the authoritative refund signal and restores stock
- *   exactly once for a confirmed order.
+ * - `refund.processed` is the authoritative refund signal, writes the
+ *   `refund_processed` event, reconciles the `Refund` ledger row when one
+ *   exists, and restores stock exactly once for a confirmed order.
  *
  * The HMAC is verified over the raw body before parsing; the parsed body is
  * schema-validated before any DB access. Invalid trust-boundary input is 400
@@ -71,9 +81,9 @@ const invalidateProductCaches = async (productIds: readonly string[]): Promise<v
  *
  * A failed Razorpay refund is acknowledged (200) with a loud alert, not a 500:
  * the claim already recorded the payment proof, so a retried delivery would
- * hit `already_handled` and could not retry the refund. Until a refund ledger
- * tracks failed attempts (Phase 1), recovery is support-led from the alert.
- * DB/transaction failures still propagate for a 500 so Razorpay retries.
+ * hit `already_handled` and could not retry the refund. Recovery is
+ * support-led from the alert. DB/transaction failures still propagate for a
+ * 500 so Razorpay retries.
  */
 const refundCapture = async (
   orderId: string,
@@ -114,12 +124,134 @@ const refundCapture = async (
   }
 };
 
+/**
+ * Late-capture backstop for a cancelled pending order: the customer cancelled
+ * before paying, but Razorpay captured a payment anyway (e.g. a delayed UPI
+ * capture). The proof claim and refund-ledger claim commit in one transaction,
+ * so a DB failure leaves the order claimable on the next delivery. The refund
+ * call then moves the captured amount back; the order stays `cancelled`.
+ *
+ * Replays see the recorded proof and no-op. A failed refund is support-led and
+ * acknowledged, matching the other refund paths.
+ */
+const handleCancelledLateCapture = async (
+  orderId: string,
+  payment: PaymentWebhookEntity
+): Promise<NextResponse> => {
+  let claim: Awaited<ReturnType<typeof claimRefundInTransaction>> | null;
+  try {
+    claim = await prisma.$transaction(async (tx) => {
+      const proof = await tx.order.updateMany({
+        where: { id: orderId, status: "cancelled", paymentId: "" },
+        data: { paymentId: payment.id },
+      });
+      if (proof.count === 0) {
+        return null;
+      }
+
+      return claimRefundInTransaction(tx, {
+        orderId,
+        amountPaise: payment.amount,
+        reason: "LATE_CAPTURE",
+        allowedFrom: ["cancelled"],
+        actorId: null,
+      });
+    });
+  } catch (error) {
+    if (error instanceof AppError) {
+      // An existing refund row owns this order (processed or in flight); never
+      // issue a second refund. The transaction rolled back, so a duplicate
+      // capture is support-led.
+      logError({
+        event: "webhook_late_capture_claim_rejected",
+        orderId,
+        paymentId: payment.id,
+        code: error.code,
+        error: errorMessage(error),
+      });
+      return acknowledgment();
+    }
+    throw error;
+  }
+
+  if (!claim) {
+    logWarn({
+      event: "webhook_late_capture_already_claimed",
+      orderId,
+      paymentId: payment.id,
+    });
+    return acknowledgment();
+  }
+
+  let refundId: string;
+  try {
+    ({ refundId } = await refundPayment({
+      paymentId: payment.id,
+      amountPaise: payment.amount,
+      orderId,
+      reason: "LATE_CAPTURE",
+    }));
+  } catch (error) {
+    logError({
+      event: "webhook_late_capture_refund_failed",
+      orderId,
+      capturedPaise: payment.amount,
+      error: errorMessage(error),
+    });
+    // Record the failure for support; the order keeps its `cancelled` status.
+    try {
+      await failOrderRefund({
+        orderId,
+        refundRowId: claim.refundRowId,
+        reason: "LATE_CAPTURE",
+        error: errorMessage(error),
+        actorId: null,
+      });
+    } catch (ledgerError) {
+      logError({
+        event: "webhook_late_capture_ledger_failed",
+        orderId,
+        error: errorMessage(ledgerError),
+      });
+    }
+    return acknowledgment();
+  }
+
+  try {
+    await finalizeOrderRefund({
+      orderId,
+      refundRowId: claim.refundRowId,
+      razorpayRefundId: refundId,
+      amountPaise: payment.amount,
+      reason: "LATE_CAPTURE",
+      // The order already moved to `cancelled`; the backstop must not move it.
+      allowedFrom: [],
+      finalStatus: "cancelled",
+      actorId: null,
+    });
+  } catch (error) {
+    // The money is back. `refund.processed` will reconcile the ledger row; a
+    // retried delivery would no-op on the recorded proof, so alert and ack.
+    logError({
+      event: "webhook_late_capture_ledger_failed",
+      orderId,
+      refundId,
+      error: errorMessage(error),
+    });
+    return acknowledgment();
+  }
+
+  revalidateOrderViews();
+  return acknowledgment();
+};
+
 const handlePaymentCaptured = async (payment: PaymentWebhookEntity): Promise<NextResponse> => {
   const order = await prisma.order.findUnique({
     where: { transactionId: payment.order_id },
     select: {
       id: true,
       status: true,
+      paymentId: true,
       total: true,
       items: { select: { productId: true } },
     },
@@ -137,9 +269,17 @@ const handlePaymentCaptured = async (payment: PaymentWebhookEntity): Promise<Nex
     return acknowledgment();
   }
 
+  if (order.status === "cancelled") {
+    if (order.paymentId === "") {
+      return handleCancelledLateCapture(order.id, payment);
+    }
+    // Already claimed/refunded for this cancelled order: a replay.
+    return acknowledgment();
+  }
+
   if (order.status !== "pending") {
-    // confirmed/shipped/delivered/refunded/cancelled: the client callback or a
-    // previous delivery already handled this capture.
+    // confirmed/shipped/delivered/refunded: the client callback or a previous
+    // delivery already handled this capture.
     return acknowledgment();
   }
 
@@ -205,7 +345,7 @@ const handleRefundProcessed = async (refund: RefundWebhookEntity): Promise<NextR
 
     const orderTotalPaise = Math.round(Number(order.total) * 100);
     if (refund.amount < orderTotalPaise) {
-      // Partial refunds are out of scope in Phase 0: acknowledge (so Razorpay
+      // Partial refunds are out of scope in Phase 1: acknowledge (so Razorpay
       // stops retrying) but never change the order or the stock.
       return {
         kind: "partial",
@@ -215,11 +355,47 @@ const handleRefundProcessed = async (refund: RefundWebhookEntity): Promise<NextR
       };
     }
 
+    // One refund row per order. Our own flows mark it processed before this
+    // event arrives; a webhook-first race or a Phase 0 refund has no row (or
+    // a still-requested one).
+    const refundRow = await tx.refund.findUnique({ where: { orderId: order.id } });
+    const alreadyProcessed =
+      refundRow?.status === "processed" && refundRow.razorpayRefundId === refund.id;
+    if (refundRow && !alreadyProcessed) {
+      await tx.refund.update({
+        where: { id: refundRow.id },
+        data: { razorpayRefundId: refund.id, status: "processed" },
+      });
+    }
+
+    const recordProcessedEvent = async (
+      fromStatus: OrderStatus | null,
+      toStatus: OrderStatus | null
+    ): Promise<void> => {
+      if (alreadyProcessed) return;
+      const existing = await tx.orderEvent.findFirst({
+        where: { orderId: order.id, type: "refund_processed" },
+        select: { id: true },
+      });
+      if (existing) return;
+
+      await writeOrderEvent(tx, {
+        orderId: order.id,
+        type: "refund_processed",
+        fromStatus,
+        toStatus,
+        actorId: null,
+        metadata: { refundId: refund.id, amountPaise: refund.amount },
+      });
+    };
+
     switch (order.status) {
       case "refunded":
       case "cancelled":
         // Never overwrite a terminal state (in particular, never turn a
-        // `refunded` order into `cancelled`).
+        // `refunded` order into `cancelled`). The event still records the
+        // authoritative settlement for refunds issued outside our actions.
+        await recordProcessedEvent(null, null);
         return { kind: "terminal", orderId: order.id, status: order.status };
 
       case "confirmed": {
@@ -229,10 +405,12 @@ const handleRefundProcessed = async (refund: RefundWebhookEntity): Promise<NextR
           data: { status: "refunded" },
         });
         if (updated.count === 0) {
+          await recordProcessedEvent(null, null);
           return { kind: "raced", orderId: order.id, status: order.status };
         }
 
         await restoreOrderStock(tx, order.items);
+        await recordProcessedEvent("confirmed", "refunded");
         // Only lines with a live product row were restored; null snapshots
         // (deleted products) have no cache entry to drop.
         return {
@@ -252,9 +430,11 @@ const handleRefundProcessed = async (refund: RefundWebhookEntity): Promise<NextR
           data: { status: "refunded" },
         });
         if (updated.count === 0) {
+          await recordProcessedEvent(null, null);
           return { kind: "raced", orderId: order.id, status: order.status };
         }
 
+        await recordProcessedEvent(order.status, "refunded");
         // Stock was not touched, so no product view is stale.
         return { kind: "refunded", orderId: order.id, productIds: [] };
       }
