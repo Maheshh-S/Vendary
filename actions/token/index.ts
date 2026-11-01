@@ -30,15 +30,32 @@ export const getVerificationTokenByToken = async (token : string) => {
     }
 }
 
-export const getPasswordResetTokenByEmail = async (token : string) => {
+export const getPasswordResetTokenByEmail = async (email : string) => {
     const db = prisma;
     try {
-        const verificationToken = db.passwordResetToken.findUnique({
+        // `email` alone is not unique (the schema's unique key is
+        // `[email, token]`), so this must be a findFirst.
+        const resetToken = await db.passwordResetToken.findFirst({
+            where: {
+                email: email
+            }
+        })
+        return resetToken
+    } catch (error) {
+        console.error(error)
+        throw new Error("Error while fetching password reset token")
+    }
+}
+
+export const getPasswordResetTokenByToken = async (token : string) => {
+    const db = prisma;
+    try {
+        const resetToken = await db.passwordResetToken.findUnique({
             where: {
                 token: token
             }
         })
-        return verificationToken
+        return resetToken
     } catch (error) {
         console.error(error)
         throw new Error("Error while fetching password reset token")

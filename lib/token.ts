@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { PASSWORD_RESET_TOKEN_EXPIRE_TIME, VERIFICATION_TOKEN_EXPIRE_TIME } from '@/metadata';
-import { getPasswordResetTokenByEmail, getVerificationTokenByEmail } from '@/actions/token';
+import { getVerificationTokenByEmail } from '@/actions/token';
 import {prisma} from './db/prisma';
 const db = prisma;
 
@@ -31,14 +31,13 @@ export const generatePasswordResetToken = async (email: string) => {
     const token = uuidv4();
     const expires = new Date(new Date().getTime() + PASSWORD_RESET_TOKEN_EXPIRE_TIME * 1000);
 
-    const existing_token = await getPasswordResetTokenByEmail(email);
-    if (existing_token) {
-        await db.passwordResetToken.delete({
-            where: {
-                id: existing_token.id
-            }
-        })
-    }
+    // Only one live reset token per email: clearing the email's tokens also
+    // invalidates any older links the user may still have in an inbox.
+    await db.passwordResetToken.deleteMany({
+        where: {
+            email: email
+        }
+    })
 
     const passwordREsetToken = await db.passwordResetToken.create({
         data: {

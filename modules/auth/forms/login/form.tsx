@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import Link from "next/link";
 import { IconLoader } from "@tabler/icons-react";
 import { Field, Label } from "@/components/ui/fieldset";
 import { Input } from "@/components/ui/input";
@@ -85,6 +86,14 @@ export default function FormSignIn({ onSuccess }: Props) {
             </p>
           )}
         </Field>
+        <div className="-mt-1 text-right">
+          <Link
+            href="/forgot-password"
+            className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+          >
+            Forgot password?
+          </Link>
+        </div>
         <Button disabled={isPending} type="submit" className="w-full cursor-pointer mt-6">
           { isPending ? <IconLoader size={22} className="animate-spin" />: "Sign in" }
         </Button>

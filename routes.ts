@@ -33,6 +33,7 @@ export const authRoutes = [
 export const publicRoutes = [
     '/',
     '/new-verification',
+    '/forgot-password',
     '/password/reset',
     '/changelog',
     '/products',

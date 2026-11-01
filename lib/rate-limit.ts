@@ -41,6 +41,10 @@ export const RATE_LIMITS = {
   search: { limit: 60, windowMs: 60_000 },
   addReview: { limit: 5, windowMs: 60 * 60_000 },
   adminMutation: { limit: 60, windowMs: 60_000 },
+  /** Three reset-mail requests per address per hour (fixed window). */
+  passwordResetEmail: { limit: 3, windowMs: 60 * 60_000 },
+  /** A single IP can try ten different addresses per hour. */
+  passwordResetIp: { limit: 10, windowMs: 60 * 60_000 },
 } as const;
 
 type MemoryWindow = { count: number; expiresAt: number };

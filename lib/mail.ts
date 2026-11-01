@@ -5,6 +5,7 @@ import { Resend } from "resend";
 
 import { prisma } from "@/lib/db/prisma";
 import { ORDER_EMAIL_EVENT_TYPE } from "@/lib/orders/events";
+import { escapeHtml } from "@/lib/html";
 import { BASE_URL, PROJECT_NAME } from "@/metadata";
 import { orderConfirmationEmail } from "@/templates/mail/order-confirmation";
 import { orderStatusEmail } from "@/templates/mail/order-status";
@@ -56,25 +57,68 @@ export const sendVerificationEmail = async (email: string, token: string): Promi
   });
 };
 
-export const sendPasswordResetEmail = async (email: string, token: string): Promise<void> => {
-  const resend = getResendClient();
-  if (!resend) return;
+/** Outcome of a reset send; the caller keeps its response constant either way. */
+export type PasswordResetEmailResult =
+  | { status: "sent" }
+  | { status: "skipped"; reason: "not_configured" | "rejected" };
 
-  const confirmLink = `${BASE_URL}/password/reset?token=${token}`;
+/**
+ * Sends the password reset link. Never throws: an unconfigured mailbox or a
+ * Resend outage must not change the (enumeration-safe) response the requester
+ * sees. Log lines contain event codes only — never the address or the token.
+ */
+export const sendPasswordResetEmail = async (
+  email: string,
+  token: string
+): Promise<PasswordResetEmailResult> => {
+  try {
+    const resend = getResendClient();
+    const from =
+      process.env.EMAIL_FROM?.trim() ||
+      (process.env.NODE_ENV === "development" ? DEVELOPMENT_SENDER : "");
+    if (!resend || !from) {
+      console.info(
+        JSON.stringify({ level: "info", event: "password_reset_email_skipped", reason: "not_configured" })
+      );
+      return { status: "skipped", reason: "not_configured" };
+    }
 
-  await resend.emails.send({
-    from: "Acme <onboarding@resend.dev>",
-    to: [email],
-    subject: `Reset Password for ${PROJECT_NAME}`,
-    html: `
-            <p>Thank you for signing up for your account at, ${PROJECT_NAME}!</p>
-            <p>Please confirm your email address by clicking the link below:</p>
-            <p><a href="${confirmLink}">Confirm Email</a></p>
-            <p>If you did not sign up for ${PROJECT_NAME}, please ignore this email.</p>
+    // Prefer the public site URL so the link works behind a proxy; BASE_URL
+    // already falls back to NEXT_PUBLIC_SITE_URL.
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || BASE_URL;
+    const resetLink = `${siteUrl}/password/reset?token=${encodeURIComponent(token)}`;
+
+    const { error } = await resend.emails.send({
+      from,
+      to: [email],
+      subject: `Reset Password for ${PROJECT_NAME}`,
+      html: `
+            <p>We received a request to reset the password for your ${escapeHtml(PROJECT_NAME)} account.</p>
+            <p>Choose a new password with the link below. It expires in one hour and can be used once.</p>
+            <p><a href="${escapeHtml(resetLink)}">Reset password</a></p>
+            <p>If you did not request this, you can safely ignore this email — your password has not changed.</p>
             <p>Best regards,</p>
-            <p>The ${PROJECT_NAME} Team</p>
+            <p>The ${escapeHtml(PROJECT_NAME)} Team</p>
         `,
-  });
+    });
+    if (error) {
+      console.warn(
+        JSON.stringify({ level: "warn", event: "password_reset_email_rejected" })
+      );
+      return { status: "skipped", reason: "rejected" };
+    }
+    return { status: "sent" };
+  } catch (error) {
+    // Only the error class name: provider messages can echo request fields.
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        event: "password_reset_email_failed",
+        error: error instanceof Error ? error.name : "unknown",
+      })
+    );
+    return { status: "skipped", reason: "rejected" };
+  }
 };
 
 /** One idempotency marker per (order, email kind). */
