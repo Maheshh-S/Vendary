@@ -6,6 +6,7 @@ import type { OrderStatus, Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
+import { sendOrderEmail } from "@/lib/mail";
 import { writeOrderEvent } from "@/lib/orders/events";
 import { refundPayment, type RefundReason } from "@/lib/razorpay-client";
 
@@ -33,9 +34,11 @@ const isUniqueConstraintViolation = (error: unknown): boolean =>
  * Records an automatic (Phase 0) refund on the shared ledger.
  *
  * `Refund.orderId` is unique, so this converges on the single row for the
- * order: a row created by the webhook or an earlier attempt is updated to
- * `processed` with the real Razorpay id instead of inserting a duplicate. A
- * concurrent insert that loses the unique race is retried as an update.
+ * order: a row still `requested` (e.g. created by the webhook or a concurrent
+ * claim) is updated to `processed` with the real Razorpay id instead of
+ * inserting a duplicate; a row already `processed`/`failed` is left as the
+ * authoritative record. A concurrent insert that loses the unique race is
+ * retried as an update.
  *
  * The `refund_processed` event is written here (once, guarded by a lookup)
  * because the ledger row now marks the refund as settled before Razorpay's
@@ -61,7 +64,14 @@ const recordAutomaticRefund = async (input: {
       };
 
       if (existing) {
-        await tx.refund.update({ where: { id: existing.id }, data });
+        // Only a still-requested row may be settled here. A row already
+        // `processed` (the webhook reconciled it first) or `failed` (another
+        // attempt owns the outcome) is left untouched: the money has moved,
+        // and overwriting the audit trail would hide a prior reconciliation.
+        await tx.refund.updateMany({
+          where: { id: existing.id, status: "requested" },
+          data,
+        });
       } else {
         await tx.refund.create({
           data: { orderId: input.orderId, ...data },
@@ -76,6 +86,8 @@ const recordAutomaticRefund = async (input: {
         await writeOrderEvent(tx, {
           orderId: input.orderId,
           type: "refund_processed",
+          fromStatus: "pending",
+          toStatus: "refunded",
           actorId: null,
           metadata: {
             refundId: input.razorpayRefundId,
@@ -201,6 +213,10 @@ export const refundAndClose = async (
         orderId,
       })
     );
+  } else {
+    // Post-commit customer notification; the shared helper is idempotent and
+    // never throws, so a mail outage cannot undo the refund.
+    await sendOrderEmail(orderId, "refunded");
   }
 
   return { outcome: "refunded" };

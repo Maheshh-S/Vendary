@@ -568,6 +568,98 @@ describe("PlaceOrder (confirm with payment proof only)", () => {
     expect(refundMock).toHaveBeenCalledTimes(1);
   });
 
+  it("returns a support message and records refund_failed when the late-capture refund fails", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      // The customer cancel wins the confirm claim, then the late-capture
+      // refund call itself fails: the proof stays recorded for support.
+      prismaMock.$transaction.mockImplementation(
+        async (callback: (tx: typeof txMock) => unknown) => {
+          if (txState.status === "pending") {
+            txState = { status: "cancelled", paymentId: "" };
+          }
+          const result = await callback(txMock);
+          orderState = { ...txState };
+          return result;
+        }
+      );
+      refundMock.mockRejectedValue(new Error("razorpay unavailable"));
+
+      const result = await PlaceOrder(signedProof());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.code).toBe("PAYMENT_FAILED");
+      expect(result.message).toMatch(/couldn't refund/i);
+      expect(refundMock).toHaveBeenCalledTimes(1);
+      expect(refundMock).toHaveBeenCalledWith(
+        expect.objectContaining({ reason: "LATE_CAPTURE", orderId: "order_1" })
+      );
+
+      // The capture is claimed (never silently dropped) and the failed attempt
+      // is on the ledger; the order stays cancelled.
+      expect(orderState).toEqual({ status: "cancelled", paymentId: RAZORPAY_PAYMENT_ID });
+      expect(refundRows).toHaveLength(1);
+      expect(refundRows[0]).toMatchObject({
+        orderId: "order_1",
+        reason: "LATE_CAPTURE",
+        status: "failed",
+      });
+
+      const eventTypes = txMock.orderEvent.create.mock.calls.map(
+        (call) => (call[0] as { data: { type: string } }).data.type
+      );
+      expect(eventTypes).toContain("refund_requested");
+      expect(eventTypes).toContain("refund_failed");
+      expect(eventTypes).not.toContain("refund_processed");
+
+      const entries = error.mock.calls.map((call) => JSON.parse(String(call[0])));
+      expect(entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ event: "late_capture_refund_failed", orderId: "order_1" }),
+        ])
+      );
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it("returns CONFLICT when the late capture was already handled elsewhere", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      // The order is observed as cancelled with no proof, but the proof claim
+      // loses: another refund path already recorded the capture.
+      prismaMock.$transaction.mockImplementation(
+        async (callback: (tx: typeof txMock) => unknown) => {
+          txState = { status: "cancelled", paymentId: "" };
+          const result = await callback(txMock);
+          orderState = { ...txState };
+          return result;
+        }
+      );
+      txMock.order.updateMany.mockResolvedValue({ count: 0 });
+      txMock.order.findUniqueOrThrow.mockResolvedValue({
+        status: "cancelled",
+        paymentId: "",
+      });
+
+      const result = await PlaceOrder(signedProof());
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.code).toBe("CONFLICT");
+      expect(refundMock).not.toHaveBeenCalled();
+      expect(refundRows).toHaveLength(0);
+      expect(orderState).toEqual({ status: "cancelled", paymentId: "" });
+      expect(JSON.parse(String(warn.mock.calls[0][0]))).toMatchObject({
+        event: "late_capture_already_claimed",
+        orderId: "order_1",
+      });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("refunds the capture and returns PRICE_CHANGED when current prices drift", async () => {
     prismaMock.product.findMany.mockResolvedValue([{ id: PRODUCT.id, price: "300.00" }]);
 
@@ -605,6 +697,8 @@ describe("PlaceOrder (confirm with payment proof only)", () => {
       data: expect.objectContaining({
         orderId: "order_1",
         type: "refund_processed",
+        fromStatus: "pending",
+        toStatus: "refunded",
         actorId: null,
       }),
     });
@@ -635,6 +729,76 @@ describe("PlaceOrder (confirm with payment proof only)", () => {
     expect(refundRows).toHaveLength(1);
     expect(refundRows[0]).toMatchObject({
       razorpayRefundId: "rfnd_1",
+      status: "processed",
+    });
+  });
+
+  it("retries a P2002 insert race as an update instead of duplicating the ledger row", async () => {
+    prismaMock.product.findMany.mockResolvedValue([{ id: PRODUCT.id, price: "300.00" }]);
+    // A webhook path inserted the row between our read and our insert: the
+    // first read misses it, the insert loses the unique race, and the retry
+    // converges on that row.
+    refundRows = [
+      {
+        id: "refund_row_1",
+        orderId: "order_1",
+        razorpayRefundId: "rfnd_webhook",
+        paymentId: RAZORPAY_PAYMENT_ID,
+        amount: "216.00",
+        reason: "PRICE_CHANGED",
+        status: "requested",
+      },
+    ];
+    txMock.refund.findUnique.mockResolvedValueOnce(null);
+    txMock.refund.create.mockRejectedValueOnce(
+      Object.assign(new Error("Unique constraint failed"), { code: "P2002" })
+    );
+
+    const result = await PlaceOrder(signedProof());
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe("PRICE_CHANGED");
+    // One rejected insert, then an update of the concurrent row.
+    expect(txMock.refund.create).toHaveBeenCalledTimes(1);
+    expect(txMock.refund.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "refund_row_1", status: "requested" } })
+    );
+    expect(refundRows).toHaveLength(1);
+    expect(refundRows[0]).toMatchObject({
+      razorpayRefundId: "rfnd_1",
+      status: "processed",
+    });
+  });
+
+  it("leaves an already-processed ledger row untouched", async () => {
+    prismaMock.product.findMany.mockResolvedValue([{ id: PRODUCT.id, price: "300.00" }]);
+    // A webhook-first reconciliation already settled this refund with the real
+    // Razorpay id; the automatic path must not rewrite that audit trail.
+    refundRows = [
+      {
+        id: "refund_row_1",
+        orderId: "order_1",
+        razorpayRefundId: "rfnd_webhook",
+        paymentId: RAZORPAY_PAYMENT_ID,
+        amount: "216.00",
+        reason: "PRICE_CHANGED",
+        status: "processed",
+      },
+    ];
+
+    const result = await PlaceOrder(signedProof());
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe("PRICE_CHANGED");
+    // The guarded update matches nothing on a processed row.
+    expect(txMock.refund.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "refund_row_1", status: "requested" } })
+    );
+    expect(refundRows).toHaveLength(1);
+    expect(refundRows[0]).toMatchObject({
+      razorpayRefundId: "rfnd_webhook",
       status: "processed",
     });
   });

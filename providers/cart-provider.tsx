@@ -87,7 +87,11 @@ const CartProvider = ({ children }: Props) => {
       return false;
     }
 
-    setItems(mergeCartItem(items, normalized));
+    // Functional write-back: two adds in the same tick both apply to the
+    // latest list instead of the render-closure snapshot. `mergeCartItem`
+    // re-checks the line cap inside the updater, so the cap still holds even
+    // when the closure above is stale.
+    setItems((prev) => mergeCartItem(prev, normalized));
     setIsOpen(true);
     return true;
   }, [items, setItems, setIsOpen]);
