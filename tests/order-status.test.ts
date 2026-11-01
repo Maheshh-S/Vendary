@@ -13,6 +13,7 @@ const { authMock, prismaMock, txMock, invalidateMock, revalidateMock, refundPaym
   vi.hoisted(() => {
     const txMock = {
       order: { findUnique: vi.fn(), updateMany: vi.fn() },
+      orderEvent: { create: vi.fn() },
       product: { updateMany: vi.fn() },
     };
     const prismaMock = { $transaction: vi.fn() };
@@ -258,6 +259,7 @@ beforeEach(() => {
   invalidateMock.mockResolvedValue(undefined);
   revalidateMock.mockReturnValue(undefined);
   txMock.product.updateMany.mockResolvedValue({ count: 1 });
+  txMock.orderEvent.create.mockResolvedValue({ id: "event_1" });
 
   prismaMock.$transaction.mockImplementation(async (callback: (tx: typeof txMock) => unknown) => {
     // Discard the in-transaction writes when the action throws, like a real
@@ -522,6 +524,17 @@ describe("updateOrderStatus stock restoration", () => {
     expect(invalidateMock).toHaveBeenNthCalledWith(1, PRODUCT_A);
     expect(invalidateMock).toHaveBeenNthCalledWith(2, PRODUCT_B);
     expect(invalidateMock).not.toHaveBeenCalledWith(null);
+
+    expect(txMock.orderEvent.create).toHaveBeenCalledTimes(1);
+    expect(txMock.orderEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        orderId: ORDER_ID,
+        type: "status_changed",
+        fromStatus: "confirmed",
+        toStatus: "cancelled",
+        actorId: ADMIN_SESSION.user.id,
+      }),
+    });
 
     expect(revalidateMock).toHaveBeenCalledWith("/admin");
     expect(revalidateMock).toHaveBeenCalledWith("/my-orders");

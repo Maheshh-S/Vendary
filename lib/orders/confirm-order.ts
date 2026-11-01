@@ -4,6 +4,7 @@ import type { OrderStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
+import { writeOrderEvent } from "@/lib/orders/events";
 
 export type ConfirmOrderResult =
   | { status: "confirmed" }
@@ -24,10 +25,15 @@ export type ConfirmOrderResult =
  * failure — including a line whose product was deleted after checkout started
  * (`productId === null`) — throws, rolling back the claim and every earlier
  * decrement. The caller is responsible for refunding the captured payment.
+ *
+ * The `payment_confirmed` event is written in the same transaction as the
+ * claim and stock decrement, so only the transition winner records it exactly
+ * once; a replay observes `already` and writes nothing.
  */
 export const confirmOrder = async (
   orderId: string,
-  paymentId: string
+  paymentId: string,
+  actorId: string | null = null
 ): Promise<ConfirmOrderResult> =>
   prisma.$transaction(async (tx) => {
     const claimed = await tx.order.updateMany({
@@ -73,6 +79,14 @@ export const confirmOrder = async (
         data: { availability: "OUT_OF_STOCK" },
       });
     }
+
+    await writeOrderEvent(tx, {
+      orderId,
+      type: "payment_confirmed",
+      fromStatus: "pending",
+      toStatus: "confirmed",
+      actorId,
+    });
 
     return { status: "confirmed" };
   });

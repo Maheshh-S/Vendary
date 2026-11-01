@@ -15,6 +15,7 @@ const { authMock, prismaMock, txMock, razorpayMock, rateLimitMock, refundMock, r
       address: { create: vi.fn() },
       order: { create: vi.fn(), updateMany: vi.fn(), findUniqueOrThrow: vi.fn() },
       orderItem: { create: vi.fn(), createMany: vi.fn(), findMany: vi.fn() },
+      orderEvent: { create: vi.fn() },
       product: { updateMany: vi.fn() },
     };
     const prismaMock = {
@@ -186,6 +187,7 @@ beforeEach(() => {
   txMock.address.create.mockResolvedValue({ id: "addr_1" });
   txMock.order.create.mockResolvedValue({ id: "order_1" });
   txMock.orderItem.createMany.mockResolvedValue({ count: 1 });
+  txMock.orderEvent.create.mockResolvedValue({ id: "event_1" });
   txMock.order.updateMany.mockImplementation(
     async (args: {
       where: { status?: string; paymentId?: string };
@@ -288,6 +290,17 @@ describe("createRazorpayOrder (durable checkout intent)", () => {
     });
     // Nothing is reserved at init: stock is only decremented on confirmation.
     expect(txMock.product.updateMany).not.toHaveBeenCalled();
+    // The audit trail starts with the order row.
+    expect(txMock.orderEvent.create).toHaveBeenCalledTimes(1);
+    expect(txMock.orderEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        orderId: "order_1",
+        type: "order_placed",
+        fromStatus: null,
+        toStatus: "pending",
+        actorId: USER_ID,
+      }),
+    });
   });
 
   it("returns INTERNAL and logs the orphan Razorpay order when persistence fails", async () => {
@@ -366,13 +379,26 @@ describe("PlaceOrder (confirm with payment proof only)", () => {
       where: { id: PRODUCT.id, availability: "IN_STOCK", stockQty: { gte: 1 } },
       data: { stockQty: { decrement: 1 } },
     });
+    // The transition winner records the confirmation event exactly once.
+    expect(txMock.orderEvent.create).toHaveBeenCalledTimes(1);
+    expect(txMock.orderEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        orderId: "order_1",
+        type: "payment_confirmed",
+        fromStatus: "pending",
+        toStatus: "confirmed",
+        actorId: USER_ID,
+      }),
+    });
     expect(invalidateMock).toHaveBeenCalledWith(PRODUCT.id);
 
     const second = await PlaceOrder(signedProof());
 
     expect(second).toEqual({ ok: true, data: { orderId: "order_1" } });
-    // The replay returns before the confirm transaction: no second decrement.
+    // The replay returns before the confirm transaction: no second decrement
+    // and no duplicate confirmation event.
     expect(txMock.product.updateMany).toHaveBeenCalledTimes(2);
+    expect(txMock.orderEvent.create).toHaveBeenCalledTimes(1);
     expect(razorpayMock.orders.fetch).toHaveBeenCalledTimes(1);
   });
 

@@ -26,6 +26,7 @@ type Props = {
 const EVENT_LABELS: Record<string, string> = {
   order_placed: "Order placed",
   order_created: "Order placed",
+  payment_confirmed: "Payment confirmed",
   order_confirmed: "Payment confirmed",
   status_changed: "Status updated",
   order_shipped: "Order shipped",

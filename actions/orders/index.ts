@@ -11,6 +11,7 @@ import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
 import { computeOrderTotals } from "@/lib/money";
 import { confirmOrder } from "@/lib/orders/confirm-order";
+import { writeOrderEvent } from "@/lib/orders/events";
 import { refundAndClose, restoreOrderStock, type RefundOutcome } from "@/lib/orders/refund";
 import { canAdminTransition } from "@/lib/orders/status";
 import { invalidateProductCache } from "@/lib/product-cache";
@@ -227,6 +228,14 @@ export const createRazorpayOrder = async ({
           })),
         });
 
+        // The timeline is complete from the first render of the order page.
+        await writeOrderEvent(tx, {
+          orderId: created.id,
+          type: "order_placed",
+          toStatus: "pending",
+          actorId: session.user.id,
+        });
+
         return created;
       });
       orderId = order.id;
@@ -365,7 +374,7 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
 
     let confirmation: Awaited<ReturnType<typeof confirmOrder>>;
     try {
-      confirmation = await confirmOrder(order.id, proof.razorpayPaymentId);
+      confirmation = await confirmOrder(order.id, proof.razorpayPaymentId, session.user.id);
     } catch (error) {
       if (error instanceof AppError && error.code === "OUT_OF_STOCK") {
         const refund = await refundAndCloseForAction(order.id, proof.razorpayPaymentId, paidAmountPaise, "OUT_OF_STOCK");
@@ -420,8 +429,8 @@ const ORDER_STATUS_INPUT = z.object({
  * `restoreOrderStock` runs at most once.
  *
  * Phase 0 note: `cancelled`/`refunded` from the admin are record-only
- * overrides — no Razorpay refund is issued here. Phase 1 Task 1.4 wires the
- * refund API into this action.
+ * overrides — no Razorpay refund is issued here. Money-moving refunds go
+ * through `actions/(admin)/orders/refund.ts` (Phase 1 Task 1.4).
  */
 export const updateOrderStatus = async (orderId: string, status: string) =>
   runAction("orders.updateStatus", async () => {
@@ -485,6 +494,14 @@ export const updateOrderStatus = async (orderId: string, status: string) =>
       if (restoreStock) {
         await restoreOrderStock(tx, order.items);
       }
+
+      await writeOrderEvent(tx, {
+        orderId: input.orderId,
+        type: "status_changed",
+        fromStatus: from,
+        toStatus: to,
+        actorId: session.user.id,
+      });
 
       return {
         orderId: input.orderId,
