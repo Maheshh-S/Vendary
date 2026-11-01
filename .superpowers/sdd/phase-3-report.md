@@ -25,6 +25,10 @@ already staged it; the replacement `/api/status` route follows immediately in
 the commit that enables the pre-commit hook (`11ad761`), so the mechanical
 diff is isolated from the hook rollout.
 
+Follow-up after the first report pass: `6c6d448` rejects oversized CSP reports
+by declared `content-length` before buffering them (the post-read length check
+remains). Full unit/format/type/lint checks were re-run after it.
+
 ---
 
 ## Task 3.1 — structured logger + optional Sentry
