@@ -18,7 +18,8 @@
     "format:check": "prettier --check .",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "prisma db seed",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "prepare": "husky"
   },
   "prisma": {
     "seed": "bun prisma/seed.ts"
