@@ -1,0 +1,32 @@
+/* Printable invoice: A4 page, no app chrome or button, black-on-white. */
+@page {
+  size: A4;
+  margin: 14mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  /* App chrome only — the invoice's own <header> must stay visible. */
+  .invoice-actions,
+  nav,
+  .grainy > main > header,
+  .grainy > footer {
+    display: none !important;
+  }
+
+  .invoice {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+
+  .invoice article {
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+}

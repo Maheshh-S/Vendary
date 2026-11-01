@@ -31,6 +31,8 @@ export const serverEnvSchema = z
     EMAIL_FROM: optionalString,
     /** Optional store inbox that receives a copy of every order email. */
     ORDER_NOTIFICATION_EMAIL: optionalString,
+    /** Seller GSTIN printed on invoices; the row is omitted when unset. */
+    SELLER_GSTIN: optionalString,
     REDIS_URL: z.string().url().optional().or(z.literal("")),
     NEXT_PUBLIC_SITE_URL: z.string().url().default("http://localhost:3000"),
   })

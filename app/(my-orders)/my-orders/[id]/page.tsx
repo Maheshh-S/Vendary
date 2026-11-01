@@ -106,6 +106,12 @@ export default async function OrderDetailPage({ params }: Props) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href={`/my-orders/${order.id}/invoice`}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-900"
+          >
+            Invoice
+          </Link>
           <CancelOrderButton orderId={order.id} status={order.status} />
           <span
             className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium capitalize ${statusPillClass(order.status)}`}
