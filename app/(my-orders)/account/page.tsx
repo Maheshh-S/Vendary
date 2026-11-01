@@ -1,19 +1,16 @@
-import Link from "next/link"
-import { redirect } from "next/navigation"
+import Link from "next/link";
+import { redirect } from "next/navigation";
 
-import { auth } from "@/auth"
-import { prisma } from "@/lib/db/prisma"
-import {
-  PasswordForm,
-  ProfileForm,
-} from "@/modules/account/components/profile-forms"
+import { auth } from "@/auth";
+import { prisma } from "@/lib/db/prisma";
+import { PasswordForm, ProfileForm } from "@/modules/account/components/profile-forms";
 
-export const metadata = { title: "Account settings | Vendary" }
+export const metadata = { title: "Account settings | Vendary" };
 
 export default async function AccountPage() {
-  const session = await auth()
+  const session = await auth();
   if (!session?.user?.id) {
-    redirect("/")
+    redirect("/");
   }
 
   const user = await prisma.user.findUnique({
@@ -26,19 +23,17 @@ export default async function AccountPage() {
       profilePic: true,
       password: true,
     },
-  })
+  });
 
   if (!user) {
-    redirect("/")
+    redirect("/");
   }
 
   return (
     <main className="mx-auto my-8 max-w-3xl px-4 sm:px-6 lg:px-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Account settings
-          </h1>
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Account settings</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{user.email}</p>
         </div>
         <div className="flex flex-wrap items-center gap-4 text-sm">
@@ -95,5 +90,5 @@ export default async function AccountPage() {
         </div>
       </section>
     </main>
-  )
+  );
 }

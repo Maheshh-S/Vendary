@@ -24,10 +24,7 @@ export type OrderTotals = {
 export const paiseToRupees = (paise: number): string => (paise / 100).toFixed(2);
 
 export function computeOrderTotals(lines: PricedLine[]): OrderTotals {
-  const subtotalPaise = lines.reduce(
-    (acc, line) => acc + line.unitPaise * line.quantity,
-    0
-  );
+  const subtotalPaise = lines.reduce((acc, line) => acc + line.unitPaise * line.quantity, 0);
   const taxPaise = Math.round(subtotalPaise * GST_RATE);
 
   return {

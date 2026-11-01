@@ -10,7 +10,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import toast from "react-hot-toast";
 import { useMutation } from "@tanstack/react-query";
-import {Login} from "@/actions/auth";
+import { Login } from "@/actions/auth";
 import { LoginSchema, LoginSchemaType } from "@/schemas/auth/login-schema";
 import { Logo } from "@/components/global/logo";
 import GoogleSignInButton from "@/modules/auth/components/google-sign-in-button";
@@ -24,16 +24,13 @@ export default function FormSignIn({ onSuccess }: Props) {
     handleSubmit,
     formState: { errors },
     register,
-    reset
+    reset,
   } = useForm<LoginSchemaType>({
     resolver: zodResolver(LoginSchema),
   });
 
-  const {
-    mutate: login,
-    isPending
-  } = useMutation({
-    mutationKey: ['login'],
+  const { mutate: login, isPending } = useMutation({
+    mutationKey: ["login"],
     mutationFn: Login,
     onSuccess: (data) => {
       reset();
@@ -45,15 +42,17 @@ export default function FormSignIn({ onSuccess }: Props) {
       // performs the navigation itself, so there is nothing to toast.
       if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) return;
       toast.error(error instanceof Error ? error.message : "Something went wrong");
-    }
-  })
+    },
+  });
 
   const onSubmit = (data: LoginSchemaType) => {
     login(data);
   };
   return (
     <div className="mx-auto w-full max-w-md rounded-none p-4 md:p-8">
-      <h2 className="text-xl font-bold">Welcome back to <Logo /></h2>
+      <h2 className="text-xl font-bold">
+        Welcome back to <Logo />
+      </h2>
       <p className="mt-2 max-w-sm text-sm">
         Login to your precious {PROJECT_NAME.toLocaleLowerCase()} account and start your journey.
       </p>
@@ -67,23 +66,14 @@ export default function FormSignIn({ onSuccess }: Props) {
             type="email"
           />
           {errors.email && (
-            <p className="dark:text-red-300 text-red-800 text-sm mt-1">
-              {errors.email.message}
-            </p>
+            <p className="dark:text-red-300 text-red-800 text-sm mt-1">{errors.email.message}</p>
           )}
         </Field>
         <Field className="my-4">
           <Label htmlFor="password">Password</Label>
-          <Input
-            {...register("password")}
-            id="password"
-            placeholder="••••••••"
-            type="password"
-          />
+          <Input {...register("password")} id="password" placeholder="••••••••" type="password" />
           {errors.password && (
-            <p className="dark:text-red-300 text-red-800 text-sm mt-1">
-              {errors.password.message}
-            </p>
+            <p className="dark:text-red-300 text-red-800 text-sm mt-1">{errors.password.message}</p>
           )}
         </Field>
         <div className="-mt-1 text-right">
@@ -95,7 +85,7 @@ export default function FormSignIn({ onSuccess }: Props) {
           </Link>
         </div>
         <Button disabled={isPending} type="submit" className="w-full cursor-pointer mt-6">
-          { isPending ? <IconLoader size={22} className="animate-spin" />: "Sign in" }
+          {isPending ? <IconLoader size={22} className="animate-spin" /> : "Sign in"}
         </Button>
 
         <div className="my-8 h-[1px] w-full bg-gradient-to-r from-transparent via-neutral-300 to-transparent dark:via-neutral-700" />

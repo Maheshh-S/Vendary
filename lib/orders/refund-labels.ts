@@ -15,5 +15,4 @@ const REFUND_REASON_LABELS: Record<string, string> = {
 };
 
 /** Unknown reasons fall back to the raw constant so nothing renders blank. */
-export const refundReasonLabel = (reason: string): string =>
-  REFUND_REASON_LABELS[reason] ?? reason;
+export const refundReasonLabel = (reason: string): string => REFUND_REASON_LABELS[reason] ?? reason;

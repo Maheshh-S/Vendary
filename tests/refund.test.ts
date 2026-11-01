@@ -149,23 +149,21 @@ beforeEach(() => {
       : null
   );
 
-  prismaMock.$transaction.mockImplementation(
-    async (callback: (tx: typeof txMock) => unknown) => {
-      const snapshot = {
-        order: orderRow === null ? null : structuredClone(orderRow),
-        refunds: structuredClone(refundRows),
-        events: structuredClone(events),
-      };
-      try {
-        return await callback(txMock);
-      } catch (error) {
-        orderRow = snapshot.order;
-        refundRows = snapshot.refunds;
-        events = snapshot.events;
-        throw error;
-      }
+  prismaMock.$transaction.mockImplementation(async (callback: (tx: typeof txMock) => unknown) => {
+    const snapshot = {
+      order: orderRow === null ? null : structuredClone(orderRow),
+      refunds: structuredClone(refundRows),
+      events: structuredClone(events),
+    };
+    try {
+      return await callback(txMock);
+    } catch (error) {
+      orderRow = snapshot.order;
+      refundRows = snapshot.refunds;
+      events = snapshot.events;
+      throw error;
     }
-  );
+  });
 
   txMock.order.findUnique.mockImplementation(async () =>
     orderRow
@@ -194,13 +192,11 @@ beforeEach(() => {
     async (args: { where: { orderId: string } }) =>
       refundRows.find((refund) => refund.orderId === args.where.orderId) ?? null
   );
-  txMock.refund.create.mockImplementation(
-    async (args: { data: Omit<RefundRow, "id"> }) => {
-      const refund: RefundRow = { id: "refund_row_1", ...args.data };
-      refundRows.push(refund);
-      return { id: refund.id };
-    }
-  );
+  txMock.refund.create.mockImplementation(async (args: { data: Omit<RefundRow, "id"> }) => {
+    const refund: RefundRow = { id: "refund_row_1", ...args.data };
+    refundRows.push(refund);
+    return { id: refund.id };
+  });
   txMock.refund.update.mockImplementation(
     async (args: { where: { id: string }; data: Partial<RefundRow> }) => {
       const refund = refundRows.find((candidate) => candidate.id === args.where.id);
@@ -225,8 +221,7 @@ beforeEach(() => {
   txMock.orderEvent.findFirst.mockImplementation(
     async (args: { where: { orderId: string; type: string } }) =>
       events.find(
-        (event) =>
-          event.orderId === args.where.orderId && event.type === args.where.type
+        (event) => event.orderId === args.where.orderId && event.type === args.where.type
       ) ?? null
   );
   txMock.orderEvent.create.mockImplementation(async (args: { data: EventRow }) => {
@@ -287,16 +282,13 @@ describe("refundOrder authorization and validation", () => {
 });
 
 describe("refundOrder status gates", () => {
-  it.each(["pending", "cancelled", "refunded"])(
-    "refuses to refund a %s order",
-    async (status) => {
-      orderRow = makeOrder({ status });
+  it.each(["pending", "cancelled", "refunded"])("refuses to refund a %s order", async (status) => {
+    orderRow = makeOrder({ status });
 
-      expectFailure(await refundOrder(ORDER_ID), "CONFLICT");
-      expect(refundPaymentMock).not.toHaveBeenCalled();
-      expect(txMock.refund.create).not.toHaveBeenCalled();
-    }
-  );
+    expectFailure(await refundOrder(ORDER_ID), "CONFLICT");
+    expect(refundPaymentMock).not.toHaveBeenCalled();
+    expect(txMock.refund.create).not.toHaveBeenCalled();
+  });
 
   it("refuses an order with no captured payment proof", async () => {
     orderRow = makeOrder({ paymentId: "" });
@@ -328,11 +320,7 @@ describe("refundOrder success", () => {
     });
     expect(txMock.product.updateMany).toHaveBeenCalledTimes(1);
     expect(invalidateMock).toHaveBeenCalledWith("prod_1");
-    expect(eventTypes()).toEqual([
-      "refund_requested",
-      "status_changed",
-      "refund_processed",
-    ]);
+    expect(eventTypes()).toEqual(["refund_requested", "status_changed", "refund_processed"]);
     expect(events[1]).toMatchObject({
       fromStatus: "confirmed",
       toStatus: "refunded",
@@ -354,11 +342,7 @@ describe("refundOrder success", () => {
       expect(orderRow?.status).toBe("refunded");
       expect(txMock.product.updateMany).not.toHaveBeenCalled();
       expect(invalidateMock).not.toHaveBeenCalled();
-      expect(eventTypes()).toEqual([
-        "refund_requested",
-        "status_changed",
-        "refund_processed",
-      ]);
+      expect(eventTypes()).toEqual(["refund_requested", "status_changed", "refund_processed"]);
       expect(events[1]).toMatchObject({ fromStatus: status, toStatus: "refunded" });
     }
   );

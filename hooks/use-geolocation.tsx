@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { CountryCode, COUNTRY_MAP, CountryInfo } from '../types/country';
+import { useState, useEffect, useCallback } from "react";
+import { CountryCode, COUNTRY_MAP, CountryInfo } from "../types/country";
 
 // Define permission states
 export enum PermissionState {
@@ -57,7 +57,7 @@ export const useGeolocation = () => {
     }
 
     try {
-      const result = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
+      const result = await navigator.permissions.query({ name: "geolocation" as PermissionName });
       return result.state as PermissionState;
     } catch (error) {
       console.error("Error checking geolocation permission:", error);
@@ -67,7 +67,7 @@ export const useGeolocation = () => {
 
   const fetchLocationData = useCallback(async () => {
     if (!navigator.geolocation) {
-      setLocationInfo(prev => ({
+      setLocationInfo((prev) => ({
         ...prev,
         loading: false,
         error: "Geolocation is not supported by your browser",
@@ -76,15 +76,15 @@ export const useGeolocation = () => {
       return;
     }
 
-    setLocationInfo(prev => ({
+    setLocationInfo((prev) => ({
       ...prev,
       loading: true,
     }));
 
     // Check current permission state
     const permState = await checkPermissionState();
-    
-    setLocationInfo(prev => ({
+
+    setLocationInfo((prev) => ({
       ...prev,
       permissionState: permState,
       permissionGranted: permState === PermissionState.GRANTED,
@@ -93,10 +93,10 @@ export const useGeolocation = () => {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords;
-        
+
         try {
           // Update permission states since user allowed
-          setLocationInfo(prev => ({
+          setLocationInfo((prev) => ({
             ...prev,
             permissionGranted: true,
             permissionState: PermissionState.GRANTED,
@@ -105,19 +105,19 @@ export const useGeolocation = () => {
               longitude,
             },
           }));
-          
+
           // Reverse geocoding to get location details
           const response = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`,
-            { headers: { 'Accept': 'application/json' } }
+            { headers: { Accept: "application/json" } }
           );
-          
+
           if (!response.ok) {
-            throw new Error('Failed to fetch location data');
+            throw new Error("Failed to fetch location data");
           }
-          
-          const data = await response.json() as GeocodingResponse;
-          
+
+          const data = (await response.json()) as GeocodingResponse;
+
           // Convert country code to our enum
           const countryCode = data.address.country_code.toUpperCase() as CountryCode;
           const countryInfo = COUNTRY_MAP[countryCode] || {
@@ -125,8 +125,8 @@ export const useGeolocation = () => {
             code: countryCode as CountryCode,
             phoneCode: "",
           };
-          
-          setLocationInfo(prev => ({
+
+          setLocationInfo((prev) => ({
             ...prev,
             country: countryInfo,
             city: data.address.city || null,
@@ -136,7 +136,7 @@ export const useGeolocation = () => {
             error: null,
           }));
         } catch (error) {
-          setLocationInfo(prev => ({
+          setLocationInfo((prev) => ({
             ...prev,
             loading: false,
             error: `Error fetching location data: ${error instanceof Error ? error.message : String(error)}`,
@@ -146,12 +146,13 @@ export const useGeolocation = () => {
       (error) => {
         // Handle specific geolocation errors
         let permState = PermissionState.UNKNOWN;
-        
-        if (error.code === 1) { // PERMISSION_DENIED
+
+        if (error.code === 1) {
+          // PERMISSION_DENIED
           permState = PermissionState.DENIED;
         }
-        
-        setLocationInfo(prev => ({
+
+        setLocationInfo((prev) => ({
           ...prev,
           loading: false,
           error: `Geolocation error: ${error.message}`,

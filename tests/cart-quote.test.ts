@@ -48,10 +48,7 @@ const expectSuccess = <T>(result: ActionResult<T>): T => {
   return result.data;
 };
 
-const expectFailure = (
-  result: ActionResult<unknown>,
-  code: ActionErrorCode
-): void => {
+const expectFailure = (result: ActionResult<unknown>, code: ActionErrorCode): void => {
   expect(result.ok).toBe(false);
   if (result.ok) {
     throw new Error("Expected the action to fail");
@@ -68,9 +65,7 @@ describe("getCartQuote", () => {
   it("re-prices from the database and returns integer paise plus totals", async () => {
     prismaMock.product.findMany.mockResolvedValue([VASE]);
 
-    const data = expectSuccess(
-      await getCartQuote([{ productId: VASE.id, quantity: 2 }])
-    );
+    const data = expectSuccess(await getCartQuote([{ productId: VASE.id, quantity: 2 }]));
 
     expect(data.lines).toEqual([
       {
@@ -107,9 +102,7 @@ describe("getCartQuote", () => {
       { ...VASE, price: new Prisma.Decimal("1499.50") },
     ]);
 
-    const data = expectSuccess(
-      await getCartQuote([{ productId: VASE.id, quantity: 1 }])
-    );
+    const data = expectSuccess(await getCartQuote([{ productId: VASE.id, quantity: 1 }]));
 
     expect(data.lines[0].unitPaise).toBe(149950);
   });
@@ -117,9 +110,7 @@ describe("getCartQuote", () => {
   it("marks a deleted product MISSING and excludes it from totals", async () => {
     prismaMock.product.findMany.mockResolvedValue([]);
 
-    const data = expectSuccess(
-      await getCartQuote([{ productId: "gone", quantity: 3 }])
-    );
+    const data = expectSuccess(await getCartQuote([{ productId: "gone", quantity: 3 }]));
 
     expect(data.lines).toEqual([
       {
@@ -141,13 +132,9 @@ describe("getCartQuote", () => {
     { label: "OUT_OF_STOCK", availability: "OUT_OF_STOCK" as const },
     { label: "PRE_ORDER", availability: "PRE_ORDER" as const },
   ])("blocks a $label product", async ({ availability }) => {
-    prismaMock.product.findMany.mockResolvedValue([
-      { ...VASE, availability, stockQty: 50 },
-    ]);
+    prismaMock.product.findMany.mockResolvedValue([{ ...VASE, availability, stockQty: 50 }]);
 
-    const data = expectSuccess(
-      await getCartQuote([{ productId: VASE.id, quantity: 1 }])
-    );
+    const data = expectSuccess(await getCartQuote([{ productId: VASE.id, quantity: 1 }]));
 
     expect(data.lines[0].issue).toBe("OUT_OF_STOCK");
     // The listed price still contributes to the displayed total.
@@ -157,15 +144,11 @@ describe("getCartQuote", () => {
   it("blocks an under-stocked quantity but accepts an exact stock match", async () => {
     prismaMock.product.findMany.mockResolvedValue([{ ...VASE, stockQty: 3 }]);
 
-    const tooMany = expectSuccess(
-      await getCartQuote([{ productId: VASE.id, quantity: 4 }])
-    );
+    const tooMany = expectSuccess(await getCartQuote([{ productId: VASE.id, quantity: 4 }]));
     expect(tooMany.lines[0].issue).toBe("INSUFFICIENT_STOCK");
     expect(tooMany.lines[0].stockQty).toBe(3);
 
-    const exact = expectSuccess(
-      await getCartQuote([{ productId: VASE.id, quantity: 3 }])
-    );
+    const exact = expectSuccess(await getCartQuote([{ productId: VASE.id, quantity: 3 }]));
     expect(exact.lines[0].issue).toBeNull();
   });
 
@@ -275,9 +258,7 @@ describe("quote helpers", () => {
     ).toBe(true);
     expect(shouldBlockCheckout({ quote: null, isLoading: false })).toBe(true);
     expect(shouldBlockCheckout({ quote, isLoading: false })).toBe(true);
-    expect(
-      shouldBlockCheckout({ quote: cleanQuote, isLoading: true })
-    ).toBe(true);
+    expect(shouldBlockCheckout({ quote: cleanQuote, isLoading: true })).toBe(true);
     expect(
       shouldBlockCheckout({
         quote: cleanQuote,
@@ -289,15 +270,9 @@ describe("quote helpers", () => {
   });
 
   it("labels per-line issues for the cart and checkout summaries", () => {
-    expect(quoteLineIssueLabel({ issue: "MISSING", stockQty: 0 })).toBe(
-      "No longer available"
-    );
-    expect(quoteLineIssueLabel({ issue: "OUT_OF_STOCK", stockQty: 0 })).toBe(
-      "Out of stock"
-    );
-    expect(quoteLineIssueLabel({ issue: "INSUFFICIENT_STOCK", stockQty: 3 })).toBe(
-      "Only 3 left"
-    );
+    expect(quoteLineIssueLabel({ issue: "MISSING", stockQty: 0 })).toBe("No longer available");
+    expect(quoteLineIssueLabel({ issue: "OUT_OF_STOCK", stockQty: 0 })).toBe("Out of stock");
+    expect(quoteLineIssueLabel({ issue: "INSUFFICIENT_STOCK", stockQty: 3 })).toBe("Only 3 left");
     expect(quoteLineIssueLabel({ issue: "INSUFFICIENT_STOCK", stockQty: 0 })).toBe(
       "Not enough stock"
     );

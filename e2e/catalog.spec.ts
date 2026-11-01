@@ -69,7 +69,9 @@ test.describe("catalog", () => {
     await expect(grid.locator('a[href^="/products/"]')).toHaveCount(3);
   });
 
-  test("price filter applies from the controls and hides out-of-range products", async ({ page }) => {
+  test("price filter applies from the controls and hides out-of-range products", async ({
+    page,
+  }) => {
     await page.goto("/products");
 
     await page.getByLabel("Min (₹)").fill("2000");

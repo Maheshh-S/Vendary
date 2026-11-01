@@ -1,48 +1,44 @@
-"use client"
+"use client";
 
-import Link from "next/link"
+import Link from "next/link";
 
-import { formatINR } from "@/lib/format-inr"
-import {
-  computeInvoiceTotals,
-  invoiceNumber,
-  invoiceYear,
-} from "@/lib/orders/invoice"
-import { PROJECT_NAME } from "@/metadata"
+import { formatINR } from "@/lib/format-inr";
+import { computeInvoiceTotals, invoiceNumber, invoiceYear } from "@/lib/orders/invoice";
+import { PROJECT_NAME } from "@/metadata";
 
 export type InvoiceOrderView = {
-  id: string
-  createdAt: string
-  status: string
-  paymentMethod: string
-  total: number
-  taxAmount: number
+  id: string;
+  createdAt: string;
+  status: string;
+  paymentMethod: string;
+  total: number;
+  taxAmount: number;
   items: {
-    id: string
-    productName: string
-    quantity: number
-    price: number
-  }[]
+    id: string;
+    productName: string;
+    quantity: number;
+    price: number;
+  }[];
   address: {
-    firstName: string
-    lastName: string
-    phone: string
-    address: string
-    area: string
-    landmark: string
-    postalCode: string
-    state: string
-    country: string
-  } | null
-}
+    firstName: string;
+    lastName: string;
+    phone: string;
+    address: string;
+    area: string;
+    landmark: string;
+    postalCode: string;
+    state: string;
+    country: string;
+  } | null;
+};
 
-const formatRupees = (paise: number): string => formatINR(paise / 100)
+const formatRupees = (paise: number): string => formatINR(paise / 100);
 
 const formatDate = (value: string): string =>
   new Date(value).toLocaleDateString("en-IN", {
     dateStyle: "long",
     timeZone: "Asia/Kolkata",
-  })
+  });
 
 /**
  * Printable GST invoice. Amounts are derived from the immutable order/item
@@ -53,11 +49,11 @@ export default function Invoice({
   order,
   gstin,
 }: {
-  order: InvoiceOrderView
-  gstin: string | null
+  order: InvoiceOrderView;
+  gstin: string | null;
 }) {
-  const amounts = computeInvoiceTotals(order)
-  const number = invoiceNumber(order.id, invoiceYear(order.createdAt))
+  const amounts = computeInvoiceTotals(order);
+  const number = invoiceNumber(order.id, invoiceYear(order.createdAt));
 
   return (
     <div className="invoice mx-auto my-8 max-w-3xl px-4 sm:px-6">
@@ -124,9 +120,7 @@ export default function Invoice({
             )}
           </div>
           <div>
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Payment
-            </h2>
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Payment</h2>
             <p className="mt-2 text-sm text-gray-800">{order.paymentMethod}</p>
             <p className="text-sm text-gray-600">Paid in INR</p>
           </div>
@@ -143,17 +137,15 @@ export default function Invoice({
           </thead>
           <tbody>
             {order.items.map((item) => {
-              const unitPaise = Math.round(Number(item.price) * 100)
+              const unitPaise = Math.round(Number(item.price) * 100);
               return (
                 <tr key={item.id} className="border-b border-gray-200">
                   <td className="py-2 pr-2">{item.productName}</td>
                   <td className="py-2 pr-2 text-right">{item.quantity}</td>
                   <td className="py-2 pr-2 text-right">{formatRupees(unitPaise)}</td>
-                  <td className="py-2 text-right">
-                    {formatRupees(unitPaise * item.quantity)}
-                  </td>
+                  <td className="py-2 text-right">{formatRupees(unitPaise * item.quantity)}</td>
                 </tr>
-              )
+              );
             })}
           </tbody>
         </table>
@@ -174,10 +166,9 @@ export default function Invoice({
         </dl>
 
         <footer className="mt-8 border-t border-gray-200 pt-4 text-xs text-gray-500">
-          This is a computer-generated invoice. Amounts reflect the order at the
-          time it was placed.
+          This is a computer-generated invoice. Amounts reflect the order at the time it was placed.
         </footer>
       </article>
     </div>
-  )
+  );
 }

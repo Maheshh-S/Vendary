@@ -1,15 +1,15 @@
-import { StarIcon } from '@heroicons/react/20/solid';
-import AddReview from './add-review';
-import type { Session } from 'next-auth';
-import { cn } from '@/lib/utils';
-import type { RatingSummary } from '@/lib/reviews/summary';
-import { ExtendedReviewType } from '../../types/reviews';
-import { Avatar } from '@/components/ui/avatar';
-import NoReviewsState from './no-reviews-state';
-import ReviewActions from './review-actions';
+import { StarIcon } from "@heroicons/react/20/solid";
+import AddReview from "./add-review";
+import type { Session } from "next-auth";
+import { cn } from "@/lib/utils";
+import type { RatingSummary } from "@/lib/reviews/summary";
+import { ExtendedReviewType } from "../../types/reviews";
+import { Avatar } from "@/components/ui/avatar";
+import NoReviewsState from "./no-reviews-state";
+import ReviewActions from "./review-actions";
 
 function classNames(...classes: string[]) {
-  return classes.filter(Boolean).join(' ');
+  return classes.filter(Boolean).join(" ");
 }
 
 interface ReviewsProps {
@@ -40,7 +40,7 @@ export default function Reviews({
       : reviews;
 
   return (
-    <div className='border-t mt-6 border-gray-200'>
+    <div className="border-t mt-6 border-gray-200">
       <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6 sm:py-24 lg:grid lg:max-w-7xl lg:grid-cols-12 lg:gap-x-8 lg:px-8 lg:py-32">
         <div className="lg:col-span-4">
           <h2 className="text-2xl font-bold tracking-tight text-gray-900">Customer Reviews</h2>
@@ -53,8 +53,8 @@ export default function Reviews({
                     key={rating}
                     aria-hidden="true"
                     className={classNames(
-                      averageRating > rating ? 'text-yellow-400' : 'text-gray-300',
-                      'size-5 shrink-0',
+                      averageRating > rating ? "text-yellow-400" : "text-gray-300",
+                      "size-5 shrink-0"
                     )}
                   />
                 ))}
@@ -78,7 +78,10 @@ export default function Reviews({
                     <div aria-hidden="true" className="ml-1 flex flex-1 items-center">
                       <StarIcon
                         aria-hidden="true"
-                        className={classNames(count > 0 ? 'text-yellow-400' : 'text-gray-300', 'size-5 shrink-0')}
+                        className={classNames(
+                          count > 0 ? "text-yellow-400" : "text-gray-300",
+                          "size-5 shrink-0"
+                        )}
                       />
 
                       <div className="relative ml-3 flex-1">
@@ -119,17 +122,16 @@ export default function Reviews({
         <div className="mt-16 lg:col-span-7 lg:col-start-6 lg:mt-0">
           <h3 className="sr-only">Recent reviews</h3>
 
-
           <div className="space-y-8 p-6">
             {totalReviews === 0 && <NoReviewsState session={session} productId={productId} />}
             {displayReviews.map((review) => (
-              <div
-                key={review.id}
-                className="p-6 border-b border-gray-200 transition-all"
-              >
+              <div key={review.id} className="p-6 border-b border-gray-200 transition-all">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <Avatar src={review.user.profilePic || "/default-profile-pic.png"} className="h-12 w-12 border border-gray-300" />
+                    <Avatar
+                      src={review.user.profilePic || "/default-profile-pic.png"}
+                      className="h-12 w-12 border border-gray-300"
+                    />
                     <div>
                       <h4 className="text-lg font-semibold text-gray-900">
                         {review.user.name || "Anonymous"}

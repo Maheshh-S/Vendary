@@ -1,19 +1,19 @@
-import { useState, useEffect } from 'react';
-import CheckoutForm from './_checkout-form';
-import ItemsSummary from './_items-summary';
-import QuoteBanner from './_quote-banner';
-import { PermissionState } from '@/hooks/use-geolocation';
-import { useCartQuote } from '@/hooks/use-cart-quote';
-import { CheckoutSession } from '@/modules/products/types/checkout';
-import { hasBlockingQuoteIssue, shouldBlockCheckout } from '@/schemas/cart/quote-schema';
-import toast from 'react-hot-toast';
+import { useState, useEffect } from "react";
+import CheckoutForm from "./_checkout-form";
+import ItemsSummary from "./_items-summary";
+import QuoteBanner from "./_quote-banner";
+import { PermissionState } from "@/hooks/use-geolocation";
+import { useCartQuote } from "@/hooks/use-cart-quote";
+import { CheckoutSession } from "@/modules/products/types/checkout";
+import { hasBlockingQuoteIssue, shouldBlockCheckout } from "@/schemas/cart/quote-schema";
+import toast from "react-hot-toast";
 
 const useGeolocation = () => {
   const [permissionState, setPermissionState] = useState<PermissionState>(PermissionState.UNKNOWN);
 
   useEffect(() => {
     if (navigator.permissions && navigator.permissions.query) {
-      navigator.permissions.query({ name: 'geolocation' }).then(permissionStatus => {
+      navigator.permissions.query({ name: "geolocation" }).then((permissionStatus) => {
         setPermissionState(permissionStatus.state as PermissionState);
         permissionStatus.onchange = () => {
           setPermissionState(permissionStatus.state as PermissionState);
@@ -35,8 +35,8 @@ const useGeolocation = () => {
 };
 
 type Props = {
-  checkoutSession: CheckoutSession
-}
+  checkoutSession: CheckoutSession;
+};
 
 const CheckoutPageComponent = ({ checkoutSession }: Props) => {
   const { permissionState, requestLocationPermission } = useGeolocation();

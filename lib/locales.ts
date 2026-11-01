@@ -25,11 +25,51 @@ export interface Locale {
 }
 
 export const LOCALES: LocaleOption[] = [
-  { countryCode: "IN", currency: "INR", phonePrefix: "+91", name: "India", flag: "🇮🇳", intlLocale: "en-IN", inrToCurrencyRate: 1 },
-  { countryCode: "US", currency: "USD", phonePrefix: "+1", name: "United States", flag: "🇺🇸", intlLocale: "en-US", inrToCurrencyRate: 0.012 },
-  { countryCode: "GB", currency: "GBP", phonePrefix: "+44", name: "United Kingdom", flag: "🇬🇧", intlLocale: "en-GB", inrToCurrencyRate: 0.0095 },
-  { countryCode: "AE", currency: "AED", phonePrefix: "+971", name: "UAE", flag: "🇦🇪", intlLocale: "en-AE", inrToCurrencyRate: 0.044 },
-  { countryCode: "SG", currency: "SGD", phonePrefix: "+65", name: "Singapore", flag: "🇸🇬", intlLocale: "en-SG", inrToCurrencyRate: 0.016 },
+  {
+    countryCode: "IN",
+    currency: "INR",
+    phonePrefix: "+91",
+    name: "India",
+    flag: "🇮🇳",
+    intlLocale: "en-IN",
+    inrToCurrencyRate: 1,
+  },
+  {
+    countryCode: "US",
+    currency: "USD",
+    phonePrefix: "+1",
+    name: "United States",
+    flag: "🇺🇸",
+    intlLocale: "en-US",
+    inrToCurrencyRate: 0.012,
+  },
+  {
+    countryCode: "GB",
+    currency: "GBP",
+    phonePrefix: "+44",
+    name: "United Kingdom",
+    flag: "🇬🇧",
+    intlLocale: "en-GB",
+    inrToCurrencyRate: 0.0095,
+  },
+  {
+    countryCode: "AE",
+    currency: "AED",
+    phonePrefix: "+971",
+    name: "UAE",
+    flag: "🇦🇪",
+    intlLocale: "en-AE",
+    inrToCurrencyRate: 0.044,
+  },
+  {
+    countryCode: "SG",
+    currency: "SGD",
+    phonePrefix: "+65",
+    name: "Singapore",
+    flag: "🇸🇬",
+    intlLocale: "en-SG",
+    inrToCurrencyRate: 0.016,
+  },
 ];
 
 export const DEFAULT_LOCALE: Locale = {
@@ -102,7 +142,7 @@ export async function refreshFxRates(): Promise<void> {
     }
     window.localStorage.setItem(
       FX_CACHE_KEY,
-      JSON.stringify({ timestamp: Date.now(), rates } satisfies FxCache),
+      JSON.stringify({ timestamp: Date.now(), rates } satisfies FxCache)
     );
   } catch {
     // Offline / API failure: callers fall back to the static table.

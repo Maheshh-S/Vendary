@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MAX_CART_LINES } from "@/lib/cart";
-import {
-  checkoutSessionSchema,
-  placeOrderSchema,
-} from "@/schemas/checkout/place-order-schema";
+import { checkoutSessionSchema, placeOrderSchema } from "@/schemas/checkout/place-order-schema";
 import { confirmPaymentSchema } from "@/schemas/checkout/confirm-payment-schema";
 
 const validAddress = {

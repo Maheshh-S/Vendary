@@ -4,10 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import {
-  PRODUCT_SORTS,
-  type ProductSort,
-} from "@/schemas/products/products-query-schema";
+import { PRODUCT_SORTS, type ProductSort } from "@/schemas/products/products-query-schema";
 
 const SORT_LABELS: Record<ProductSort, string> = {
   newest: "Newest",
@@ -29,12 +26,7 @@ type Props = {
  * (dropping `page` so filters always start at page 1) and lets the server
  * component re-query; no catalog state lives in React.
  */
-export default function CatalogFilters({
-  category,
-  sort,
-  minRupees,
-  maxRupees,
-}: Props) {
+export default function CatalogFilters({ category, sort, minRupees, maxRupees }: Props) {
   const router = useRouter();
   const [sortValue, setSortValue] = useState<ProductSort>(sort);
   const [min, setMin] = useState(minRupees ?? "");

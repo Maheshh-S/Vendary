@@ -24,7 +24,8 @@ const HeroBanner = () => {
       id: 2,
       title: "Rajasthani Puppets",
       subtitle: "Bringing Tradition to Life",
-      description: "Colorful and expressive Rajasthani puppets that make for unique gifts and performances.",
+      description:
+        "Colorful and expressive Rajasthani puppets that make for unique gifts and performances.",
       buttonText: "See collection",
       backgroundColor: "bg-pink-100",
       textColor: "text-pink-800",
@@ -169,9 +170,7 @@ const HeroBanner = () => {
             key={index}
             onClick={() => goToSlide(index)}
             className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full transition-colors ${
-              index === currentSlide
-                ? "bg-gray-800"
-                : "bg-gray-300 hover:bg-gray-400"
+              index === currentSlide ? "bg-gray-800" : "bg-gray-300 hover:bg-gray-400"
             }`}
             aria-label={`Go to slide ${index + 1}`}
             aria-current={index === currentSlide ? "true" : "false"}

@@ -1,14 +1,14 @@
-import * as z from "zod"
+import * as z from "zod";
 
-export const PRODUCT_SORTS = ["newest", "price_asc", "price_desc", "name_asc"] as const
+export const PRODUCT_SORTS = ["newest", "price_asc", "price_desc", "name_asc"] as const;
 
-export type ProductSort = (typeof PRODUCT_SORTS)[number]
+export type ProductSort = (typeof PRODUCT_SORTS)[number];
 
 /**
  * Defensive upper bound for the URL page number: `skip` grows linearly, so an
  * arbitrarily large page must never reach Prisma.
  */
-export const MAX_PRODUCTS_PAGE = 10_000
+export const MAX_PRODUCTS_PAGE = 10_000;
 
 /**
  * Price bounds arrive as paise (integer) from the action boundary. An empty
@@ -22,7 +22,7 @@ const optionalPaise = z.preprocess(
     .int("Price bounds must be whole paise")
     .min(0, "Price cannot be negative")
     .optional()
-)
+);
 
 /**
  * Public catalog query boundary. Numbers arrive as URL strings, so they are
@@ -44,11 +44,7 @@ export const productsQuerySchema = z
       .min(1, "Page size must be at least 1")
       .max(48, "Page size cannot exceed 48")
       .default(24),
-    category: z
-      .string()
-      .trim()
-      .max(60, "Category cannot exceed 60 characters")
-      .optional(),
+    category: z.string().trim().max(60, "Category cannot exceed 60 characters").optional(),
     sort: z.enum(PRODUCT_SORTS).default("newest"),
     minPricePaise: optionalPaise,
     maxPricePaise: optionalPaise,
@@ -62,6 +58,6 @@ export const productsQuerySchema = z
       message: "Minimum price cannot exceed maximum price",
       path: ["maxPricePaise"],
     }
-  )
+  );
 
-export type ProductsQuery = z.infer<typeof productsQuerySchema>
+export type ProductsQuery = z.infer<typeof productsQuerySchema>;

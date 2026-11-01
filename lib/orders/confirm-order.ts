@@ -7,8 +7,7 @@ import { AppError } from "@/lib/errors";
 import { writeOrderEvent } from "@/lib/orders/events";
 
 export type ConfirmOrderResult =
-  | { status: "confirmed" }
-  | { status: "already"; current: OrderStatus; paymentId: string };
+  { status: "confirmed" } | { status: "already"; current: OrderStatus; paymentId: string };
 
 /**
  * Claims a pending order and decrements stock in one transaction.

@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  PRODUCT_SORTS,
-  productsQuerySchema,
-} from "@/schemas/products/products-query-schema";
+import { PRODUCT_SORTS, productsQuerySchema } from "@/schemas/products/products-query-schema";
 import { searchProductsSchema } from "@/schemas/products/search-schema";
 
 /**

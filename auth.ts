@@ -1,67 +1,66 @@
-import NextAuth from "next-auth"
-import {prisma} from "@/lib/db/prisma"
-import { PrismaAdapter } from "@auth/prisma-adapter"
+import NextAuth from "next-auth";
+import { prisma } from "@/lib/db/prisma";
+import { PrismaAdapter } from "@auth/prisma-adapter";
 import authConfig from "@/auth.config";
 import { GetUserById } from "./actions/user";
 const db = prisma;
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
-	pages: {
-		signIn: '/login',
-		error: '/error'
-	},
-	adapter: PrismaAdapter(db),
-	session: {
-		strategy: "jwt",
-	},
-	callbacks: {
-		async signIn({ user, account }){
-			const existingUser = await GetUserById(user.id);
-			if(account?.provider !== "credentials"){
-				//allow OAuth users to login without email verification
-				return true;
-			}
-			if(!existingUser || !existingUser?.emailVerified){
-				//dont allow non verified users to login
-				return false;
-			}
-			// TODO : Add 2FA check
-			return true;
-		},
-		async jwt({token}){
-			if(!token.sub) return token; //User Logged Out
-			const existingUser = await GetUserById(token.sub);
-			if(!existingUser) return token;
-			token.role = existingUser.role;
-			token.email = existingUser.email;
-			const nameParts = [existingUser.firstName, existingUser.lastName]
-				.map((part) => part?.trim())
-				.filter((part): part is string => Boolean(part));
-			// Prefer the stored display name; otherwise join only the parts that
-			// exist so an OAuth user without a first/last name never shows
-			// "null null" in the header.
-			token.name =
-				existingUser.name?.trim() || (nameParts.length > 0 ? nameParts.join(" ") : null);
-			token.picture = existingUser.image ?? existingUser.profilePic ?? null;
+  pages: {
+    signIn: "/login",
+    error: "/error",
+  },
+  adapter: PrismaAdapter(db),
+  session: {
+    strategy: "jwt",
+  },
+  callbacks: {
+    async signIn({ user, account }) {
+      const existingUser = await GetUserById(user.id);
+      if (account?.provider !== "credentials") {
+        //allow OAuth users to login without email verification
+        return true;
+      }
+      if (!existingUser || !existingUser?.emailVerified) {
+        //dont allow non verified users to login
+        return false;
+      }
+      // TODO : Add 2FA check
+      return true;
+    },
+    async jwt({ token }) {
+      if (!token.sub) return token; //User Logged Out
+      const existingUser = await GetUserById(token.sub);
+      if (!existingUser) return token;
+      token.role = existingUser.role;
+      token.email = existingUser.email;
+      const nameParts = [existingUser.firstName, existingUser.lastName]
+        .map((part) => part?.trim())
+        .filter((part): part is string => Boolean(part));
+      // Prefer the stored display name; otherwise join only the parts that
+      // exist so an OAuth user without a first/last name never shows
+      // "null null" in the header.
+      token.name = existingUser.name?.trim() || (nameParts.length > 0 ? nameParts.join(" ") : null);
+      token.picture = existingUser.image ?? existingUser.profilePic ?? null;
 
-			return token;
-		},
-		async session({session, token}){
-			if(token.sub && session.user){
-				session.user.id = token.sub;
-			}
-			if(token.role && session.user){
-				session.user.role = token.role;
-			}
-			if(token.picture && session.user){
-				session.user.image = token.picture;
-			}
-			if(session.user && token.email){
-				session.user.name = token.name;
-				session.user.email = token.email;
-			}
-			return session;
-		}
-	},
-	...authConfig
-})
+      return token;
+    },
+    async session({ session, token }) {
+      if (token.sub && session.user) {
+        session.user.id = token.sub;
+      }
+      if (token.role && session.user) {
+        session.user.role = token.role;
+      }
+      if (token.picture && session.user) {
+        session.user.image = token.picture;
+      }
+      if (session.user && token.email) {
+        session.user.name = token.name;
+        session.user.email = token.email;
+      }
+      return session;
+    },
+  },
+  ...authConfig,
+});

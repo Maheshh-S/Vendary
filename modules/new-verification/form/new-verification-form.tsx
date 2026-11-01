@@ -71,8 +71,8 @@ export default function NewVerficationForm() {
               ) : (
                 <div>
                   <p className="mt-6 text-base text-gray-600 dark:text-gray-400">
-                    You have successfully verified your email address. You can
-                    now use all the features of {PROJECT_NAME}.
+                    You have successfully verified your email address. You can now use all the
+                    features of {PROJECT_NAME}.
                   </p>
                   <Button className="my-4" href="/login">
                     Login
@@ -124,8 +124,7 @@ function Example() {
     </form>
   );
 }
-                        `
-                      }
+                        `}
                       />
                     </div>
                   </div>

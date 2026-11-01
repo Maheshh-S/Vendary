@@ -1,5 +1,5 @@
-@import 'tailwindcss';
-@import './typography.css' layer(components);
+@import "tailwindcss";
+@import "./typography.css" layer(components);
 
 @custom-variant dark (&:where(.dark, .dark *));
 

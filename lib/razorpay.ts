@@ -1,4 +1,4 @@
-import crypto from "crypto"
+import crypto from "crypto";
 
 /**
  * Pure Razorpay signature verification, split out of the server actions so
@@ -14,15 +14,15 @@ export const verifyRazorpayPaymentSignature = (
 ): boolean => {
   // Fail closed: without the secret no signature can be trusted.
   if (!keySecret) {
-    return false
+    return false;
   }
-  const text = `${razorpayOrderId}|${razorpayPaymentId}`
-  const expected = crypto.createHmac("sha256", keySecret).update(text).digest("hex")
+  const text = `${razorpayOrderId}|${razorpayPaymentId}`;
+  const expected = crypto.createHmac("sha256", keySecret).update(text).digest("hex");
 
-  const a = Buffer.from(expected, "hex")
-  const b = Buffer.from(razorpaySignature, "hex")
-  return a.length === b.length && crypto.timingSafeEqual(a, b)
-}
+  const a = Buffer.from(expected, "hex");
+  const b = Buffer.from(razorpaySignature, "hex");
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+};
 
 export const verifyRazorpayWebhookSignature = (
   rawBody: string,
@@ -30,15 +30,15 @@ export const verifyRazorpayWebhookSignature = (
   webhookSecret: string | undefined
 ): boolean => {
   if (!webhookSecret || !signature) {
-    return false
+    return false;
   }
-  const expected = crypto.createHmac("sha256", webhookSecret).update(rawBody).digest("hex")
+  const expected = crypto.createHmac("sha256", webhookSecret).update(rawBody).digest("hex");
 
-  const a = Buffer.from(expected, "hex")
-  const b = Buffer.from(signature, "hex")
-  return a.length === b.length && crypto.timingSafeEqual(a, b)
-}
+  const a = Buffer.from(expected, "hex");
+  const b = Buffer.from(signature, "hex");
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+};
 
 /** Test/debug helper — produces a valid signature for the given secret. */
 export const signRazorpayPayload = (text: string, secret: string): string =>
-  crypto.createHmac("sha256", secret).update(text).digest("hex")
+  crypto.createHmac("sha256", secret).update(text).digest("hex");

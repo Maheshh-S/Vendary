@@ -1,4 +1,3 @@
-
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db/prisma";
 import { serializePrismaObject } from "@/lib/db/serializer";
@@ -51,11 +50,13 @@ export default async function MyOrdersPage() {
                 </p>
 
                 <ul className="mt-3 space-y-1">
-                  {order.items.map((item: { id: string; productName: string; quantity: number }) => (
-                    <li key={item.id} className="text-sm text-gray-700 dark:text-gray-300">
-                      {item.productName} × {item.quantity}
-                    </li>
-                  ))}
+                  {order.items.map(
+                    (item: { id: string; productName: string; quantity: number }) => (
+                      <li key={item.id} className="text-sm text-gray-700 dark:text-gray-300">
+                        {item.productName} × {item.quantity}
+                      </li>
+                    )
+                  )}
                 </ul>
 
                 <div className="mt-3 flex items-center justify-between">
@@ -69,9 +70,8 @@ export default async function MyOrdersPage() {
 
                 {order.address && (
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    {order.address.firstName} {order.address.lastName},{" "}
-                    {order.address.address}, {order.address.area},{" "}
-                    {order.address.postalCode}
+                    {order.address.firstName} {order.address.lastName}, {order.address.address},{" "}
+                    {order.address.area}, {order.address.postalCode}
                   </p>
                 )}
               </Link>

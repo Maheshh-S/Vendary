@@ -288,9 +288,7 @@ describe("GetProducts", () => {
   it("converts paise price bounds to rupee Decimal filters shared by list and count", async () => {
     prismaMock.product.count.mockResolvedValue(5);
 
-    expectSuccess(
-      await GetProducts({ minPricePaise: 200000, maxPricePaise: 300050 })
-    );
+    expectSuccess(await GetProducts({ minPricePaise: 200000, maxPricePaise: 300050 }));
 
     const [findArgs] = prismaMock.product.findMany.mock.calls[0];
     const [countArgs] = prismaMock.product.count.mock.calls[0];
@@ -327,9 +325,7 @@ describe("GetProducts", () => {
   it("coerces URL strings and computes skip from the page", async () => {
     prismaMock.product.count.mockResolvedValue(25);
 
-    const data = expectSuccess(
-      await GetProducts({ page: "3", pageSize: "10", sort: "name_asc" })
-    );
+    const data = expectSuccess(await GetProducts({ page: "3", pageSize: "10", sort: "name_asc" }));
 
     expect(data.page).toBe(3);
     expect(data.pageSize).toBe(10);
@@ -469,11 +465,7 @@ describe("addReview", () => {
       })
     );
 
-    expectFailure(
-      await addReview(REVIEW_INPUT),
-      "CONFLICT",
-      "You already reviewed this product."
-    );
+    expectFailure(await addReview(REVIEW_INPUT), "CONFLICT", "You already reviewed this product.");
     expect(revalidateMock).not.toHaveBeenCalled();
   });
 });

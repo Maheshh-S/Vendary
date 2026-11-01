@@ -20,12 +20,14 @@ const STATUS_COPY: Record<OrderStatusEmailKind, StatusCopy> = {
   },
   cancelled: {
     heading: "Your order was cancelled",
-    intro: "This order has been cancelled. If a payment was captured, the refund is recorded against the same order.",
+    intro:
+      "This order has been cancelled. If a payment was captured, the refund is recorded against the same order.",
     note: "No further action is needed unless you were expecting this order.",
   },
   refunded: {
     heading: "Your refund was processed",
-    intro: "We've processed a refund for this order. Your bank or card issuer may take a few business days to post it.",
+    intro:
+      "We've processed a refund for this order. Your bank or card issuer may take a few business days to post it.",
     note: "The refund reference is available from support if you need it.",
   },
 };

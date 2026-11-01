@@ -147,11 +147,7 @@ beforeEach(() => {
 
   prismaMock.order.findFirst.mockImplementation(
     async (args: { where: { id: string; userId: string } }) => {
-      if (
-        !orderRow ||
-        args.where.id !== orderRow.id ||
-        args.where.userId !== orderRow.userId
-      ) {
+      if (!orderRow || args.where.id !== orderRow.id || args.where.userId !== orderRow.userId) {
         return null;
       }
       return {
@@ -163,23 +159,21 @@ beforeEach(() => {
     }
   );
 
-  prismaMock.$transaction.mockImplementation(
-    async (callback: (tx: typeof txMock) => unknown) => {
-      const snapshot = {
-        order: orderRow === null ? null : structuredClone(orderRow),
-        refunds: structuredClone(refundRows),
-        events: structuredClone(events),
-      };
-      try {
-        return await callback(txMock);
-      } catch (error) {
-        orderRow = snapshot.order;
-        refundRows = snapshot.refunds;
-        events = snapshot.events;
-        throw error;
-      }
+  prismaMock.$transaction.mockImplementation(async (callback: (tx: typeof txMock) => unknown) => {
+    const snapshot = {
+      order: orderRow === null ? null : structuredClone(orderRow),
+      refunds: structuredClone(refundRows),
+      events: structuredClone(events),
+    };
+    try {
+      return await callback(txMock);
+    } catch (error) {
+      orderRow = snapshot.order;
+      refundRows = snapshot.refunds;
+      events = snapshot.events;
+      throw error;
     }
-  );
+  });
 
   txMock.order.findUnique.mockImplementation(async () =>
     orderRow
@@ -208,10 +202,7 @@ beforeEach(() => {
       if (args.where.status !== undefined && args.where.status !== orderRow.status) {
         return { count: 0 };
       }
-      if (
-        args.where.paymentId !== undefined &&
-        args.where.paymentId !== orderRow.paymentId
-      ) {
+      if (args.where.paymentId !== undefined && args.where.paymentId !== orderRow.paymentId) {
         return { count: 0 };
       }
       if (args.data.status !== undefined) {
@@ -225,13 +216,11 @@ beforeEach(() => {
     async (args: { where: { orderId: string } }) =>
       refundRows.find((refund) => refund.orderId === args.where.orderId) ?? null
   );
-  txMock.refund.create.mockImplementation(
-    async (args: { data: Omit<RefundRow, "id"> }) => {
-      const refund: RefundRow = { id: "refund_row_1", ...args.data };
-      refundRows.push(refund);
-      return { id: refund.id };
-    }
-  );
+  txMock.refund.create.mockImplementation(async (args: { data: Omit<RefundRow, "id"> }) => {
+    const refund: RefundRow = { id: "refund_row_1", ...args.data };
+    refundRows.push(refund);
+    return { id: refund.id };
+  });
   txMock.refund.update.mockImplementation(
     async (args: { where: { id: string }; data: Partial<RefundRow> }) => {
       const refund = refundRows.find((candidate) => candidate.id === args.where.id);
@@ -257,16 +246,13 @@ beforeEach(() => {
   txMock.orderEvent.findFirst.mockImplementation(
     async (args: { where: { orderId: string; type: string } }) =>
       events.find(
-        (event) =>
-          event.orderId === args.where.orderId && event.type === args.where.type
+        (event) => event.orderId === args.where.orderId && event.type === args.where.type
       ) ?? null
   );
-  txMock.orderEvent.create.mockImplementation(
-    async (args: { data: EventRow }) => {
-      events.push(args.data);
-      return { id: `event_${events.length}` };
-    }
-  );
+  txMock.orderEvent.create.mockImplementation(async (args: { data: EventRow }) => {
+    events.push(args.data);
+    return { id: `event_${events.length}` };
+  });
 });
 
 afterAll(() => {
@@ -364,13 +350,11 @@ describe("cancelOrder pending orders", () => {
 
 describe("cancelOrder failed-refund retry safety", () => {
   it("lets exactly one of two concurrent retries proceed", async () => {
-    refundRows = [
-      makeRefund({ status: "failed", razorpayRefundId: "pending:old" }),
-    ];
+    refundRows = [makeRefund({ status: "failed", razorpayRefundId: "pending:old" })];
 
     // No rollback: the losing claim writes nothing, so there is nothing to undo.
-    prismaMock.$transaction.mockImplementation(
-      async (callback: (tx: typeof txMock) => unknown) => callback(txMock)
+    prismaMock.$transaction.mockImplementation(async (callback: (tx: typeof txMock) => unknown) =>
+      callback(txMock)
     );
 
     const results = await Promise.all([cancelOrder(ORDER_ID), cancelOrder(ORDER_ID)]);
@@ -392,9 +376,7 @@ describe("cancelOrder failed-refund retry safety", () => {
   });
 
   it("does not clobber a processed refund or add an event on a late failure", async () => {
-    refundRows = [
-      makeRefund({ status: "processed", razorpayRefundId: "rfnd_1" }),
-    ];
+    refundRows = [makeRefund({ status: "processed", razorpayRefundId: "rfnd_1" })];
 
     await failOrderRefund({
       orderId: ORDER_ID,
@@ -443,11 +425,7 @@ describe("cancelOrder confirmed orders (full refund)", () => {
       data: { stockQty: { increment: 2 }, availability: "IN_STOCK" },
     });
     expect(invalidateMock).toHaveBeenCalledWith("prod_1");
-    expect(eventTypes()).toEqual([
-      "refund_requested",
-      "order_cancelled",
-      "refund_processed",
-    ]);
+    expect(eventTypes()).toEqual(["refund_requested", "order_cancelled", "refund_processed"]);
     expect(events[1]).toMatchObject({
       fromStatus: "confirmed",
       toStatus: "cancelled",
@@ -474,9 +452,7 @@ describe("cancelOrder confirmed orders (full refund)", () => {
   });
 
   it("retries a failed refund against the same ledger row", async () => {
-    refundRows = [
-      makeRefund({ status: "failed", razorpayRefundId: "pending:old" }),
-    ];
+    refundRows = [makeRefund({ status: "failed", razorpayRefundId: "pending:old" })];
 
     const result = await cancelOrder(ORDER_ID);
 

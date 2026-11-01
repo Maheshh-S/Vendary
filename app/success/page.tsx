@@ -1,28 +1,28 @@
-"use client"
-import React, { useEffect, useState } from 'react';
+"use client";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 
 const ConfettiParticle = ({ index }: { index: number }) => {
-  const colors = ['#FFD700', '#FF6347', '#4169E1', '#32CD32', '#FF69B4', '#9370DB'];
+  const colors = ["#FFD700", "#FF6347", "#4169E1", "#32CD32", "#FF69B4", "#9370DB"];
   const randomColor = colors[Math.floor(Math.random() * colors.length)];
   const randomLeft = `${Math.random() * 100}%`;
   const randomSize = `${Math.random() * 0.6 + 0.4}rem`;
   const randomDuration = `${Math.random() * 3 + 2}s`;
   const randomDelay = `${Math.random() * 2}s`;
-  
+
   return (
-    <div 
+    <div
       className="absolute top-0 animate-fall"
       style={{
         left: randomLeft,
         width: randomSize,
         height: randomSize,
         backgroundColor: randomColor,
-        borderRadius: index % 3 === 0 ? '50%' : '0',
+        borderRadius: index % 3 === 0 ? "50%" : "0",
         animation: `fall ${randomDuration} ease-in ${randomDelay} forwards`,
         opacity: 0,
         zIndex: 10,
-        transform: `rotate(${Math.random() * 360}deg)`
+        transform: `rotate(${Math.random() * 360}deg)`,
       }}
     />
   );
@@ -34,9 +34,9 @@ export default function SuccessPage() {
   useEffect(() => {
     // Generate confetti particles
     setParticles(Array.from({ length: 80 }, (_, i) => i));
-    
+
     // Add animation keyframes
-    const style = document.createElement('style');
+    const style = document.createElement("style");
     style.textContent = `
       @keyframes fall {
         0% {
@@ -73,7 +73,7 @@ export default function SuccessPage() {
       }
     `;
     document.head.appendChild(style);
-    
+
     return () => {
       document.head.removeChild(style);
     };
@@ -85,16 +85,33 @@ export default function SuccessPage() {
         {particles.map((index) => (
           <ConfettiParticle key={index} index={index} />
         ))}
-        
-        <div className="text-center animate-slideIn" style={{ animation: 'slideIn 0.8s ease-out forwards' }}>
+
+        <div
+          className="text-center animate-slideIn"
+          style={{ animation: "slideIn 0.8s ease-out forwards" }}
+        >
           <div className="flex justify-center mb-6">
-            <div className="w-24 h-24 rounded-full bg-green-100 flex items-center justify-center animate-pulse" style={{ animation: 'pulse 2s infinite' }}>
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            <div
+              className="w-24 h-24 rounded-full bg-green-100 flex items-center justify-center animate-pulse"
+              style={{ animation: "pulse 2s infinite" }}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-12 w-12 text-green-600"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
               </svg>
             </div>
           </div>
-          
+
           <h1 className="mt-4 text-5xl font-semibold tracking-tight text-balance text-gray-900 sm:text-7xl">
             Order Successful 🎉
           </h1>

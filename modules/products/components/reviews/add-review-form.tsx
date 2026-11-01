@@ -5,10 +5,7 @@ import { Loader2, Star } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import {
-  AddReviewInput,
-  AddReviewSchema,
-} from "@/schemas/products/reviews/review-schema";
+import { AddReviewInput, AddReviewSchema } from "@/schemas/products/reviews/review-schema";
 import { addReview } from "@/actions/products/reviews/add-review";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,9 +32,7 @@ export default function AddReviewForm({
   const router = useRouter();
 
   /** Surfaces server field errors under their inputs; returns the first. */
-  const applyServerFieldErrors = (
-    fieldErrors?: Record<string, string[]>
-  ): string | undefined => {
+  const applyServerFieldErrors = (fieldErrors?: Record<string, string[]>): string | undefined => {
     if (!fieldErrors) return undefined;
 
     let firstMessage: string | undefined;
@@ -96,9 +91,7 @@ export default function AddReviewForm({
             />
           ))}
         </div>
-        {errors.rating && (
-          <p className="text-red-500">{errors.rating.message}</p>
-        )}
+        {errors.rating && <p className="text-red-500">{errors.rating.message}</p>}
 
         <Textarea
           placeholder="Write your review..."
@@ -106,22 +99,14 @@ export default function AddReviewForm({
           className="w-full p-2 rounded-md"
           rows={12}
         />
-        {errors.review && (
-          <p className="text-red-500">{errors.review.message}</p>
-        )}
-        {errors.root && (
-          <p className="text-red-500">{errors.root.message}</p>
-        )}
+        {errors.review && <p className="text-red-500">{errors.review.message}</p>}
+        {errors.root && <p className="text-red-500">{errors.root.message}</p>}
 
         <div className="flex items-center justify-between">
-        <Button plain onClick={() => setIsOpen(false)}>
+          <Button plain onClick={() => setIsOpen(false)}>
             Cancel
           </Button>
-          <Button
-            disabled={addReviewMutation.isPending}
-            type="submit"
-            color="sky"
-          >
+          <Button disabled={addReviewMutation.isPending} type="submit" color="sky">
             {addReviewMutation.isPending ? (
               <Loader2 className="animate-spin h-5 w-5" />
             ) : (

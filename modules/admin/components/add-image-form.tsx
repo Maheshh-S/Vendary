@@ -1,30 +1,37 @@
-import { useForm, useFieldArray } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import type { Prisma } from "@prisma/client"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { cn } from "@/lib/utils"
-import { Badge } from "@/components/ui/badge"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { useMutation } from "@tanstack/react-query"
-import { addImagesToProduct } from "@/actions/(admin)/product/add-image"
-import { imageFormSchema, type ImageFormValues } from "@/schemas/admin/products/add-image-schema"
-import toast from "react-hot-toast"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { PlusCircle, Trash2 } from "lucide-react"
+import { useForm, useFieldArray } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import type { Prisma } from "@prisma/client";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { useMutation } from "@tanstack/react-query";
+import { addImagesToProduct } from "@/actions/(admin)/product/add-image";
+import { imageFormSchema, type ImageFormValues } from "@/schemas/admin/products/add-image-schema";
+import toast from "react-hot-toast";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PlusCircle, Trash2 } from "lucide-react";
 
 type Props = {
   product: Prisma.ProductGetPayload<{
     include: {
-      category: true
-      images: true
-      videos: true
-    }
-  }>
-}
+      category: true;
+      images: true;
+      videos: true;
+    };
+  }>;
+};
 
-type FormValues = ImageFormValues
+type FormValues = ImageFormValues;
 
 const AddImageForm = ({ product }: Props) => {
   const form = useForm<FormValues>({
@@ -32,51 +39,51 @@ const AddImageForm = ({ product }: Props) => {
     defaultValues: {
       images: [],
     },
-  })
+  });
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "images",
-  })
+  });
 
   const mutation = useMutation({
     mutationFn: (imageData: FormValues) => addImagesToProduct(product.id, imageData),
     onSuccess: (res) => {
       if (!res.ok) {
-        const detail = res.fieldErrors ? Object.values(res.fieldErrors).flat()[0] : undefined
-        toast.error(detail ?? res.message, { id: "add-image" })
-        return
+        const detail = res.fieldErrors ? Object.values(res.fieldErrors).flat()[0] : undefined;
+        toast.error(detail ?? res.message, { id: "add-image" });
+        return;
       }
-      toast.success("Images added successfully", { id: "add-image" })
-      form.reset({ images: [] })
+      toast.success("Images added successfully", { id: "add-image" });
+      form.reset({ images: [] });
     },
     onError: () => {
-      toast.error("Failed to add images", { id: "add-image" })
+      toast.error("Failed to add images", { id: "add-image" });
     },
     onMutate: () => {
-      toast.loading("Adding images", { id: "add-image" })
+      toast.loading("Adding images", { id: "add-image" });
     },
-  })
+  });
 
   const onSubmit = (data: FormValues) => {
-    mutation.mutate(data)
-  }
+    mutation.mutate(data);
+  };
 
   const handleAddImage = () => {
-    append({ url: "", isMain: false })
-  }
+    append({ url: "", isMain: false });
+  };
 
   const handleMainImageChange = (index: number, checked: boolean) => {
     if (checked) {
-      const currentImages = form.getValues("images")
+      const currentImages = form.getValues("images");
       currentImages.forEach((_, i) => {
         if (i !== index) {
-          form.setValue(`images.${i}.isMain`, false)
+          form.setValue(`images.${i}.isMain`, false);
         }
-      })
+      });
     }
-    form.setValue(`images.${index}.isMain`, checked)
-  }
+    form.setValue(`images.${index}.isMain`, checked);
+  };
 
   return (
     <Form {...form}>
@@ -122,10 +129,14 @@ const AddImageForm = ({ product }: Props) => {
                               <FormControl>
                                 <Checkbox
                                   checked={field.value}
-                                  onCheckedChange={(checked) => handleMainImageChange(index, checked as boolean)}
+                                  onCheckedChange={(checked) =>
+                                    handleMainImageChange(index, checked as boolean)
+                                  }
                                 />
                               </FormControl>
-                              <FormLabel className="font-normal">Set as main product image</FormLabel>
+                              <FormLabel className="font-normal">
+                                Set as main product image
+                              </FormLabel>
                             </FormItem>
                           )}
                         />
@@ -140,13 +151,11 @@ const AddImageForm = ({ product }: Props) => {
                               form.setError(`images.${index}.url`, {
                                 type: "manual",
                                 message: "Failed to load image",
-                              })
+                              });
                             }}
                           />
                           {form.watch(`images.${index}.isMain`) && (
-                            <Badge className="absolute top-2 left-2 z-10">
-                              Main Image
-                            </Badge>
+                            <Badge className="absolute top-2 left-2 z-10">Main Image</Badge>
                           )}
                         </div>
                       )}
@@ -175,10 +184,10 @@ const AddImageForm = ({ product }: Props) => {
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {fields.map((field, index) => {
-                  const imageUrl = form.watch(`images.${index}.url`)
-                  const isMain = form.watch(`images.${index}.isMain`)
+                  const imageUrl = form.watch(`images.${index}.url`);
+                  const isMain = form.watch(`images.${index}.isMain`);
 
-                  if (!imageUrl) return null
+                  if (!imageUrl) return null;
 
                   return (
                     <div
@@ -186,7 +195,7 @@ const AddImageForm = ({ product }: Props) => {
                       className={cn(
                         "group relative aspect-square overflow-hidden rounded-lg",
                         "transition-all duration-300 hover:shadow-lg",
-                        isMain ? "ring-2 ring-primary ring-offset-2" : "border border-border",
+                        isMain ? "ring-2 ring-primary ring-offset-2" : "border border-border"
                       )}
                     >
                       <img
@@ -194,11 +203,7 @@ const AddImageForm = ({ product }: Props) => {
                         alt={`Product image ${index + 1}`}
                         className="h-full w-full object-cover"
                       />
-                      {isMain && (
-                        <Badge className="absolute top-2 left-2 z-10">
-                          Main Image
-                        </Badge>
-                      )}
+                      {isMain && <Badge className="absolute top-2 left-2 z-10">Main Image</Badge>}
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                       <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                         <Button onClick={() => remove(index)}>
@@ -207,7 +212,7 @@ const AddImageForm = ({ product }: Props) => {
                         </Button>
                       </div>
                     </div>
-                  )
+                  );
                 })}
               </div>
             </CardContent>
@@ -215,8 +220,7 @@ const AddImageForm = ({ product }: Props) => {
         )}
       </form>
     </Form>
-  )
-}
+  );
+};
 
-export default AddImageForm
-
+export default AddImageForm;

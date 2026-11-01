@@ -1,24 +1,22 @@
-"use client"
-import type { SVGProps } from "react"
-import Link from "next/link"
-import { Logo } from "@/components/global/logo"
-import { PROJECT_NAME } from "@/metadata"
-import { useLocale } from "@/providers/locale-provider"
+"use client";
+import type { SVGProps } from "react";
+import Link from "next/link";
+import { Logo } from "@/components/global/logo";
+import { PROJECT_NAME } from "@/metadata";
+import { useLocale } from "@/providers/locale-provider";
 
 const navigation = {
-  company: [
-    { name: 'Browse Products', href: '/products' },
-  ],
+  company: [{ name: "Browse Products", href: "/products" }],
   legal: [
-    { name: 'Terms of service', href: '/terms-of-service' },
-    { name: 'Return Policy', href: '/returns' },
-    { name: 'Privacy policy', href: '/privacy' },
-    { name: 'License', href: '/licence' },
+    { name: "Terms of service", href: "/terms-of-service" },
+    { name: "Return Policy", href: "/returns" },
+    { name: "Privacy policy", href: "/privacy" },
+    { name: "License", href: "/licence" },
   ],
   social: [
     {
-      name: 'Facebook',
-      href: '#',
+      name: "Facebook",
+      href: "#",
       icon: (props: SVGProps<SVGSVGElement>) => (
         <svg fill="currentColor" viewBox="0 0 24 24" {...props}>
           <path
@@ -30,8 +28,8 @@ const navigation = {
       ),
     },
     {
-      name: 'Instagram',
-      href: '#',
+      name: "Instagram",
+      href: "#",
       icon: (props: SVGProps<SVGSVGElement>) => (
         <svg fill="currentColor" viewBox="0 0 24 24" {...props}>
           <path
@@ -43,8 +41,8 @@ const navigation = {
       ),
     },
     {
-      name: 'X',
-      href: '#',
+      name: "X",
+      href: "#",
       icon: (props: SVGProps<SVGSVGElement>) => (
         <svg fill="currentColor" viewBox="0 0 24 24" {...props}>
           <path d="M13.6823 10.6218L20.2391 3H18.6854L12.9921 9.61788L8.44486 3H3.2002L10.0765 13.0074L3.2002 21H4.75404L10.7663 14.0113L15.5685 21H20.8131L13.6819 10.6218H13.6823ZM11.5541 13.0956L10.8574 12.0991L5.31391 4.16971H7.70053L12.1742 10.5689L12.8709 11.5655L18.6861 19.8835H16.2995L11.5541 13.096V13.0956Z" />
@@ -52,8 +50,8 @@ const navigation = {
       ),
     },
     {
-      name: 'GitHub',
-      href: 'https://github.com/maheshh-s',
+      name: "GitHub",
+      href: "https://github.com/maheshh-s",
       icon: (props: SVGProps<SVGSVGElement>) => (
         <svg fill="currentColor" viewBox="0 0 24 24" {...props}>
           <path
@@ -65,10 +63,10 @@ const navigation = {
       ),
     },
   ],
-}
+};
 
 export default function Footer() {
-  const { countryCode, currency, locales, setLocale } = useLocale()
+  const { countryCode, currency, locales, setLocale } = useLocale();
   return (
     <footer className="grainy hidden md:block">
       <div className="mx-auto max-w-7xl py-8 border-t border-gray-300 mt-28">
@@ -80,7 +78,11 @@ export default function Footer() {
             </p>
             <div className="flex gap-x-6">
               {navigation.social.map((item) => (
-                <Link key={item.name} href={item.href} className="text-gray-600 hover:text-gray-800">
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className="text-gray-600 hover:text-gray-800"
+                >
                   <span className="sr-only">{item.name}</span>
                   <item.icon aria-hidden="true" className="size-6" />
                 </Link>
@@ -94,7 +96,10 @@ export default function Footer() {
                 <ul role="list" className="mt-6 space-y-4">
                   {navigation.company.map((item) => (
                     <li key={item.name}>
-                      <Link href={item.href} className="text-sm/6 text-gray-600 hover:text-gray-900">
+                      <Link
+                        href={item.href}
+                        className="text-sm/6 text-gray-600 hover:text-gray-900"
+                      >
                         {item.name}
                       </Link>
                     </li>
@@ -106,7 +111,10 @@ export default function Footer() {
                 <ul role="list" className="mt-6 space-y-4">
                   {navigation.legal.map((item) => (
                     <li key={item.name}>
-                      <Link href={item.href} className="text-sm/6 text-gray-600 hover:text-gray-900">
+                      <Link
+                        href={item.href}
+                        className="text-sm/6 text-gray-600 hover:text-gray-900"
+                      >
                         {item.name}
                       </Link>
                     </li>
@@ -117,16 +125,22 @@ export default function Footer() {
           </div>
         </div>
         <div className="mt-16 border-t border-gray-900/10 pt-8 sm:mt-20 lg:mt-24 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm/6 text-gray-600">&copy; { new Date().getFullYear() } {PROJECT_NAME}. All rights reserved.</p>
+          <p className="text-sm/6 text-gray-600">
+            &copy; {new Date().getFullYear()} {PROJECT_NAME}. All rights reserved.
+          </p>
           <label className="flex items-center gap-2 text-sm/6 text-gray-600">
             <span className="sr-only">Select country and currency</span>
             <select
               aria-label="Select country and currency"
               value={countryCode}
               onChange={(e) => {
-                const next = locales.find((l) => l.countryCode === e.target.value)
+                const next = locales.find((l) => l.countryCode === e.target.value);
                 if (next) {
-                  setLocale({ countryCode: next.countryCode, currency: next.currency, phonePrefix: next.phonePrefix })
+                  setLocale({
+                    countryCode: next.countryCode,
+                    currency: next.currency,
+                    phonePrefix: next.phonePrefix,
+                  });
                 }
               }}
               className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900"
@@ -142,5 +156,5 @@ export default function Footer() {
         </div>
       </div>
     </footer>
-  )
+  );
 }

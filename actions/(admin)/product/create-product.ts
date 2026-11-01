@@ -1,39 +1,39 @@
-"use server"
+"use server";
 
-import { revalidatePath } from "next/cache"
+import { revalidatePath } from "next/cache";
 
-import { requireAdmin } from "@/lib/auth-guards"
-import { prisma } from "@/lib/db/prisma"
-import { AppError } from "@/lib/errors"
-import { invalidateProductCache } from "@/lib/product-cache"
-import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
-import { runAction } from "@/lib/run-action"
-import { parseInput } from "@/lib/validation"
+import { requireAdmin } from "@/lib/auth-guards";
+import { prisma } from "@/lib/db/prisma";
+import { AppError } from "@/lib/errors";
+import { invalidateProductCache } from "@/lib/product-cache";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { runAction } from "@/lib/run-action";
+import { parseInput } from "@/lib/validation";
 import {
   createProductSchema,
   type ProductFormValues,
-} from "@/schemas/admin/products/create-product-schema"
-import { formatPriceForStorage } from "@/schemas/admin/products/edit-price-schema"
+} from "@/schemas/admin/products/create-product-schema";
+import { formatPriceForStorage } from "@/schemas/admin/products/edit-price-schema";
 
 export const createProduct = async (input: ProductFormValues) =>
   runAction("admin.createProduct", async () => {
-    const session = await requireAdmin()
+    const session = await requireAdmin();
 
     await enforceRateLimit({
       bucket: "adminMutation",
       subject: session.user.id,
       ...RATE_LIMITS.adminMutation,
-    })
+    });
 
-    const data = parseInput(createProductSchema, input)
+    const data = parseInput(createProductSchema, input);
 
     // A dangling categoryId would surface as an opaque Prisma FK error.
     const category = await prisma.category.findUnique({
       where: { id: data.categoryId },
       select: { id: true },
-    })
+    });
     if (!category) {
-      throw new AppError("NOT_FOUND", "Category not found.")
+      throw new AppError("NOT_FOUND", "Category not found.");
     }
 
     const product = await prisma.product.create({
@@ -52,10 +52,10 @@ export const createProduct = async (input: ProductFormValues) =>
         tag: data.tag ?? null,
       },
       select: { id: true },
-    })
+    });
 
-    await invalidateProductCache()
-    revalidatePath("/admin")
+    await invalidateProductCache();
+    revalidatePath("/admin");
 
-    return { productId: product.id }
-  })
+    return { productId: product.id };
+  });

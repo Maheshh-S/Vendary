@@ -1,5 +1,5 @@
-import { IconLink } from '@/components/ui/icon-link'
-import { StarField } from '@/components/ui/star-field'
+import { IconLink } from "@/components/ui/icon-link";
+import { StarField } from "@/components/ui/star-field";
 
 export default function NotFound() {
   return (
@@ -20,9 +20,7 @@ export default function NotFound() {
       <StarField className="sm:-mt-16" />
 
       <p className="font-display text-4xl/tight font-light text-white">404</p>
-      <h1 className="mt-4 font-display text-xl/8 font-semibold text-white">
-        Page not found
-      </h1>
+      <h1 className="mt-4 font-display text-xl/8 font-semibold text-white">Page not found</h1>
       <p className="mt-2 text-sm/6 text-gray-300">
         Sorry, we couldn’t find the page you’re looking for.
       </p>
@@ -30,5 +28,5 @@ export default function NotFound() {
         Go back home
       </IconLink>
     </div>
-  )
+  );
 }

@@ -32,9 +32,7 @@ test.describe("cart quote truth", () => {
     });
     await page.reload();
 
-    await expect(
-      page.getByText(/Prices have changed since you added these items/)
-    ).toBeVisible();
+    await expect(page.getByText(/Prices have changed since you added these items/)).toBeVisible();
     // The summary keeps showing the authoritative server price.
     expect(await subtotalText(page)).toBe(authoritativeSubtotal);
   });

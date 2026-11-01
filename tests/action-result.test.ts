@@ -47,7 +47,12 @@ describe("AppError", () => {
   it("preserves the code, user message, field errors, and cause", () => {
     const cause = new Error("database unavailable");
     const fieldErrors = { email: ["Enter a valid email"] };
-    const error = new AppError("VALIDATION", "Please check the highlighted fields.", fieldErrors, cause);
+    const error = new AppError(
+      "VALIDATION",
+      "Please check the highlighted fields.",
+      fieldErrors,
+      cause
+    );
 
     expect(error.name).toBe("AppError");
     expect(error.message).toBe("Please check the highlighted fields.");
@@ -236,10 +241,9 @@ describe("parseInput", () => {
   });
 
   it("returns parsed (transformed) data", () => {
-    const parsed = parseInput(
-      z.object({ email: z.string().trim().toLowerCase() }),
-      { email: "  User@Example.com " }
-    );
+    const parsed = parseInput(z.object({ email: z.string().trim().toLowerCase() }), {
+      email: "  User@Example.com ",
+    });
 
     expect(parsed).toEqual({ email: "user@example.com" });
   });
@@ -285,10 +289,7 @@ describe("parseInput", () => {
 
 describe("lib/action-result.ts", () => {
   it("is client-safe: it has no runtime imports", () => {
-    const source = readFileSync(
-      path.join(process.cwd(), "lib", "action-result.ts"),
-      "utf8"
-    );
+    const source = readFileSync(path.join(process.cwd(), "lib", "action-result.ts"), "utf8");
     expect(source).not.toMatch(/^\s*import\b/m);
   });
 });

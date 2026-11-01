@@ -139,11 +139,16 @@ const ACTION_CALLS: Array<[string, () => Promise<ActionResult<unknown>>]> = [
   ["editPrice", () => editPrice({ productId: PRODUCT_ID, price: 10.1 })],
   [
     "editShortDescription",
-    () => editShortDescription({ productId: PRODUCT_ID, shortDescription: "A sufficiently long text" }),
+    () =>
+      editShortDescription({ productId: PRODUCT_ID, shortDescription: "A sufficiently long text" }),
   ],
   [
     "editLongDescription",
-    () => editLongDescription({ productId: PRODUCT_ID, longDescription: "A sufficiently long description" }),
+    () =>
+      editLongDescription({
+        productId: PRODUCT_ID,
+        longDescription: "A sufficiently long description",
+      }),
   ],
   ["takeProductOffline", () => takeProductOffline(PRODUCT_ID, "OUT_OF_STOCK")],
   ["createProduct", () => createProduct(FORM_VALUES)],
@@ -239,7 +244,11 @@ describe("editPrice", () => {
 
   it("returns NOT_FOUND when no product row matched", async () => {
     prismaMock.product.updateMany.mockResolvedValue({ count: 0 });
-    expectFailure(await editPrice({ productId: PRODUCT_ID, price: 10 }), "NOT_FOUND", "Product not found.");
+    expectFailure(
+      await editPrice({ productId: PRODUCT_ID, price: 10 }),
+      "NOT_FOUND",
+      "Product not found."
+    );
     expect(invalidateMock).not.toHaveBeenCalled();
   });
 });
@@ -289,7 +298,10 @@ describe("description edits", () => {
   it("returns NOT_FOUND when the product is gone", async () => {
     prismaMock.product.updateMany.mockResolvedValue({ count: 0 });
     expectFailure(
-      await editShortDescription({ productId: PRODUCT_ID, shortDescription: "A valid short description" }),
+      await editShortDescription({
+        productId: PRODUCT_ID,
+        shortDescription: "A valid short description",
+      }),
       "NOT_FOUND",
       "Product not found."
     );
@@ -310,7 +322,9 @@ describe("takeProductOffline", () => {
 
   it("accepts PRE_ORDER at runtime", async () => {
     expectSuccess(await takeProductOffline(PRODUCT_ID, "PRE_ORDER"));
-    expect(prismaMock.product.updateMany.mock.calls[0][0].data).toEqual({ availability: "PRE_ORDER" });
+    expect(prismaMock.product.updateMany.mock.calls[0][0].data).toEqual({
+      availability: "PRE_ORDER",
+    });
   });
 
   it("rejects an availability outside the enum before touching the database", async () => {
@@ -323,7 +337,11 @@ describe("takeProductOffline", () => {
 
   it("returns NOT_FOUND when the product is gone", async () => {
     prismaMock.product.updateMany.mockResolvedValue({ count: 0 });
-    expectFailure(await takeProductOffline(PRODUCT_ID, "IN_STOCK"), "NOT_FOUND", "Product not found.");
+    expectFailure(
+      await takeProductOffline(PRODUCT_ID, "IN_STOCK"),
+      "NOT_FOUND",
+      "Product not found."
+    );
   });
 });
 
@@ -366,7 +384,10 @@ describe("createProduct", () => {
     { label: "fractional stock", input: { ...FORM_VALUES, stock: "1.5" } },
     { label: "missing category", input: { ...FORM_VALUES, categoryId: "" } },
     { label: "short description", input: { ...FORM_VALUES, description: "too short" } },
-    { label: "bad thumbnail host", input: { ...FORM_VALUES, thumbnail: "https://evil.example/p.png" } },
+    {
+      label: "bad thumbnail host",
+      input: { ...FORM_VALUES, thumbnail: "https://evil.example/p.png" },
+    },
   ])("rejects $label before any database access", async ({ input }) => {
     expectFailure(await createProduct(input), "VALIDATION");
     expect(prismaMock.category.findUnique).not.toHaveBeenCalled();

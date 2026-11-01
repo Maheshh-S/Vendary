@@ -1,4 +1,4 @@
-import ForgotPasswordForm from "@/modules/auth/forms/password-reset/forgot-password-form"
+import ForgotPasswordForm from "@/modules/auth/forms/password-reset/forgot-password-form";
 
 /**
  * Public: reachable before sign-in. The response is always the same generic
@@ -9,5 +9,5 @@ export default function ForgotPasswordPage() {
     <div className="grid h-full place-items-center">
       <ForgotPasswordForm />
     </div>
-  )
+  );
 }

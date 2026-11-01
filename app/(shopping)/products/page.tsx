@@ -40,9 +40,7 @@ const firstValue = (value: string | string[] | undefined): string | undefined =>
 /** Invalid URL values fall back to defaults instead of failing the page. */
 const parsePage = (value: string | undefined): number => {
   const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed >= 1 && parsed <= MAX_PRODUCTS_PAGE
-    ? parsed
-    : 1;
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= MAX_PRODUCTS_PAGE ? parsed : 1;
 };
 
 const parseCategory = (value: string | undefined): string | undefined => {
@@ -76,10 +74,7 @@ type CatalogFiltersState = {
   max?: number;
 };
 
-const productsHref = (
-  targetPage: number,
-  filters: CatalogFiltersState
-): string => {
+const productsHref = (targetPage: number, filters: CatalogFiltersState): string => {
   const params = new URLSearchParams();
   if (filters.category) params.set("category", filters.category);
   if (filters.sort !== "newest") params.set("sort", filters.sort);
@@ -120,11 +115,7 @@ export default async function ProductsPage({ searchParams }: Props) {
   let minPricePaise = parseRupeesToPaise(firstValue(params.min));
   let maxPricePaise = parseRupeesToPaise(firstValue(params.max));
   // An inverted range is a bad URL, not an error page: drop both bounds.
-  if (
-    minPricePaise !== undefined &&
-    maxPricePaise !== undefined &&
-    minPricePaise > maxPricePaise
-  ) {
+  if (minPricePaise !== undefined && maxPricePaise !== undefined && minPricePaise > maxPricePaise) {
     minPricePaise = undefined;
     maxPricePaise = undefined;
   }

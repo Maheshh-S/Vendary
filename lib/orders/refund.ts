@@ -11,8 +11,7 @@ import { writeOrderEvent } from "@/lib/orders/events";
 import { refundPayment, type RefundReason } from "@/lib/razorpay-client";
 
 export type RefundOutcome =
-  | { outcome: "refunded" }
-  | { outcome: "already_handled"; status: OrderStatus };
+  { outcome: "refunded" } | { outcome: "already_handled"; status: OrderStatus };
 
 type StockRestoreItem = {
   productId: string | null;
@@ -26,9 +25,7 @@ const toRupees = (paise: number): string => (paise / 100).toFixed(2);
 
 /** Prisma unique-constraint violation (concurrent refund claim). */
 const isUniqueConstraintViolation = (error: unknown): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  (error as { code?: unknown }).code === "P2002";
+  typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2002";
 
 /**
  * Records an automatic (Phase 0) refund on the shared ledger.
@@ -362,9 +359,7 @@ export const claimRefundInTransaction = async (
 };
 
 /** Transactional wrapper that maps the unique-race loser to a CONFLICT. */
-export const claimOrderRefund = async (
-  options: ClaimRefundOptions
-): Promise<ClaimedRefund> => {
+export const claimOrderRefund = async (options: ClaimRefundOptions): Promise<ClaimedRefund> => {
   try {
     return await prisma.$transaction((tx) => claimRefundInTransaction(tx, options));
   } catch (error) {
@@ -521,10 +516,7 @@ export const failOrderRefund = async (options: {
     });
   });
 
-export type StartRefundOptions = Omit<
-  FinalizeRefundOptions,
-  "refundRowId" | "razorpayRefundId"
-> & {
+export type StartRefundOptions = Omit<FinalizeRefundOptions, "refundRowId" | "razorpayRefundId"> & {
   /** User-facing AppError copy when the Razorpay call fails. */
   failureMessage: string;
 };

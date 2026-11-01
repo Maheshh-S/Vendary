@@ -35,10 +35,14 @@ function loadStoredLocale(): Locale {
     if (!raw) return DEFAULT_LOCALE;
     const parsed = JSON.parse(raw) as Partial<Locale>;
     const match = LOCALES.find(
-      (l) => l.countryCode === parsed.countryCode && l.currency === parsed.currency,
+      (l) => l.countryCode === parsed.countryCode && l.currency === parsed.currency
     );
     if (match) {
-      return { countryCode: match.countryCode, currency: match.currency, phonePrefix: match.phonePrefix };
+      return {
+        countryCode: match.countryCode,
+        currency: match.currency,
+        phonePrefix: match.phonePrefix,
+      };
     }
   } catch {
     // Corrupt storage: fall through to default.

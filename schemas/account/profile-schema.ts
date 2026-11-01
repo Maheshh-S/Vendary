@@ -1,6 +1,6 @@
-import * as z from "zod"
+import * as z from "zod";
 
-import { isAllowedImageUrl } from "@/lib/images"
+import { isAllowedImageUrl } from "@/lib/images";
 
 /**
  * Avatar URLs are rendered by `next/image`, whose hosts are pinned in
@@ -16,21 +16,13 @@ const avatarUrlSchema = z.preprocess(
     .url("Enter a valid avatar URL")
     .refine(isAllowedImageUrl, "Avatar must be hosted on an allowed image host")
     .optional()
-)
+);
 
 export const ProfileSchema = z.object({
-  firstName: z
-    .string()
-    .trim()
-    .min(1, "First name is required")
-    .max(60, "First name is too long"),
-  lastName: z
-    .string()
-    .trim()
-    .min(1, "Last name is required")
-    .max(60, "Last name is too long"),
+  firstName: z.string().trim().min(1, "First name is required").max(60, "First name is too long"),
+  lastName: z.string().trim().min(1, "Last name is required").max(60, "Last name is too long"),
   avatarUrl: avatarUrlSchema,
-})
+});
 
 /**
  * Password change. The 72-character ceiling matches bcrypt's input limit; the
@@ -46,7 +38,7 @@ export const ChangePasswordSchema = z.object({
     .string()
     .min(8, "Password must be at least 8 characters long")
     .max(72, "Password cannot exceed 72 characters"),
-})
+});
 
-export type ProfileInput = z.infer<typeof ProfileSchema>
-export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>
+export type ProfileInput = z.infer<typeof ProfileSchema>;
+export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>;

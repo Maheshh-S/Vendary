@@ -104,7 +104,9 @@ describe("webhook envelope schema", () => {
   });
 
   it("accepts an unknown event with an empty payload", () => {
-    expect(webhookSchema.safeParse({ event: "payment.authorized", payload: {} }).success).toBe(true);
+    expect(webhookSchema.safeParse({ event: "payment.authorized", payload: {} }).success).toBe(
+      true
+    );
   });
 
   it("rejects a body without a payload object", () => {

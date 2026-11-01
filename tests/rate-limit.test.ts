@@ -214,9 +214,7 @@ describe("clientKey", () => {
   it("prefers the user identity when a userId is provided", async () => {
     headerStore.forwardedFor = "203.0.113.9";
 
-    await expect(requestKey.clientKey("adminMutation", "user_123")).resolves.toBe(
-      "user:user_123"
-    );
+    await expect(requestKey.clientKey("adminMutation", "user_123")).resolves.toBe("user:user_123");
   });
 
   it("returns the bare subject so the limiter owns bucket namespacing", async () => {

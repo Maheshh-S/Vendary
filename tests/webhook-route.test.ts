@@ -311,7 +311,11 @@ describe("razorpay webhook route", () => {
       expect(res.status).toBe(200);
       expect(refundPaymentMock).toHaveBeenCalledTimes(1);
       expect(refundPaymentMock).toHaveBeenCalledWith(
-        expect.objectContaining({ paymentId: PAYMENT_ID, orderId: ORDER_ID, reason: "OUT_OF_STOCK" })
+        expect.objectContaining({
+          paymentId: PAYMENT_ID,
+          orderId: ORDER_ID,
+          reason: "OUT_OF_STOCK",
+        })
       );
       expect(prismaMock.order.updateMany).toHaveBeenNthCalledWith(2, {
         where: { id: ORDER_ID, status: "pending" },
@@ -455,9 +459,10 @@ describe("razorpay webhook route", () => {
         where: { id: "refund_row_1" },
         data: { razorpayRefundId: "rfnd_123", status: "processed" },
       });
-      expect(
-        txMock.orderEvent.create.mock.calls.map((call) => call[0].data.type)
-      ).toEqual(["refund_requested", "refund_processed"]);
+      expect(txMock.orderEvent.create.mock.calls.map((call) => call[0].data.type)).toEqual([
+        "refund_requested",
+        "refund_processed",
+      ]);
       // Stock was never decremented for a pending order: no restore, but the
       // order views still refresh.
       expect(txMock.product.updateMany).not.toHaveBeenCalled();
@@ -493,9 +498,10 @@ describe("razorpay webhook route", () => {
         where: { id: "refund_row_1" },
         data: { razorpayRefundId: "rfnd_123", status: "processed" },
       });
-      expect(
-        txMock.orderEvent.create.mock.calls.map((call) => call[0].data.type)
-      ).toEqual(["refund_requested", "refund_processed"]);
+      expect(txMock.orderEvent.create.mock.calls.map((call) => call[0].data.type)).toEqual([
+        "refund_requested",
+        "refund_processed",
+      ]);
       expect(revalidateMock).toHaveBeenCalledWith("/my-orders");
 
       // Replay: the proof is now recorded, so the cancelled branch no-ops.
@@ -528,9 +534,10 @@ describe("razorpay webhook route", () => {
           where: { id: "refund_row_1", status: "requested" },
           data: { status: "failed" },
         });
-        expect(
-          txMock.orderEvent.create.mock.calls.map((call) => call[0].data.type)
-        ).toEqual(["refund_requested", "refund_failed"]);
+        expect(txMock.orderEvent.create.mock.calls.map((call) => call[0].data.type)).toEqual([
+          "refund_requested",
+          "refund_failed",
+        ]);
         // The order stays cancelled; only the proof and ledger changed.
         expect(txMock.order.updateMany).toHaveBeenCalledTimes(1);
         expect(revalidateMock).not.toHaveBeenCalled();

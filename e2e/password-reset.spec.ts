@@ -98,8 +98,6 @@ test.describe("password reset", () => {
     await page.getByLabel("Email Address").fill(`missing-${suffix}@vendary.test`);
     await page.getByRole("button", { name: "Send reset link" }).click();
 
-    await expect(page.getByRole("status")).toContainText(
-      "If an account exists for that email"
-    );
+    await expect(page.getByRole("status")).toContainText("If an account exists for that email");
   });
 });

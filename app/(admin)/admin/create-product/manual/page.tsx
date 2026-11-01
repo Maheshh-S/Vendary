@@ -1,7 +1,7 @@
-import { prisma } from '@/lib/db/prisma'
-import { serializePrismaObject } from '@/lib/db/serializer';
-import CreateProductForm from '@/modules/admin/components/create-product-form';
-import React from 'react'
+import { prisma } from "@/lib/db/prisma";
+import { serializePrismaObject } from "@/lib/db/serializer";
+import CreateProductForm from "@/modules/admin/components/create-product-form";
+import React from "react";
 
 const CreateProductsManualPage = async () => {
   const categories = (await prisma.category.findMany()).map(serializePrismaObject);
@@ -11,7 +11,7 @@ const CreateProductsManualPage = async () => {
         <CreateProductForm categories={categories} />
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default CreateProductsManualPage
+export default CreateProductsManualPage;

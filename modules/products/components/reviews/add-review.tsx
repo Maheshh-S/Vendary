@@ -1,11 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Dialog,
-  DialogBody,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogBody, DialogTitle } from "@/components/ui/dialog";
 import type { Session } from "next-auth";
 import AddReviewForm from "./add-review-form";
 import { Button } from "@/components/ui/button";
@@ -19,11 +15,7 @@ export default function AddReview({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   if (!session?.user.id) {
-    return (
-      <div className="mt-3 text-sm text-gray-500">
-        Please login to add a review
-      </div>
-    );
+    return <div className="mt-3 text-sm text-gray-500">Please login to add a review</div>;
   }
   return (
     <>

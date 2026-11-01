@@ -1,15 +1,11 @@
-import React from 'react'
+import React from "react";
 
 type Props = {
-    children: React.ReactNode
-}
+  children: React.ReactNode;
+};
 
 const AuthLayout = ({ children }: Props) => {
-  return (
-    <div className="h-screen w-screen bg-background">
-      {children}
-    </div>
-  )
-}
+  return <div className="h-screen w-screen bg-background">{children}</div>;
+};
 
-export default AuthLayout
+export default AuthLayout;

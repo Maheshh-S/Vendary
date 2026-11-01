@@ -1,116 +1,122 @@
-import React, { useState, useEffect } from 'react'
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from './../ui/card'
-import { Button } from './../ui/button'
-import { Badge } from './../ui/badge'
-import { Dialog, DialogTitle, DialogDescription, DialogBody, DialogActions } from './../ui/dialog'
-import { DescriptionList, DescriptionTerm, DescriptionDetails } from './../ui/description-list'
-import { ArrowRightLeft, DollarSign, IndianRupee, RefreshCw, TrendingUp, Clock } from 'lucide-react'
+import React, { useState, useEffect } from "react";
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "./../ui/card";
+import { Button } from "./../ui/button";
+import { Badge } from "./../ui/badge";
+import { Dialog, DialogTitle, DialogDescription, DialogBody, DialogActions } from "./../ui/dialog";
+import { DescriptionList, DescriptionTerm, DescriptionDetails } from "./../ui/description-list";
+import {
+  ArrowRightLeft,
+  DollarSign,
+  IndianRupee,
+  RefreshCw,
+  TrendingUp,
+  Clock,
+} from "lucide-react";
 
 interface HistoricalRate {
-  rate: number
-  timestamp: number
+  rate: number;
+  timestamp: number;
 }
 
 export default function USDToINRConverter() {
-  const [usdAmount, setUsdAmount] = useState<string>('')
-  const [inrAmount, setInrAmount] = useState<string>('')
-  const [exchangeRate, setExchangeRate] = useState<number | null>(null)
-  const [loading, setLoading] = useState<boolean>(false)
-  const [error, setError] = useState<string>('')
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null)
-  const [showDetails, setShowDetails] = useState<boolean>(false)
-  const [historicalRates, setHistoricalRates] = useState<HistoricalRate[]>([])
+  const [usdAmount, setUsdAmount] = useState<string>("");
+  const [inrAmount, setInrAmount] = useState<string>("");
+  const [exchangeRate, setExchangeRate] = useState<number | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [showDetails, setShowDetails] = useState<boolean>(false);
+  const [historicalRates, setHistoricalRates] = useState<HistoricalRate[]>([]);
 
   const fetchExchangeRate = async () => {
-    setLoading(true)
-    setError('')
-    
+    setLoading(true);
+    setError("");
+
     try {
-      const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD')
-      
+      const response = await fetch("https://api.exchangerate-api.com/v4/latest/USD");
+
       if (!response.ok) {
-        throw new Error('Failed to fetch exchange rate')
+        throw new Error("Failed to fetch exchange rate");
       }
-      
-      const data = await response.json()
-      const rate = data.rates.INR
-      
-      setExchangeRate(rate)
-      setLastUpdated(new Date().toLocaleString())
-      
+
+      const data = await response.json();
+      const rate = data.rates.INR;
+
+      setExchangeRate(rate);
+      setLastUpdated(new Date().toLocaleString());
+
       // Store historical rate for trend analysis
-      setHistoricalRates(prev => [
+      setHistoricalRates((prev) => [
         { rate, timestamp: Date.now() },
-        ...prev.slice(0, 4) // Keep last 5 rates
-      ])
-      
+        ...prev.slice(0, 4), // Keep last 5 rates
+      ]);
     } catch (err) {
-      setError('Unable to fetch current exchange rate. Please try again.')
-      console.error('Exchange rate fetch error:', err)
+      setError("Unable to fetch current exchange rate. Please try again.");
+      console.error("Exchange rate fetch error:", err);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    fetchExchangeRate()
-  }, [])
+    fetchExchangeRate();
+  }, []);
 
   const handleUSDChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    setUsdAmount(value)
-    
+    const value = e.target.value;
+    setUsdAmount(value);
+
     if (value && !isNaN(Number(value)) && exchangeRate) {
-      const converted = (parseFloat(value) * exchangeRate).toFixed(2)
-      setInrAmount(converted)
+      const converted = (parseFloat(value) * exchangeRate).toFixed(2);
+      setInrAmount(converted);
     } else {
-      setInrAmount('')
+      setInrAmount("");
     }
-  }
+  };
 
   const handleINRChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    setInrAmount(value)
-    
+    const value = e.target.value;
+    setInrAmount(value);
+
     if (value && !isNaN(Number(value)) && exchangeRate) {
-      const converted = (parseFloat(value) / exchangeRate).toFixed(2)
-      setUsdAmount(converted)
+      const converted = (parseFloat(value) / exchangeRate).toFixed(2);
+      setUsdAmount(converted);
     } else {
-      setUsdAmount('')
+      setUsdAmount("");
     }
-  }
+  };
 
   const swapCurrencies = () => {
-    const tempUSD = usdAmount
-    setUsdAmount(inrAmount)
-    setInrAmount(tempUSD)
-  }
+    const tempUSD = usdAmount;
+    setUsdAmount(inrAmount);
+    setInrAmount(tempUSD);
+  };
 
   const clearAll = () => {
-    setUsdAmount('')
-    setInrAmount('')
-  }
+    setUsdAmount("");
+    setInrAmount("");
+  };
 
-  const getTrendDirection = (): 'up' | 'down' | 'stable' | null => {
-    if (historicalRates.length < 2) return null
-    const current = historicalRates[0]?.rate
-    const previous = historicalRates[1]?.rate
+  const getTrendDirection = (): "up" | "down" | "stable" | null => {
+    if (historicalRates.length < 2) return null;
+    const current = historicalRates[0]?.rate;
+    const previous = historicalRates[1]?.rate;
     if (current && previous) {
-      return current > previous ? 'up' : current < previous ? 'down' : 'stable'
+      return current > previous ? "up" : current < previous ? "down" : "stable";
     }
-    return null
-  }
+    return null;
+  };
 
   const formatCurrency = (amount: string | number, currency: string): string => {
-    if (!amount) return ''
-    const formatter = new Intl.NumberFormat('en-US', {
-      style: 'currency',
+    if (!amount) return "";
+    const formatter = new Intl.NumberFormat("en-US", {
+      style: "currency",
       currency: currency,
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    })
-    return formatter.format(Number(amount))
-  }
+      maximumFractionDigits: 2,
+    });
+    return formatter.format(Number(amount));
+  };
 
   return (
     <div className="max-w-md mx-auto p-4">
@@ -124,16 +130,14 @@ export default function USDToINRConverter() {
           </CardTitle>
           {exchangeRate && (
             <div className="flex items-center justify-center gap-2 mt-2">
-              <Badge color="blue">
-                1 USD = ₹{exchangeRate.toFixed(4)}
-              </Badge>
-              {getTrendDirection() === 'up' && (
+              <Badge color="blue">1 USD = ₹{exchangeRate.toFixed(4)}</Badge>
+              {getTrendDirection() === "up" && (
                 <Badge color="green">
                   <TrendingUp className="h-3 w-3" />
                   Rising
                 </Badge>
               )}
-              {getTrendDirection() === 'down' && (
+              {getTrendDirection() === "down" && (
                 <Badge color="red">
                   <TrendingUp className="h-3 w-3 rotate-180" />
                   Falling
@@ -167,7 +171,7 @@ export default function USDToINRConverter() {
               />
               {usdAmount && (
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {formatCurrency(usdAmount, 'USD')}
+                  {formatCurrency(usdAmount, "USD")}
                 </p>
               )}
             </div>
@@ -200,7 +204,7 @@ export default function USDToINRConverter() {
               />
               {inrAmount && (
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {formatCurrency(inrAmount, 'INR')}
+                  {formatCurrency(inrAmount, "INR")}
                 </p>
               )}
             </div>
@@ -215,12 +219,7 @@ export default function USDToINRConverter() {
         </CardContent>
 
         <CardFooter className="flex gap-2">
-          <Button
-            onClick={fetchExchangeRate}
-            disabled={loading}
-            color="blue"
-            className="flex-1"
-          >
+          <Button onClick={fetchExchangeRate} disabled={loading} color="blue" className="flex-1">
             {loading ? (
               <>
                 <RefreshCw className="h-4 w-4 animate-spin" />
@@ -233,21 +232,12 @@ export default function USDToINRConverter() {
               </>
             )}
           </Button>
-          
-          <Button
-            onClick={clearAll}
-            disabled={loading}
-            outline
-            className="flex-1"
-          >
+
+          <Button onClick={clearAll} disabled={loading} outline className="flex-1">
             Clear All
           </Button>
-          
-          <Button
-            onClick={() => setShowDetails(true)}
-            disabled={!exchangeRate}
-            plain
-          >
+
+          <Button onClick={() => setShowDetails(true)} disabled={!exchangeRate} plain>
             Details
           </Button>
         </CardFooter>
@@ -259,7 +249,7 @@ export default function USDToINRConverter() {
         <DialogDescription>
           Current USD to INR conversion information and recent trends.
         </DialogDescription>
-        
+
         <DialogBody>
           {exchangeRate && (
             <DescriptionList>
@@ -267,15 +257,19 @@ export default function USDToINRConverter() {
               <DescriptionDetails>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-lg">₹{exchangeRate.toFixed(4)}</span>
-                  <Badge color="blue" className="text-xs">per USD</Badge>
+                  <Badge color="blue" className="text-xs">
+                    per USD
+                  </Badge>
                 </div>
               </DescriptionDetails>
 
               <DescriptionTerm>Reverse Rate</DescriptionTerm>
               <DescriptionDetails>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-lg">${(1/exchangeRate).toFixed(6)}</span>
-                  <Badge color="green" className="text-xs">per INR</Badge>
+                  <span className="font-mono text-lg">${(1 / exchangeRate).toFixed(6)}</span>
+                  <Badge color="green" className="text-xs">
+                    per INR
+                  </Badge>
                 </div>
               </DescriptionDetails>
 
@@ -284,7 +278,9 @@ export default function USDToINRConverter() {
 
               <DescriptionTerm>Data Source</DescriptionTerm>
               <DescriptionDetails>
-                <Badge color="zinc" className="text-xs">ExchangeRate-API</Badge>
+                <Badge color="zinc" className="text-xs">
+                  ExchangeRate-API
+                </Badge>
                 <span className="text-sm text-gray-600 dark:text-gray-400 ml-2">
                   Real-time exchange rates
                 </span>
@@ -299,7 +295,7 @@ export default function USDToINRConverter() {
                         <div key={rate.timestamp} className="flex items-center gap-2 text-sm">
                           <span className="font-mono">₹{rate.rate.toFixed(4)}</span>
                           <span className="text-gray-500 text-xs">
-                            {index === 0 ? 'Current' : `${index} update${index > 1 ? 's' : ''} ago`}
+                            {index === 0 ? "Current" : `${index} update${index > 1 ? "s" : ""} ago`}
                           </span>
                         </div>
                       ))}
@@ -310,7 +306,7 @@ export default function USDToINRConverter() {
             </DescriptionList>
           )}
         </DialogBody>
-        
+
         <DialogActions>
           <Button onClick={() => setShowDetails(false)} color="zinc">
             Close
@@ -318,5 +314,5 @@ export default function USDToINRConverter() {
         </DialogActions>
       </Dialog>
     </div>
-  )
+  );
 }

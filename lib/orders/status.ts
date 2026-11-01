@@ -47,9 +47,7 @@ export const canTransition = (from: OrderStatus, to: OrderStatus): boolean =>
  */
 export const ADMIN_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   ...ORDER_TRANSITIONS,
-  pending: ORDER_TRANSITIONS.pending.filter(
-    (to) => to !== "confirmed" && to !== "cancelled"
-  ),
+  pending: ORDER_TRANSITIONS.pending.filter((to) => to !== "confirmed" && to !== "cancelled"),
 };
 
 export const canAdminTransition = (from: OrderStatus, to: OrderStatus): boolean =>

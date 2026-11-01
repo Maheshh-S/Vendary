@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  computeInvoiceTotals,
-  invoiceNumber,
-  invoiceYear,
-  toPaise,
-} from "@/lib/orders/invoice";
+import { computeInvoiceTotals, invoiceNumber, invoiceYear, toPaise } from "@/lib/orders/invoice";
 
 /**
  * Invoice math (Task 2.5): subtotal comes from the order item snapshots, tax
@@ -49,9 +44,7 @@ describe("computeInvoiceTotals", () => {
   });
 
   it("flags drift between line snapshots and the stored total", () => {
-    expect(
-      computeInvoiceTotals({ ...ORDER, total: "1500.00" }).balanced
-    ).toBe(false);
+    expect(computeInvoiceTotals({ ...ORDER, total: "1500.00" }).balanced).toBe(false);
   });
 
   it("rounds to the nearest paise", () => {

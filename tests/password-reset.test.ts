@@ -9,8 +9,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * The in-memory token store lets the one-time delete be exercised for real.
  */
 
-const { prismaMock, txMock, mailMock, generateMock, rateLimitMock, clientKeyMock } =
-  vi.hoisted(() => {
+const { prismaMock, txMock, mailMock, generateMock, rateLimitMock, clientKeyMock } = vi.hoisted(
+  () => {
     const txMock = {
       passwordResetToken: { deleteMany: vi.fn() },
       user: { update: vi.fn() },
@@ -28,7 +28,8 @@ const { prismaMock, txMock, mailMock, generateMock, rateLimitMock, clientKeyMock
       rateLimitMock: vi.fn(),
       clientKeyMock: vi.fn(),
     };
-  });
+  }
+);
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db/prisma", () => ({ prisma: prismaMock }));
@@ -43,14 +44,8 @@ vi.mock("@/lib/rate-limit", () => ({
 }));
 vi.mock("@/lib/request-key", () => ({ clientKey: clientKeyMock }));
 
-import {
-  requestPasswordReset,
-  resetPassword,
-} from "@/actions/auth/password-reset";
-import {
-  getPasswordResetTokenByEmail,
-  getPasswordResetTokenByToken,
-} from "@/actions/token";
+import { requestPasswordReset, resetPassword } from "@/actions/auth/password-reset";
+import { getPasswordResetTokenByEmail, getPasswordResetTokenByToken } from "@/actions/token";
 import type { ActionErrorCode, ActionResult } from "@/lib/action-result";
 import { PASSWORD_RESET_REQUEST_MESSAGE } from "@/schemas/auth/password-reset-schema";
 
@@ -116,8 +111,8 @@ beforeEach(() => {
     async (args: { where: { email: string } }) =>
       tokenRows.find((row) => row.email === args.where.email) ?? null
   );
-  prismaMock.$transaction.mockImplementation(
-    async (callback: (tx: typeof txMock) => unknown) => callback(txMock)
+  prismaMock.$transaction.mockImplementation(async (callback: (tx: typeof txMock) => unknown) =>
+    callback(txMock)
   );
   txMock.user.update.mockResolvedValue({ id: "user_1" });
   txMock.passwordResetToken.deleteMany.mockImplementation(

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Heading, Subheading } from "@/components/ui/heading";
 import { Text, Strong, TextLink } from "@/components/ui/text";
-import { Truck, RotateCcw, Shield, ChevronDown, ChevronUp, Check } from 'lucide-react';
+import { Truck, RotateCcw, Shield, ChevronDown, ChevronUp, Check } from "lucide-react";
 import { Image, Product } from "@prisma/client";
 import useCart from "@/hooks/use-cart";
 import ImageSlider from "../components/image-grid";
@@ -25,27 +25,23 @@ const formatPrice = (price: number) => {
 };
 
 const ProductDescription = ({ product, images, basicDetails }: Props) => {
-  const [selectedOption, setSelectedOption] = useState(
-    product.options[0]?.id || ""
-  );
+  const [selectedOption, setSelectedOption] = useState(product.options[0]?.id || "");
   const [quantity, setQuantity] = useState(1);
-  const [expandedSection, setExpandedSection] = useState<string | null>(
-    "description"
-  );
+  const [expandedSection, setExpandedSection] = useState<string | null>("description");
   const [addingToCart, setAddingToCart] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  if(!images || images.length === 0) {
+  if (!images || images.length === 0) {
     notFound();
   }
 
   // Format images for ImageSlider component
-  const formattedImages = images.map(img => ({
+  const formattedImages = images.map((img) => ({
     id: img.id || String(Math.random()),
     url: img.url || "",
     description: img.description || null,
-    isMain: img.isMain || false
+    isMain: img.isMain || false,
   }));
 
   // Import cart functionality
@@ -56,13 +52,13 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
     const checkIfMobile = () => {
       setIsMobile(window.innerWidth < 640);
     };
-    
+
     // Initial check
     checkIfMobile();
-    
+
     // Add resize listener
     window.addEventListener("resize", checkIfMobile);
-    
+
     // Cleanup
     return () => window.removeEventListener("resize", checkIfMobile);
   }, []);
@@ -82,8 +78,7 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
   const isInCart = items.some((item) => item.id === product.id);
 
   // Get current cart quantity for this product
-  const currentCartQuantity =
-    items.find((item) => item.id === product.id)?.quantity || 0;
+  const currentCartQuantity = items.find((item) => item.id === product.id)?.quantity || 0;
 
   const toggleSection = (section: string) => {
     if (expandedSection === section) {
@@ -112,9 +107,7 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
 
     const cartItem = {
       id: product.id,
-      name:
-        product.name +
-        (selectedOptionObj ? ` - ${selectedOptionObj.name}` : ""),
+      name: product.name + (selectedOptionObj ? ` - ${selectedOptionObj.name}` : ""),
       // Cart storage is paise-native; the product price is a rupee Decimal.
       unitPaise: Math.round(Number(product.price) * 100),
       quantity: quantity,
@@ -145,23 +138,11 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
   const getAvailabilityBadge = () => {
     switch (basicDetails.availability) {
       case "IN_STOCK":
-        return (
-          <Badge className="bg-green-500 text-white hover:bg-green-600">
-            In Stock
-          </Badge>
-        );
+        return <Badge className="bg-green-500 text-white hover:bg-green-600">In Stock</Badge>;
       case "OUT_OF_STOCK":
-        return (
-          <Badge className="bg-red-500 text-white hover:bg-red-600">
-            Out of Stock
-          </Badge>
-        );
+        return <Badge className="bg-red-500 text-white hover:bg-red-600">Out of Stock</Badge>;
       case "PRE_ORDER":
-        return (
-          <Badge className="bg-blue-500 text-white hover:bg-blue-600">
-            Pre-Order
-          </Badge>
-        );
+        return <Badge className="bg-blue-500 text-white hover:bg-blue-600">Pre-Order</Badge>;
       default:
         return null;
     }
@@ -173,22 +154,18 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
       {isMobile && (
         <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-700 p-4 flex items-center justify-between z-40 shadow-lg">
           <div className="flex flex-col">
-            <span className="font-bold text-lg">
-              {formatPrice(product.price)}
-            </span>
+            <span className="font-bold text-lg">{formatPrice(product.price)}</span>
             {isInCart && (
-              <span className="text-xs text-zinc-500">
-                {currentCartQuantity} in cart
-              </span>
+              <span className="text-xs text-zinc-500">{currentCartQuantity} in cart</span>
             )}
           </div>
           <Button
             color="rose"
             className={`py-2 px-5 rounded-xl transition-all ${addingToCart ? "opacity-70" : ""} ${addedToCart ? "bg-green-600 hover:bg-green-700" : ""}`}
-                disabled={basicDetails.availability === "OUT_OF_STOCK" || addingToCart}
-                onClick={handleAddToCart}
-              >
-                {addedToCart ? (
+            disabled={basicDetails.availability === "OUT_OF_STOCK" || addingToCart}
+            onClick={handleAddToCart}
+          >
+            {addedToCart ? (
               <span className="flex items-center">
                 <Check className="w-4 h-4 mr-1" />
                 Added
@@ -228,9 +205,7 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
                 {product.category.name}
               </TextLink>
               {basicDetails.isFeatured && (
-                <Badge className="bg-rose-500 text-white hover:bg-rose-600">
-                  Featured
-                </Badge>
+                <Badge className="bg-rose-500 text-white hover:bg-rose-600">Featured</Badge>
               )}
             </div>
 
@@ -282,9 +257,7 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
                   >
                     <div className="font-medium text-sm">{option.name}</div>
                     {!option.inStock && (
-                      <div className="text-xs text-red-500 mt-1">
-                        Out of stock
-                      </div>
+                      <div className="text-xs text-red-500 mt-1">Out of stock</div>
                     )}
                   </button>
                 ))}
@@ -389,9 +362,7 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
               {expandedSection === "description" && (
                 <div className="mt-3 prose prose-zinc dark:prose-invert max-w-none prose-sm">
                   {basicDetails.description ? (
-                    <div
-                      dangerouslySetInnerHTML={{ __html: basicDetails.description }}
-                    />
+                    <div dangerouslySetInnerHTML={{ __html: basicDetails.description }} />
                   ) : (
                     <Text className="text-zinc-600 dark:text-zinc-400">
                       No description available.
@@ -427,7 +398,8 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
                     <Strong>{basicDetails.shippingTime}</Strong>
                   </div>
                   <Text className="text-xs text-zinc-500 mt-2">
-                    All orders ship free. Orders are processed within 1-2 business days. Shipping times are estimates and are not guaranteed.
+                    All orders ship free. Orders are processed within 1-2 business days. Shipping
+                    times are estimates and are not guaranteed.
                   </Text>
                 </div>
               )}
@@ -451,10 +423,12 @@ const ProductDescription = ({ product, images, basicDetails }: Props) => {
               {expandedSection === "returns" && (
                 <div className="mt-3 space-y-2">
                   <Text className="text-sm">
-                    We offer a 30-day return policy for most items. Returns must be unused and in original packaging. Some products may be subject to a restocking fee.
+                    We offer a 30-day return policy for most items. Returns must be unused and in
+                    original packaging. Some products may be subject to a restocking fee.
                   </Text>
                   <Text className="text-sm mt-2">
-                    This product comes with a 1-year limited warranty covering manufacturing defects.
+                    This product comes with a 1-year limited warranty covering manufacturing
+                    defects.
                   </Text>
                   <TextLink href="/returns" className="text-sm inline-block mt-2">
                     View Full Return Policy →

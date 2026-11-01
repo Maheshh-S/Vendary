@@ -32,7 +32,8 @@ const categories = [
         isFeatured: true,
         thumbnail: img("1579783902614-a3fb3927b6a5"),
         images: [img("1579783902614-a3fb3927b6a5"), img("1541961017774-22349e4a1262")],
-        shortDescription: "Hand-painted Madhubani folk art on handmade paper, fish motif symbolising prosperity.",
+        shortDescription:
+          "Hand-painted Madhubani folk art on handmade paper, fish motif symbolising prosperity.",
         description:
           "An authentic Madhubani painting from the Mithila region of Bihar, hand-painted with natural dyes and bamboo-twig brushes. The fish motif is a traditional symbol of prosperity and good fortune. Each piece is signed by the artist and ships unframed, rolled in a protective tube.",
       },
@@ -81,7 +82,8 @@ const categories = [
         tag: "Kondapalli",
         thumbnail: img("1605883705077-8d3d3cebe78c"),
         images: [img("1605883705077-8d3d3cebe78c"), img("1558060370-d644479cb6f7")],
-        shortDescription: "Hand-carved Kondapalli bulls in soft treewood, natural tamarind-seed finish.",
+        shortDescription:
+          "Hand-carved Kondapalli bulls in soft treewood, natural tamarind-seed finish.",
         description:
           "The toy-makers of Kondapalli, Andhra Pradesh, have carved this style for four centuries. Each bull is shaped from lichteria poniki treewood, painted with natural colours, and finished with tamarind-seed paste. Set of three bulls in graduated sizes.",
       },
@@ -109,7 +111,8 @@ const categories = [
         isFeatured: true,
         thumbnail: img("1578500494198-246f612d3b3d"),
         images: [img("1578500494198-246f612d3b3d"), img("1586023492125-27b2c045efd7")],
-        shortDescription: "Iconic Turquoise-Persian glazed vase, quartz-based, hand-painted floral.",
+        shortDescription:
+          "Iconic Turquoise-Persian glazed vase, quartz-based, hand-painted floral.",
         description:
           "Jaipur's signature blue pottery — a quartz-based, low-temperature glazed ware with Persian roots. Hand-painted floral vine in cobalt on the classic turquoise ground. Decorative use; each piece varies slightly by hand.",
       },

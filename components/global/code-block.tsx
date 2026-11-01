@@ -9,7 +9,11 @@ interface CodeBlockProps {
 
 const CodeBlock: React.FC<CodeBlockProps> = ({ code, language = "jsx" }) => {
   return (
-    <SyntaxHighlighter language={language} style={nightOwl} customStyle={{ background: "none", border: "none" }}>
+    <SyntaxHighlighter
+      language={language}
+      style={nightOwl}
+      customStyle={{ background: "none", border: "none" }}
+    >
       {code}
     </SyntaxHighlighter>
   );

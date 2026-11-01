@@ -30,11 +30,7 @@ export type CartQuoteAvailability = "IN_STOCK" | "OUT_OF_STOCK" | "PRE_ORDER";
  *   only sells IN_STOCK).
  * - INSUFFICIENT_STOCK: fewer units on hand than the requested quantity.
  */
-export type CartQuoteIssue =
-  | "MISSING"
-  | "OUT_OF_STOCK"
-  | "INSUFFICIENT_STOCK"
-  | null;
+export type CartQuoteIssue = "MISSING" | "OUT_OF_STOCK" | "INSUFFICIENT_STOCK" | null;
 
 export type CartQuoteLine = {
   productId: string;
@@ -54,9 +50,8 @@ export type CartQuote = OrderTotals & {
 };
 
 /** True when paying now would be refused by the server charge path. */
-export const hasBlockingQuoteIssue = (
-  quote: CartQuote | null | undefined
-): boolean => quote?.lines.some((line) => line.issue !== null) ?? false;
+export const hasBlockingQuoteIssue = (quote: CartQuote | null | undefined): boolean =>
+  quote?.lines.some((line) => line.issue !== null) ?? false;
 
 /**
  * Checkout gate shared by the cart and checkout pages: a missing quote (still

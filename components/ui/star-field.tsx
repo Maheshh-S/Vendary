@@ -67,13 +67,7 @@ const constellations: Array<Array<Star>> = [
   ],
 ];
 
-function Star({
-  blurId,
-  point: [cx, cy, dim, blur],
-}: {
-  blurId: string;
-  point: Star;
-}) {
+function Star({ blurId, point: [cx, cy, dim, blur] }: { blurId: string; point: Star }) {
   const groupRef = useRef<React.ElementRef<"g">>(null);
   const ref = useRef<React.ElementRef<"circle">>(null);
 
@@ -126,17 +120,10 @@ function Star({
   );
 }
 
-function Constellation({
-  points,
-  blurId,
-}: {
-  points: Array<Star>;
-  blurId: string;
-}) {
+function Constellation({ points, blurId }: { points: Array<Star>; blurId: string }) {
   const ref = useRef<React.ElementRef<"path">>(null);
   const uniquePoints = points.filter(
-    (point, pointIndex) =>
-      points.findIndex((p) => String(p) === String(point)) === pointIndex
+    (point, pointIndex) => points.findIndex((p) => String(p) === String(point)) === pointIndex
   );
   const isFilled = uniquePoints.length !== points.length;
 
@@ -154,11 +141,7 @@ function Constellation({
     ];
 
     if (isFilled) {
-      sequence.push([
-        ref.current,
-        { fill: "rgb(255 255 255 / 0.02)" },
-        { duration: 1 },
-      ]);
+      sequence.push([ref.current, { fill: "rgb(255 255 255 / 0.02)" }, { duration: 1 }]);
     }
 
     const animation = timeline(sequence);
@@ -207,11 +190,7 @@ export function StarField({ className }: { className?: string }) {
         </filter>
       </defs>
       {constellations.map((points, constellationIndex) => (
-        <Constellation
-          key={constellationIndex}
-          points={points}
-          blurId={blurId}
-        />
+        <Constellation key={constellationIndex} points={points} blurId={blurId} />
       ))}
       {stars.map((point, pointIndex) => (
         <Star key={pointIndex} point={point} blurId={blurId} />

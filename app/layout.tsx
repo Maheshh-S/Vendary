@@ -22,27 +22,19 @@ export const metadata: Metadata = {
     "Vendary is a shopping platform that offers a unique and personalized shopping experience, combining the best of online and offline shopping.",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={clsx("h-full antialiased", font.className)}
-      suppressHydrationWarning
-    >
+    <html lang="en" className={clsx("h-full antialiased", font.className)} suppressHydrationWarning>
       <QueryClientProvider>
         <body className="flex min-h-full flex-col dark:bg-gray-950">
           <Providers>
             <LocaleProvider>
-            <CartProvider>
-              <Suspense fallback={null}>
-                <NetworkIndicator />
-              </Suspense>
-              {children}
-            </CartProvider>
+              <CartProvider>
+                <Suspense fallback={null}>
+                  <NetworkIndicator />
+                </Suspense>
+                {children}
+              </CartProvider>
             </LocaleProvider>
           </Providers>
           <Toaster position="top-center" reverseOrder={false} />

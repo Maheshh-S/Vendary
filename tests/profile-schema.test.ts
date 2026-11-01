@@ -23,10 +23,7 @@ vi.mock("next/cache", () => ({ revalidatePath: revalidateMock }));
 
 import { changePassword, updateProfile } from "@/actions/account/profile";
 import type { ActionErrorCode, ActionResult } from "@/lib/action-result";
-import {
-  ChangePasswordSchema,
-  ProfileSchema,
-} from "@/schemas/account/profile-schema";
+import { ChangePasswordSchema, ProfileSchema } from "@/schemas/account/profile-schema";
 
 const USER_ID = "user_1";
 const OLD_PASSWORD = "OldPassword1";

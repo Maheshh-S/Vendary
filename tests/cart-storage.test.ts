@@ -61,9 +61,7 @@ describe("normalizeCartItems", () => {
         { id: "negative", unitPaise: -5, quantity: 1 },
         { id: "ok", unitPaise: 500, quantity: 1 },
       ])
-    ).toEqual([
-      { id: "ok", name: "", unitPaise: 500, quantity: 1, images: [] },
-    ]);
+    ).toEqual([{ id: "ok", name: "", unitPaise: 500, quantity: 1, images: [] }]);
   });
 
   it("clamps quantities to 1..99 and merges duplicate product ids", () => {
@@ -93,9 +91,7 @@ describe("normalizeCartItems", () => {
   });
 
   it("prefers the current unitPaise when both shapes are present", () => {
-    const [item] = normalizeCartItems([
-      { id: "p", price: 10, unitPaise: 1234, quantity: 1 },
-    ]);
+    const [item] = normalizeCartItems([{ id: "p", price: 10, unitPaise: 1234, quantity: 1 }]);
 
     expect(item.unitPaise).toBe(1234);
   });
@@ -160,16 +156,11 @@ describe("mergeCartItem (distinct-line cap)", () => {
   it("appends a new line below the cap", () => {
     const items = [cartItem("a")];
 
-    expect(mergeCartItem(items, cartItem("b"))).toEqual([
-      cartItem("a"),
-      cartItem("b"),
-    ]);
+    expect(mergeCartItem(items, cartItem("b"))).toEqual([cartItem("a"), cartItem("b")]);
   });
 
   it("rejects the 51st distinct line but still allows quantity updates", () => {
-    const full = Array.from({ length: MAX_CART_LINES }, (_, index) =>
-      cartItem(`p_${index}`)
-    );
+    const full = Array.from({ length: MAX_CART_LINES }, (_, index) => cartItem(`p_${index}`));
 
     expect(mergeCartItem(full, cartItem("overflow"))).toEqual(full);
     expect(mergeCartItem(full, cartItem("overflow"))).toHaveLength(MAX_CART_LINES);

@@ -1,26 +1,26 @@
-"use client"
+"use client";
 
-import { searchProducts } from "@/actions/products/search"
-import { PlaceholdersAndVanishInput } from "@/components/ui/placeholders-and-vanish-input"
-import { useQuery } from "@tanstack/react-query"
-import Image from "next/image"
-import type React from "react"
-import { useState } from "react"
-import { Loader2 } from 'lucide-react'
-import Link from "next/link"
-import { formatINR } from "@/lib/format-inr"
+import { searchProducts } from "@/actions/products/search";
+import { PlaceholdersAndVanishInput } from "@/components/ui/placeholders-and-vanish-input";
+import { useQuery } from "@tanstack/react-query";
+import Image from "next/image";
+import type React from "react";
+import { useState } from "react";
+import { Loader2 } from "lucide-react";
+import Link from "next/link";
+import { formatINR } from "@/lib/format-inr";
 
-const SearchForm = ({ setIsOpen } : {setIsOpen : (arg0: boolean) => void}) => {
+const SearchForm = ({ setIsOpen }: { setIsOpen: (arg0: boolean) => void }) => {
   const placeholders = [
     "Pashmina Shawl",
     "Bidriware Vase",
     "Channapatna Wooden Toys",
     "Madhubani Painting",
     "Brass Dhokra Figurine",
-  ]
+  ];
 
-  const [searchTerm, setSearchTerm] = useState("")
-  const trimmedTerm = searchTerm.trim()
+  const [searchTerm, setSearchTerm] = useState("");
+  const trimmedTerm = searchTerm.trim();
 
   const {
     isPending,
@@ -29,11 +29,11 @@ const SearchForm = ({ setIsOpen } : {setIsOpen : (arg0: boolean) => void}) => {
   } = useQuery({
     queryKey: ["search", trimmedTerm],
     queryFn: async () => {
-      const res = await searchProducts(trimmedTerm)
+      const res = await searchProducts(trimmedTerm);
       if (!res.ok) {
-        throw new Error(res.message)
+        throw new Error(res.message);
       }
-      return res.data
+      return res.data;
     },
     // The server requires 2-64 trimmed characters; don't fire before that.
     enabled: trimmedTerm.length >= 2,
@@ -42,21 +42,21 @@ const SearchForm = ({ setIsOpen } : {setIsOpen : (arg0: boolean) => void}) => {
     retry: false,
     // Don't show loading state initially
     initialData: [],
-  })
+  });
 
   const handleDebouncedSearch = (value: string) => {
     // The server caps search terms at 64 characters; mirror it here so an
     // over-long term never leaves the browser.
-    setSearchTerm(value.slice(0, 64))
-  }
+    setSearchTerm(value.slice(0, 64));
+  };
 
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
+    e.preventDefault();
     // The shared input has no `name`, so FormData is empty; read the DOM value
     // and mirror the server's 64-character cap.
-    const query = e.currentTarget.querySelector("input")?.value ?? ""
-    setSearchTerm(query.slice(0, 64))
-  }
+    const query = e.currentTarget.querySelector("input")?.value ?? "";
+    setSearchTerm(query.slice(0, 64));
+  };
 
   return (
     <div className="flex flex-col justify-center items-center w-full max-w-2xl mx-auto px-4">
@@ -83,9 +83,7 @@ const SearchForm = ({ setIsOpen } : {setIsOpen : (arg0: boolean) => void}) => {
         {/* Error state */}
         {error && (
           <div className="p-6 text-center">
-            <p>
-              {error instanceof Error ? error.message : "An error occurred while searching"}
-            </p>
+            <p>{error instanceof Error ? error.message : "An error occurred while searching"}</p>
           </div>
         )}
 
@@ -124,7 +122,9 @@ const SearchForm = ({ setIsOpen } : {setIsOpen : (arg0: boolean) => void}) => {
                         <span className="font-medium group-hover:text-primary transition-colors duration-200">
                           {result.name}
                         </span>
-                        <span className="text-xs text-muted-foreground">Handcrafted artisan product</span>
+                        <span className="text-xs text-muted-foreground">
+                          Handcrafted artisan product
+                        </span>
                       </div>
                     </div>
                     <span className="font-semibold text-primary">{formatINR(result.price)}</span>
@@ -144,7 +144,7 @@ const SearchForm = ({ setIsOpen } : {setIsOpen : (arg0: boolean) => void}) => {
         )}
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default SearchForm
+export default SearchForm;

@@ -1,17 +1,17 @@
-import { redis } from "@/lib/redis"
+import { redis } from "@/lib/redis";
 
 export const CACHE_TTL_SECONDS = {
   featured: 600,
   basicDetails: 300,
-}
+};
 
 /**
  * Cache keys for product-derived data. v3: the featured list now filters on
  * `isFeatured`, so entries cached before that filter can never be served.
  */
-export const FEATURED_PRODUCTS_KEY = "featured-products:v3"
+export const FEATURED_PRODUCTS_KEY = "featured-products:v3";
 export const productBasicDetailsKey = (productId: string) =>
-  `product-basic-details:v2:${productId}`
+  `product-basic-details:v2:${productId}`;
 
 /**
  * Purges every cached view derived from a product. Call after any product
@@ -21,13 +21,13 @@ export const productBasicDetailsKey = (productId: string) =>
 export async function invalidateProductCache(productId?: string) {
   const keys = productId
     ? [FEATURED_PRODUCTS_KEY, productBasicDetailsKey(productId)]
-    : [FEATURED_PRODUCTS_KEY]
+    : [FEATURED_PRODUCTS_KEY];
 
   for (const key of keys) {
     try {
-      await redis.del(key)
+      await redis.del(key);
     } catch (cacheError) {
-      console.error(`Cache invalidation failed for ${key}:`, cacheError)
+      console.error(`Cache invalidation failed for ${key}:`, cacheError);
     }
   }
 }

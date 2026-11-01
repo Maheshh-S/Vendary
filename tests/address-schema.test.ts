@@ -46,9 +46,11 @@ describe("SavedAddressInputSchema", () => {
       isDefault: true,
     });
 
-    expect(
-      valid({ ...VALID, label: "   ", line2: "", landmark: "  " })
-    ).toMatchObject({ label: undefined, line2: undefined, landmark: undefined });
+    expect(valid({ ...VALID, label: "   ", line2: "", landmark: "  " })).toMatchObject({
+      label: undefined,
+      line2: undefined,
+      landmark: undefined,
+    });
   });
 
   it("defaults lastName to an empty string and isDefault to false", () => {
@@ -120,7 +122,9 @@ describe("UpdateSavedAddressSchema", () => {
     });
     expect(UpdateSavedAddressSchema.safeParse(VALID).success).toBe(false);
     expect(UpdateSavedAddressSchema.safeParse({ ...VALID, id: "" }).success).toBe(false);
-    expect(UpdateSavedAddressSchema.safeParse({ ...VALID, id: "a".repeat(65) }).success).toBe(false);
+    expect(UpdateSavedAddressSchema.safeParse({ ...VALID, id: "a".repeat(65) }).success).toBe(
+      false
+    );
   });
 });
 

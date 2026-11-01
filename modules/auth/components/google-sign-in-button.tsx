@@ -1,4 +1,4 @@
-"use client"
+"use client";
 import React, { useState } from "react";
 import { IconBrandGoogle, IconLoader } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,11 @@ export default function GoogleSignInButton({ disabled }: Props) {
       disabled={disabled || isPending}
       onClick={handleGoogleSignIn}
     >
-      {isPending ? <IconLoader size={22} className="animate-spin" /> : <IconBrandGoogle size={22} />}
+      {isPending ? (
+        <IconLoader size={22} className="animate-spin" />
+      ) : (
+        <IconBrandGoogle size={22} />
+      )}
       <span>Continue with Google</span>
     </Button>
   );

@@ -17,9 +17,7 @@ export type ProductCardData = {
 
 function truncateText(text: string | null, maxLength: number = 20) {
   if (!text) return "";
-  return text.length > maxLength
-    ? text.substring(0, maxLength) + "..."
-    : text;
+  return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
 }
 
 export default function ProductCard({ product }: { product: ProductCardData }) {

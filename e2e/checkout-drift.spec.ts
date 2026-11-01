@@ -40,9 +40,7 @@ test.describe("checkout price drift", () => {
     });
     await page.reload();
 
-    await expect(
-      page.getByText(/Prices have changed since you added these items/)
-    ).toBeVisible();
+    await expect(page.getByText(/Prices have changed since you added these items/)).toBeVisible();
     expect(await amountAfter(page, "Subtotal")).toBe(authoritativeSubtotal);
     expect(await amountAfter(page, "Total")).toBe(authoritativeTotal);
 

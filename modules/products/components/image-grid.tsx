@@ -1,26 +1,26 @@
-"use client"
-import React, { useState, useEffect, useRef } from "react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import Image from "next/image"
+"use client";
+import React, { useState, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import Image from "next/image";
 
 type SliderImage = {
-  id: string
-  url: string
-  description?: string | null
-  isMain: boolean
-}
+  id: string;
+  url: string;
+  description?: string | null;
+  isMain: boolean;
+};
 
 type ImageSliderProps = {
-  images: SliderImage[]
-  autoSlide?: boolean
-  slideInterval?: number
-  showThumbnails?: boolean
-  showDescription?: boolean
-  isMobile?: boolean
-  onImageClick?: () => void
-  className?: string
-}
+  images: SliderImage[];
+  autoSlide?: boolean;
+  slideInterval?: number;
+  showThumbnails?: boolean;
+  showDescription?: boolean;
+  isMobile?: boolean;
+  onImageClick?: () => void;
+  className?: string;
+};
 
 const ImageSlider = ({
   images,
@@ -32,80 +32,80 @@ const ImageSlider = ({
   onImageClick,
   className,
 }: ImageSliderProps) => {
-  const [currentIndex, setCurrentIndex] = useState(0)
-  const [touchStart, setTouchStart] = useState(0)
-  const [touchEnd, setTouchEnd] = useState(0)
-  const [isFullScreen, setIsFullScreen] = useState(false)
-  const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [touchStart, setTouchStart] = useState(0);
+  const [touchEnd, setTouchEnd] = useState(0);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Find initial main image index or default to 0
   useEffect(() => {
-    const mainImageIndex = images.findIndex((img) => img.isMain)
-    setCurrentIndex(mainImageIndex !== -1 ? mainImageIndex : 0)
-  }, [images])
+    const mainImageIndex = images.findIndex((img) => img.isMain);
+    setCurrentIndex(mainImageIndex !== -1 ? mainImageIndex : 0);
+  }, [images]);
 
   const startSlideTimer = React.useCallback(() => {
     if (timerRef.current) {
-      clearInterval(timerRef.current)
+      clearInterval(timerRef.current);
     }
 
     timerRef.current = setInterval(() => {
-      setCurrentIndex((prevIndex) => (prevIndex === images.length - 1 ? 0 : prevIndex + 1))
-    }, slideInterval)
-  }, [images.length, slideInterval])
+      setCurrentIndex((prevIndex) => (prevIndex === images.length - 1 ? 0 : prevIndex + 1));
+    }, slideInterval);
+  }, [images.length, slideInterval]);
 
   // Setup auto-sliding
   useEffect(() => {
     if (autoSlide) {
-      startSlideTimer()
+      startSlideTimer();
     }
 
     return () => {
       if (timerRef.current) {
-        clearInterval(timerRef.current)
+        clearInterval(timerRef.current);
       }
-    }
-  }, [autoSlide, startSlideTimer])
+    };
+  }, [autoSlide, startSlideTimer]);
 
   const goToNextSlide = () => {
-    setCurrentIndex((prevIndex) => (prevIndex === images.length - 1 ? 0 : prevIndex + 1))
-    if (autoSlide) startSlideTimer()
-  }
+    setCurrentIndex((prevIndex) => (prevIndex === images.length - 1 ? 0 : prevIndex + 1));
+    if (autoSlide) startSlideTimer();
+  };
 
   const goToPreviousSlide = () => {
-    setCurrentIndex((prevIndex) => (prevIndex === 0 ? images.length - 1 : prevIndex - 1))
-    if (autoSlide) startSlideTimer()
-  }
+    setCurrentIndex((prevIndex) => (prevIndex === 0 ? images.length - 1 : prevIndex - 1));
+    if (autoSlide) startSlideTimer();
+  };
 
   const goToSlide = (index: number) => {
-    setCurrentIndex(index)
-    if (autoSlide) startSlideTimer()
-  }
+    setCurrentIndex(index);
+    if (autoSlide) startSlideTimer();
+  };
 
   // Handle touch events for swipe
   const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStart(e.targetTouches[0].clientX)
-  }
+    setTouchStart(e.targetTouches[0].clientX);
+  };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX)
-  }
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
 
   const handleTouchEnd = () => {
     if (touchStart - touchEnd > 100) {
       // Swipe left, go to next
-      goToNextSlide()
+      goToNextSlide();
     }
 
     if (touchStart - touchEnd < -100) {
       // Swipe right, go to previous
-      goToPreviousSlide()
+      goToPreviousSlide();
     }
-  }
+  };
 
   const toggleFullScreen = () => {
-    setIsFullScreen(!isFullScreen)
-  }
+    setIsFullScreen(!isFullScreen);
+  };
 
   // If no images, display placeholder
   if (!images.length) {
@@ -113,7 +113,7 @@ const ImageSlider = ({
       <div className="relative w-full h-64 bg-zinc-100 flex items-center justify-center rounded-lg dark:bg-zinc-800">
         <p>No images available</p>
       </div>
-    )
+    );
   }
 
   // Full screen mobile view
@@ -210,7 +210,7 @@ const ImageSlider = ({
           ))}
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -236,8 +236,8 @@ const ImageSlider = ({
           <div className="absolute inset-0 flex items-center justify-between p-4">
             <Button
               onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                e.stopPropagation()
-                goToPreviousSlide()
+                e.stopPropagation();
+                goToPreviousSlide();
               }}
               className="rounded-full bg-white/80 p-2 shadow-md hover:bg-white"
             >
@@ -257,8 +257,8 @@ const ImageSlider = ({
             </Button>
             <Button
               onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                e.stopPropagation()
-                goToNextSlide()
+                e.stopPropagation();
+                goToNextSlide();
               }}
               className="rounded-full bg-white/80 p-2 shadow-md hover:bg-white"
             >
@@ -312,7 +312,9 @@ const ImageSlider = ({
       {/* Image description */}
       {showDescription && images[currentIndex].description && (
         <div className="mt-2">
-          <p className="text-center text-sm text-gray-600 dark:text-gray-300">{images[currentIndex].description}</p>
+          <p className="text-center text-sm text-gray-600 dark:text-gray-300">
+            {images[currentIndex].description}
+          </p>
         </div>
       )}
 
@@ -324,7 +326,9 @@ const ImageSlider = ({
               key={image.id}
               onClick={() => goToSlide(index)}
               className={`relative h-16 w-16 rounded-md overflow-hidden border-2 ${
-                index === currentIndex ? "border-blue-500 ring-1 ring-blue-500" : "border-transparent hover:opacity-80"
+                index === currentIndex
+                  ? "border-blue-500 ring-1 ring-blue-500"
+                  : "border-transparent hover:opacity-80"
               }`}
             >
               <Image
@@ -358,8 +362,7 @@ const ImageSlider = ({
         </div>
       )}
     </div>
-  )
-}
+  );
+};
 
-export default ImageSlider
-
+export default ImageSlider;

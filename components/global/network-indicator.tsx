@@ -1,6 +1,6 @@
 "use client";
-import { useState, useEffect, useRef } from 'react';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { useState, useEffect, useRef } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 
 export default function NetworkIndicator() {
   const [progress, setProgress] = useState(0);
@@ -17,7 +17,7 @@ export default function NetworkIndicator() {
       // Set initial loading state
       setProgress(0);
       setIsVisible(true);
-      
+
       // Start progress animation
       intervalRef.current = setInterval(() => {
         setProgress((prevProgress) => {
@@ -27,20 +27,20 @@ export default function NetworkIndicator() {
       }, 100);
 
       // Check if document is already loaded
-      if (document.readyState === 'complete') {
+      if (document.readyState === "complete") {
         completeLoading();
       } else {
         // Listen for the load event
         const handleLoad = () => {
           completeLoading();
         };
-        
-        window.addEventListener('load', handleLoad);
+
+        window.addEventListener("load", handleLoad);
         return () => {
-          window.removeEventListener('load', handleLoad);
+          window.removeEventListener("load", handleLoad);
         };
       }
-      
+
       // Mark initial load as done for future renders
       initialLoadRef.current = false;
     }
@@ -50,18 +50,18 @@ export default function NetworkIndicator() {
   useEffect(() => {
     // Skip for initial render
     if (initialLoadRef.current) return;
-    
+
     // Start loading indicator
     startLoading();
-    
+
     // Simulate completion after navigation
     const timeout = setTimeout(() => {
       completeLoading();
     }, 300);
-    
+
     return () => {
       clearTimeout(timeout);
-      
+
       // Clean up any existing interval when the component unmounts
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -73,19 +73,19 @@ export default function NetworkIndicator() {
   useEffect(() => {
     // Skip for initial render
     if (initialLoadRef.current) return;
-    
+
     const handlePopState = () => {
       startLoading();
-      
+
       setTimeout(() => {
         completeLoading();
       }, 300);
     };
-    
-    window.addEventListener('popstate', handlePopState);
-    
+
+    window.addEventListener("popstate", handlePopState);
+
     return () => {
-      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener("popstate", handlePopState);
     };
   }, []);
 
@@ -95,10 +95,10 @@ export default function NetworkIndicator() {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
-    
+
     setProgress(0);
     setIsVisible(true);
-    
+
     // Start progress animation
     intervalRef.current = setInterval(() => {
       setProgress((prevProgress) => {
@@ -115,10 +115,10 @@ export default function NetworkIndicator() {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    
+
     // Complete the progress bar
     setProgress(100);
-    
+
     // Hide after transition
     setTimeout(() => {
       setIsVisible(false);
@@ -128,18 +128,18 @@ export default function NetworkIndicator() {
 
   // Don't render anything if not visible
   if (!isVisible) return null;
-  
+
   return (
-    <div 
+    <div
       style={{
-        position: 'fixed',
+        position: "fixed",
         top: 0,
         left: 0,
-        height: '3px',
+        height: "3px",
         width: `${progress}%`,
-        backgroundColor: 'red',
+        backgroundColor: "red",
         zIndex: 9999,
-        transition: 'width 0.2s ease-in-out'
+        transition: "width 0.2s ease-in-out",
       }}
     />
   );

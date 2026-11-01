@@ -1,4 +1,4 @@
-import * as z from "zod"
+import * as z from "zod";
 
 /**
  * Password reset boundaries.
@@ -15,19 +15,15 @@ export const ForgotPasswordSchema = z.object({
     .min(1, "Email is required")
     .email("Enter a valid email address")
     .max(254, "Email is too long"),
-})
+});
 
 export const ResetPasswordSchema = z.object({
-  token: z
-    .string()
-    .trim()
-    .min(1, "Reset token is required")
-    .max(128, "Reset token is invalid"),
+  token: z.string().trim().min(1, "Reset token is required").max(128, "Reset token is invalid"),
   password: z
     .string()
     .min(8, "Password must be at least 8 characters long")
     .max(72, "Password cannot exceed 72 characters"),
-})
+});
 
 /**
  * The response is identical for known and unknown addresses (and for
@@ -35,7 +31,7 @@ export const ResetPasswordSchema = z.object({
  * enumerate users.
  */
 export const PASSWORD_RESET_REQUEST_MESSAGE =
-  "If an account exists for that email, we've sent password reset instructions."
+  "If an account exists for that email, we've sent password reset instructions.";
 
-export type ForgotPasswordInput = z.infer<typeof ForgotPasswordSchema>
-export type ResetPasswordInput = z.infer<typeof ResetPasswordSchema>
+export type ForgotPasswordInput = z.infer<typeof ForgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof ResetPasswordSchema>;

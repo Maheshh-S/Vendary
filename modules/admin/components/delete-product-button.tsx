@@ -24,14 +24,11 @@ const DeleteProductButton = ({ productId }: Props) => {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
-  const {
-    isPending,
-    mutate
-  } = useMutation({
+  const { isPending, mutate } = useMutation({
     mutationKey: ["delete-product"],
     mutationFn: deleteProduct,
     onMutate: () => {
-        toast.loading("Deleting product", { id: "delete-product" });
+      toast.loading("Deleting product", { id: "delete-product" });
     },
     onSuccess: (res) => {
       if (!res.ok) {
@@ -44,38 +41,42 @@ const DeleteProductButton = ({ productId }: Props) => {
     onError: () => {
       toast.error("Failed to delete product", { id: "delete-product" });
     },
-  })
+  });
 
   const handleDelete = () => {
     mutate(productId);
-  }
+  };
 
   return (
     <>
-      <Button
-        outline
-        className="border-none"
-        type="button"
-        onClick={() => setIsOpen(true)}
-      >
+      <Button outline className="border-none" type="button" onClick={() => setIsOpen(true)}>
         <Trash2Icon className="text-red-500" />
       </Button>
       <Dialog open={isOpen} onClose={setIsOpen}>
         <DialogTitle>Delete Product</DialogTitle>
         <DialogDescription>
-          This action cannot be undone. This will permanently delete the product
-            and all its associated data.
+          This action cannot be undone. This will permanently delete the product and all its
+          associated data.
         </DialogDescription>
         <DialogBody>
           <Field>
-            <Input value={inputValue} onChange={(e) => setInputValue(e.target.value)} name="amount" placeholder='Type "DELETE" to continue' />
+            <Input
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              name="amount"
+              placeholder='Type "DELETE" to continue'
+            />
           </Field>
         </DialogBody>
         <DialogActions>
           <Button plain onClick={() => setIsOpen(false)}>
             Cancel
           </Button>
-          <Button color="rose" disabled={inputValue !== "DELETE" || isPending} onClick={handleDelete}>
+          <Button
+            color="rose"
+            disabled={inputValue !== "DELETE" || isPending}
+            onClick={handleDelete}
+          >
             {isPending ? <LoaderPinwheel size={20} className="animate-spin" /> : "Delete"}
           </Button>
         </DialogActions>

@@ -12,31 +12,25 @@ const PAYMENT_ID = "pay_NyaTFw2gn4dNqq";
 describe("verifyRazorpayPaymentSignature", () => {
   it("accepts a correctly signed payment", () => {
     const signature = signRazorpayPayload(`${ORDER_ID}|${PAYMENT_ID}`, SECRET);
-    expect(
-      verifyRazorpayPaymentSignature(ORDER_ID, PAYMENT_ID, signature, SECRET)
-    ).toBe(true);
+    expect(verifyRazorpayPaymentSignature(ORDER_ID, PAYMENT_ID, signature, SECRET)).toBe(true);
   });
 
   it("rejects a tampered payment id (signature from a different payment)", () => {
     const signature = signRazorpayPayload(`${ORDER_ID}|${PAYMENT_ID}`, SECRET);
-    expect(
-      verifyRazorpayPaymentSignature(ORDER_ID, "pay_forged", signature, SECRET)
-    ).toBe(false);
+    expect(verifyRazorpayPaymentSignature(ORDER_ID, "pay_forged", signature, SECRET)).toBe(false);
   });
 
   it("rejects signatures produced with a different secret", () => {
     const signature = signRazorpayPayload(`${ORDER_ID}|${PAYMENT_ID}`, "other-secret");
-    expect(
-      verifyRazorpayPaymentSignature(ORDER_ID, PAYMENT_ID, signature, SECRET)
-    ).toBe(false);
+    expect(verifyRazorpayPaymentSignature(ORDER_ID, PAYMENT_ID, signature, SECRET)).toBe(false);
   });
 
   it("rejects garbage signatures and fails closed on a missing secret", () => {
-    expect(verifyRazorpayPaymentSignature(ORDER_ID, PAYMENT_ID, "not-even-hex", SECRET)).toBe(false);
+    expect(verifyRazorpayPaymentSignature(ORDER_ID, PAYMENT_ID, "not-even-hex", SECRET)).toBe(
+      false
+    );
     expect(verifyRazorpayPaymentSignature(ORDER_ID, PAYMENT_ID, "deadbeef", SECRET)).toBe(false);
-    expect(
-      verifyRazorpayPaymentSignature(ORDER_ID, PAYMENT_ID, "deadbeef", undefined)
-    ).toBe(false);
+    expect(verifyRazorpayPaymentSignature(ORDER_ID, PAYMENT_ID, "deadbeef", undefined)).toBe(false);
   });
 });
 

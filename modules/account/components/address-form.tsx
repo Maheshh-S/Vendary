@@ -1,25 +1,22 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useRouter } from "next/navigation"
-import toast from "react-hot-toast"
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 
 import {
   createAddress,
   deleteAddress,
   setDefaultAddress,
   updateAddress,
-} from "@/actions/account/addresses"
-import { Button } from "@/components/ui/button"
-import { Field, Label } from "@/components/ui/fieldset"
-import { Input } from "@/components/ui/input"
-import {
-  SavedAddressInputSchema,
-  type SavedAddressInput,
-} from "@/schemas/account/address-schema"
-import type { SavedAddressView } from "@/modules/account/types"
+} from "@/actions/account/addresses";
+import { Button } from "@/components/ui/button";
+import { Field, Label } from "@/components/ui/fieldset";
+import { Input } from "@/components/ui/input";
+import { SavedAddressInputSchema, type SavedAddressInput } from "@/schemas/account/address-schema";
+import type { SavedAddressView } from "@/modules/account/types";
 
 const emptyValues: SavedAddressInput = {
   label: undefined,
@@ -34,7 +31,7 @@ const emptyValues: SavedAddressInput = {
   postalCode: "",
   country: "India",
   isDefault: false,
-}
+};
 
 const toInput = (address: SavedAddressView): SavedAddressInput => ({
   label: address.label ?? undefined,
@@ -49,7 +46,7 @@ const toInput = (address: SavedAddressView): SavedAddressInput => ({
   postalCode: address.postalCode,
   country: address.country,
   isDefault: address.isDefault,
-})
+});
 
 /**
  * Create/edit form for one saved address. Server field errors are mapped back
@@ -60,12 +57,12 @@ export function AddressForm({
   onDone,
   onCancel,
 }: {
-  initialAddress?: SavedAddressView
-  onDone?: () => void
-  onCancel?: () => void
+  initialAddress?: SavedAddressView;
+  onDone?: () => void;
+  onCancel?: () => void;
 }) {
-  const router = useRouter()
-  const [isPending, setIsPending] = useState(false)
+  const router = useRouter();
+  const [isPending, setIsPending] = useState(false);
   const {
     register,
     handleSubmit,
@@ -75,40 +72,40 @@ export function AddressForm({
   } = useForm<SavedAddressInput>({
     resolver: zodResolver(SavedAddressInputSchema),
     defaultValues: initialAddress ? toInput(initialAddress) : emptyValues,
-  })
+  });
 
   const applyServerFieldErrors = (fieldErrors?: Record<string, string[]>): string | undefined => {
-    if (!fieldErrors) return undefined
-    let firstMessage: string | undefined
+    if (!fieldErrors) return undefined;
+    let firstMessage: string | undefined;
     for (const [field, messages] of Object.entries(fieldErrors)) {
-      const message = messages[0]
-      if (!message) continue
-      firstMessage ??= message
+      const message = messages[0];
+      if (!message) continue;
+      firstMessage ??= message;
       if (field in SavedAddressInputSchema.shape) {
-        setError(field as keyof SavedAddressInput, { type: "server", message })
+        setError(field as keyof SavedAddressInput, { type: "server", message });
       }
     }
-    return firstMessage
-  }
+    return firstMessage;
+  };
 
   const onSubmit = async (values: SavedAddressInput) => {
-    setIsPending(true)
+    setIsPending(true);
     try {
       const result = initialAddress
         ? await updateAddress({ id: initialAddress.id, ...values })
-        : await createAddress(values)
+        : await createAddress(values);
       if (!result.ok) {
-        toast.error(applyServerFieldErrors(result.fieldErrors) ?? result.message)
-        return
+        toast.error(applyServerFieldErrors(result.fieldErrors) ?? result.message);
+        return;
       }
-      toast.success(initialAddress ? "Address updated" : "Address saved")
-      if (!initialAddress) reset(emptyValues)
-      router.refresh()
-      onDone?.()
+      toast.success(initialAddress ? "Address updated" : "Address saved");
+      if (!initialAddress) reset(emptyValues);
+      router.refresh();
+      onDone?.();
     } finally {
-      setIsPending(false)
+      setIsPending(false);
     }
-  }
+  };
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
@@ -199,42 +196,40 @@ export function AddressForm({
         )}
       </div>
     </form>
-  )
+  );
 }
 
 /** One address card with ownership-scoped edit, default and delete controls. */
 export function AddressCard({ address }: { address: SavedAddressView }) {
-  const router = useRouter()
-  const [isEditing, setIsEditing] = useState(false)
-  const [isPending, setIsPending] = useState(false)
+  const router = useRouter();
+  const [isEditing, setIsEditing] = useState(false);
+  const [isPending, setIsPending] = useState(false);
 
   const run = async (operation: () => Promise<{ ok: boolean; message?: string }>) => {
-    setIsPending(true)
+    setIsPending(true);
     try {
-      const result = await operation()
+      const result = await operation();
       if (!result.ok) {
-        toast.error(result.message ?? "Something went wrong.")
-        return
+        toast.error(result.message ?? "Something went wrong.");
+        return;
       }
-      router.refresh()
+      router.refresh();
     } finally {
-      setIsPending(false)
+      setIsPending(false);
     }
-  }
+  };
 
   if (isEditing) {
     return (
       <li className="rounded-lg border border-gray-200 p-4 dark:border-gray-800">
-        <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">
-          Edit address
-        </h3>
+        <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-white">Edit address</h3>
         <AddressForm
           initialAddress={address}
           onDone={() => setIsEditing(false)}
           onCancel={() => setIsEditing(false)}
         />
       </li>
-    )
+    );
   }
 
   return (
@@ -276,9 +271,9 @@ export function AddressCard({ address }: { address: SavedAddressView }) {
             disabled={isPending}
             onClick={() => {
               if (!window.confirm("Delete this saved address? Past orders keep their address.")) {
-                return
+                return;
               }
-              void run(() => deleteAddress(address.id))
+              void run(() => deleteAddress(address.id));
             }}
             className="font-medium text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
           >
@@ -305,5 +300,5 @@ export function AddressCard({ address }: { address: SavedAddressView }) {
         {address.phone}
       </p>
     </li>
-  )
+  );
 }

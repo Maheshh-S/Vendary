@@ -14,9 +14,7 @@ const ShoppingLayout = async ({ children }: Props) => {
     <div className="grainy">
       <main className="h-full">
         <ShoppingNavbar session={session} />
-        <div className="flex w-screen items-center justify-center gap-3">
-          {children}
-        </div>
+        <div className="flex w-screen items-center justify-center gap-3">{children}</div>
       </main>
       <Footer />
     </div>

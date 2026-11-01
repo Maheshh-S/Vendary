@@ -23,9 +23,7 @@ import {
  * listed price; missing lines contribute 0) so the display stays coherent while
  * the blocking issue explains why payment is disabled.
  */
-export const getCartQuote = async (
-  lineItems: unknown
-): Promise<ActionResult<CartQuote>> =>
+export const getCartQuote = async (lineItems: unknown): Promise<ActionResult<CartQuote>> =>
   runAction("cart.quote", async () => {
     const lines = parseInput(cartQuoteSchema, lineItems);
 

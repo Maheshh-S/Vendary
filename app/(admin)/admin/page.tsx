@@ -1,6 +1,5 @@
-
 import { auth } from "@/auth";
-import {prisma} from "@/lib/db/prisma";
+import { prisma } from "@/lib/db/prisma";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -22,19 +21,14 @@ import {
   buildAdminProductWhere,
   parseAdminSearchQuery,
 } from "@/lib/admin/search";
-import {
-  Pagination,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
+import { Pagination, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 
 function truncateText(text: string | null, maxLength: number = 100) {
-  if (!text) return ''
-  return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
+  if (!text) return "";
+  return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
 }
 
-const totalPagesFor = (count: number): number =>
-  Math.max(1, Math.ceil(count / ADMIN_PAGE_SIZE));
+const totalPagesFor = (count: number): number => Math.max(1, Math.ceil(count / ADMIN_PAGE_SIZE));
 
 type SearchParams = {
   q?: string | string[];
@@ -82,7 +76,7 @@ export default async function AdminPage({ searchParams }: Props) {
         // Creator audit only — visibility is never scoped by it.
         user: { select: { email: true } },
       },
-      orderBy: { name: 'asc' },
+      orderBy: { name: "asc" },
       take: ADMIN_PAGE_SIZE,
       skip: adminSkip(productPage),
     }),
@@ -98,14 +92,13 @@ export default async function AdminPage({ searchParams }: Props) {
         items: true,
         address: true,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       take: ADMIN_PAGE_SIZE,
       skip: adminSkip(orderPage),
     }),
   ]);
   const serializedProducts = products.map(serializePrismaObject);
   const serializedOrders = orders.map(serializePrismaObject);
-
 
   return (
     <div className="px-4 sm:px-6 min-h-screen lg:px-8 my-8">
@@ -118,9 +111,7 @@ export default async function AdminPage({ searchParams }: Props) {
       <div className="sm:flex sm:items-center">
         <div className="sm:flex-auto">
           <h1 className="text-xl font-semibold text-gray-900">Products</h1>
-          <p className="mt-2 text-sm text-gray-700">
-            A list of every product in the store.
-          </p>
+          <p className="mt-2 text-sm text-gray-700">A list of every product in the store.</p>
         </div>
         <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
           <Link
@@ -176,9 +167,17 @@ export default async function AdminPage({ searchParams }: Props) {
                   </tr>
                 ) : (
                   serializedProducts.map((product) => (
-                    <tr key={product.id} className={cn(product.images.length === 0 && "bg-red-100")}>
+                    <tr
+                      key={product.id}
+                      className={cn(product.images.length === 0 && "bg-red-100")}
+                    >
                       <td className="py-4 pr-3 pl-4 text-sm font-medium whitespace-nowrap text-gray-900 sm:pl-6">
-                        <Link href={`/products/${product.id}`} className="text-blue-700 hover:text-blue-900 hover:underline">{truncateText(product.name, 30)}</Link>
+                        <Link
+                          href={`/products/${product.id}`}
+                          className="text-blue-700 hover:text-blue-900 hover:underline"
+                        >
+                          {truncateText(product.name, 30)}
+                        </Link>
                       </td>
                       <td className="py-4 text-sm whitespace-nowrap flex items-center justify-center space-x-2 text-gray-500">
                         ₹ <PriceEdit productId={product.id} price={Number(product.price)} />
@@ -189,14 +188,25 @@ export default async function AdminPage({ searchParams }: Props) {
                       <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
                         {product.category?.name || "N/A"}
                       </td>
-                      <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500" data-testid="product-creator">
+                      <td
+                        className="px-3 py-4 text-sm whitespace-nowrap text-gray-500"
+                        data-testid="product-creator"
+                      >
                         {product.user?.email ?? "N/A"}
                       </td>
                       <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
-                        {product.images.length === 0 ? <AddImages product={product} /> : product.images.length}
+                        {product.images.length === 0 ? (
+                          <AddImages product={product} />
+                        ) : (
+                          product.images.length
+                        )}
                       </td>
                       <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
-                        <DescriptionForm productId={product.id} description={product.description} shortDescription={product.shortDescription} />
+                        <DescriptionForm
+                          productId={product.id}
+                          description={product.description}
+                          shortDescription={product.shortDescription}
+                        />
                       </td>
                       <td className="px-3 py-4 text-sm text-right whitespace-nowrap">
                         <TakeOfflineSwitch product={product} />
@@ -226,9 +236,7 @@ export default async function AdminPage({ searchParams }: Props) {
       <div className="mt-12 sm:flex sm:items-center">
         <div className="sm:flex-auto">
           <h1 className="text-xl font-semibold text-gray-900">Orders</h1>
-          <p className="mt-2 text-sm text-gray-700">
-            A list of all orders placed by customers.
-          </p>
+          <p className="mt-2 text-sm text-gray-700">A list of all orders placed by customers.</p>
         </div>
       </div>
       <div className="mt-8 flow-root overflow-x-auto">
@@ -274,12 +282,14 @@ export default async function AdminPage({ searchParams }: Props) {
                         {order.user?.email ?? "N/A"}
                       </td>
                       <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
-                        {order.items.map((item: { productName?: string; quantity: number }, index: number) => (
-                          <span key={index}>
-                            {index > 0 && ", "}
-                            {item.productName || "Unknown product"} x {item.quantity}
-                          </span>
-                        ))}
+                        {order.items.map(
+                          (item: { productName?: string; quantity: number }, index: number) => (
+                            <span key={index}>
+                              {index > 0 && ", "}
+                              {item.productName || "Unknown product"} x {item.quantity}
+                            </span>
+                          )
+                        )}
                       </td>
                       <td className="px-3 py-4 text-sm whitespace-nowrap text-gray-500">
                         {formatINR(Number(order.total))}
@@ -309,9 +319,7 @@ export default async function AdminPage({ searchParams }: Props) {
           <span className="text-sm text-gray-600">
             Page {orderPage} of {orderPages} · {orderCount} orders
           </span>
-          <PaginationNext
-            href={orderPage < orderPages ? adminHref(orderPage + 1, q) : null}
-          />
+          <PaginationNext href={orderPage < orderPages ? adminHref(orderPage + 1, q) : null} />
         </Pagination>
       )}
     </div>

@@ -1,7 +1,13 @@
 import AddReview from "./add-review";
 import type { Session } from "next-auth";
 
-export default function NoReviewsState({ session, productId }: { session: Session | null, productId: string }) {
+export default function NoReviewsState({
+  session,
+  productId,
+}: {
+  session: Session | null;
+  productId: string;
+}) {
   return (
     <div className="text-center border-2 border-gray-200 rounded-lg p-4">
       <svg
@@ -22,5 +28,5 @@ export default function NoReviewsState({ session, productId }: { session: Sessio
       <h3 className="mt-2 text-sm font-semibold text-gray-900">No Reviews</h3>
       <AddReview session={session} productId={productId} />
     </div>
-  )
+  );
 }

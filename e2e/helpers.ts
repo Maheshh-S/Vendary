@@ -17,10 +17,7 @@ export const DEMO_ADMIN = {
  * form. This helper still uses the real provider (authorize + JWT session),
  * just without the UI round trip.
  */
-export async function loginWith(
-  page: Page,
-  credentials: { email: string; password: string }
-) {
+export async function loginWith(page: Page, credentials: { email: string; password: string }) {
   const csrfResponse = await page.request.get("/api/auth/csrf");
   if (!csrfResponse.ok()) {
     throw new Error(`Login failed: csrf endpoint returned ${csrfResponse.status()}`);

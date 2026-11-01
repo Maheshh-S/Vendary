@@ -172,10 +172,7 @@ describe("updateReview ownership", () => {
     expect(prismaMock.review.findFirst).not.toHaveBeenCalled();
 
     authMock.mockResolvedValue({ user: { id: OTHER_ID, role: "USER" } });
-    expectFailure(
-      await updateReview({ id: REVIEW_ID, rating: 9, review: "short" }),
-      "VALIDATION"
-    );
+    expectFailure(await updateReview({ id: REVIEW_ID, rating: 9, review: "short" }), "VALIDATION");
     expect(prismaMock.review.findFirst).not.toHaveBeenCalled();
   });
 });

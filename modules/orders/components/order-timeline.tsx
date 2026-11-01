@@ -40,8 +40,7 @@ const EVENT_LABELS: Record<string, string> = {
 const humanize = (value: string): string =>
   value.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
 
-const statusLabel = (status: string): string =>
-  status.charAt(0).toUpperCase() + status.slice(1);
+const statusLabel = (status: string): string => status.charAt(0).toUpperCase() + status.slice(1);
 
 const formatTimestamp = (value: string | Date): string =>
   new Date(value).toLocaleString("en-IN", {
@@ -78,9 +77,7 @@ export default function OrderTimeline({ events, fallback }: Props) {
                     : "mt-1 h-2.5 w-2.5 rounded-full bg-zinc-300 dark:bg-zinc-600"
                 }
               />
-              {!isLast && (
-                <span className="mt-1 w-px flex-1 bg-zinc-200 dark:bg-zinc-700" />
-              )}
+              {!isLast && <span className="mt-1 w-px flex-1 bg-zinc-200 dark:bg-zinc-700" />}
             </div>
             <div className={isLast ? "pb-0" : "pb-4"}>
               <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">

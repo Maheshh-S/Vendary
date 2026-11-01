@@ -138,9 +138,7 @@ describe("checkRateLimit (redis)", () => {
     const otherBucketKey = redisMock.incr.mock.calls[3][0];
     expect(nextWindowKey).toBe(expectedKey("login", "203.0.113.13"));
     expect(nextWindowKey).not.toBe(redisMock.incr.mock.calls[0][0]);
-    expect(otherBucketKey).toBe(
-      expectedKey("register", "203.0.113.13", 15 * 60_000)
-    );
+    expect(otherBucketKey).toBe(expectedKey("register", "203.0.113.13", 15 * 60_000));
   });
 
   it("fails open to the in-memory window when Redis throws", async () => {
@@ -199,9 +197,7 @@ describe("checkRateLimit (redis)", () => {
       windowMs: 60_000,
     };
     // A blackholed Redis: the command never settles.
-    redisMock.incr.mockImplementation(
-      () => new Promise<number>(() => {})
-    );
+    redisMock.incr.mockImplementation(() => new Promise<number>(() => {}));
 
     const pending = rateLimit.checkRateLimit({ ...opts, timeoutMs: 10 });
     await vi.advanceTimersByTimeAsync(10);

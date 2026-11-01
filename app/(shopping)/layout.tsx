@@ -1,16 +1,12 @@
-import ShoppingLayout from '@/modules/shopping/layout/shopping-layout'
-import React from 'react'
+import ShoppingLayout from "@/modules/shopping/layout/shopping-layout";
+import React from "react";
 
 type Props = {
-    children: React.ReactNode
-}
+  children: React.ReactNode;
+};
 
 const layout = ({ children }: Props) => {
-  return (
-    <ShoppingLayout>
-        { children }
-    </ShoppingLayout>
-  )
-}
+  return <ShoppingLayout>{children}</ShoppingLayout>;
+};
 
-export default layout
+export default layout;

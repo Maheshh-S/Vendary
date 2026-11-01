@@ -176,9 +176,7 @@ describe("ADMIN_TRANSITIONS / canAdminTransition", () => {
     expect(ADMIN_TRANSITIONS.pending).toEqual([]);
     expect(ORDER_TRANSITIONS.pending).toEqual(["confirmed", "cancelled"]);
     for (const from of ALL_STATUSES) {
-      expect(ADMIN_TRANSITIONS[from]).toEqual(
-        from === "pending" ? [] : ORDER_TRANSITIONS[from]
-      );
+      expect(ADMIN_TRANSITIONS[from]).toEqual(from === "pending" ? [] : ORDER_TRANSITIONS[from]);
     }
   });
 
@@ -309,7 +307,11 @@ beforeEach(() => {
   );
   txMock.order.updateMany.mockImplementation(
     async (args: { where: { id: string; status: OrderStatus }; data: { status: OrderStatus } }) => {
-      if (orderRow === null || args.where.id !== orderRow.id || args.where.status !== orderRow.status) {
+      if (
+        orderRow === null ||
+        args.where.id !== orderRow.id ||
+        args.where.status !== orderRow.status
+      ) {
         return { count: 0 };
       }
       orderRow = { ...orderRow, status: args.data.status };
@@ -337,7 +339,11 @@ describe("updateOrderStatus authorization and validation", () => {
   it("rejects unauthenticated callers with UNAUTHORIZED before touching the database", async () => {
     authMock.mockResolvedValue(null);
 
-    expectFailure(await updateOrderStatus(ORDER_ID, "cancelled"), "UNAUTHORIZED", "Please sign in to continue.");
+    expectFailure(
+      await updateOrderStatus(ORDER_ID, "cancelled"),
+      "UNAUTHORIZED",
+      "Please sign in to continue."
+    );
     expect(rateLimitMock).not.toHaveBeenCalled();
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
     expect(invalidateMock).not.toHaveBeenCalled();
@@ -471,16 +477,19 @@ describe("updateOrderStatus transition guards", () => {
   it.each([
     ["cancelled", "confirmed"],
     ["refunded", "confirmed"],
-  ] as [OrderStatus, OrderStatus][])("refuses to revive a %s order (%s -> %s)", async (from, to) => {
-    orderRow = makeOrder(from);
+  ] as [OrderStatus, OrderStatus][])(
+    "refuses to revive a %s order (%s -> %s)",
+    async (from, to) => {
+      orderRow = makeOrder(from);
 
-    expectFailure(
-      await updateOrderStatus(ORDER_ID, to),
-      "CONFLICT",
-      `Cannot change an order from ${from} to ${to}.`
-    );
-    expect(txMock.order.updateMany).not.toHaveBeenCalled();
-  });
+      expectFailure(
+        await updateOrderStatus(ORDER_ID, to),
+        "CONFLICT",
+        `Cannot change an order from ${from} to ${to}.`
+      );
+      expect(txMock.order.updateMany).not.toHaveBeenCalled();
+    }
+  );
 
   it("returns CONFLICT when the conditional claim matches no row", async () => {
     // Another admin moved the order between the read and the claim.
@@ -500,20 +509,17 @@ describe("updateOrderStatus transition guards", () => {
     ["delivered", "delivered"],
     ["refunded", "refunded"],
     ["cancelled", "cancelled"],
-  ] as [OrderStatus, OrderStatus][])(
-    "rejects a replayed transition %s -> %s",
-    async (from, to) => {
-      orderRow = makeOrder(from);
+  ] as [OrderStatus, OrderStatus][])("rejects a replayed transition %s -> %s", async (from, to) => {
+    orderRow = makeOrder(from);
 
-      expectFailure(
-        await updateOrderStatus(ORDER_ID, to),
-        "CONFLICT",
-        `Cannot change an order from ${from} to ${to}.`
-      );
-      expect(txMock.order.updateMany).not.toHaveBeenCalled();
-      expect(txMock.product.updateMany).not.toHaveBeenCalled();
-    }
-  );
+    expectFailure(
+      await updateOrderStatus(ORDER_ID, to),
+      "CONFLICT",
+      `Cannot change an order from ${from} to ${to}.`
+    );
+    expect(txMock.order.updateMany).not.toHaveBeenCalled();
+    expect(txMock.product.updateMany).not.toHaveBeenCalled();
+  });
 });
 
 describe("updateOrderStatus customer email", () => {

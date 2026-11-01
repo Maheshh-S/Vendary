@@ -9,7 +9,7 @@ import { notFound } from "next/navigation";
 import React from "react";
 
 type Props = {
-  params:  Promise<{ id: string }>
+  params: Promise<{ id: string }>;
 };
 
 const ProductPage = async ({ params }: Props) => {
@@ -18,28 +18,28 @@ const ProductPage = async ({ params }: Props) => {
 
   const product = await prisma.product.findUnique({
     where: {
-        id,
+      id,
     },
     include: {
-        images: true,
-        category: true,
-        options: true,
-        videos: true,
-        reviews: {
-            take: 10,
-            orderBy: {
-                createdAt: "desc",
-            },
-            include: {
-                user: {
-                    select: {
-                        id: true,
-                        name: true,
-                        profilePic: true,
-                    },
-                },
-            },
+      images: true,
+      category: true,
+      options: true,
+      videos: true,
+      reviews: {
+        take: 10,
+        orderBy: {
+          createdAt: "desc",
         },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              profilePic: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -79,14 +79,18 @@ const ProductPage = async ({ params }: Props) => {
 
   return (
     <div className="w-full">
-        <ProductDescription basicDetails={serializedBasicDetails} product={serializedProduct} images={serializePrismaObject(product.images)} />
-        <Reviews
-          productId={product.id}
-          session={session}
-          reviews={serializePrismaObject(product.reviews ?? [])}
-          myReview={serializePrismaObject(myReview)}
-          ratingSummary={ratingSummary}
-        />
+      <ProductDescription
+        basicDetails={serializedBasicDetails}
+        product={serializedProduct}
+        images={serializePrismaObject(product.images)}
+      />
+      <Reviews
+        productId={product.id}
+        session={session}
+        reviews={serializePrismaObject(product.reviews ?? [])}
+        myReview={serializePrismaObject(myReview)}
+        ratingSummary={ratingSummary}
+      />
     </div>
   );
 };

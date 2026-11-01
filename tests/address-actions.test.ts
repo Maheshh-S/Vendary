@@ -79,8 +79,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   authMock.mockResolvedValue({ user: { id: USER_ID, role: "USER" } });
   revalidateMock.mockReturnValue(undefined);
-  prismaMock.$transaction.mockImplementation(
-    async (callback: (tx: typeof txMock) => unknown) => callback(txMock)
+  prismaMock.$transaction.mockImplementation(async (callback: (tx: typeof txMock) => unknown) =>
+    callback(txMock)
   );
   prismaMock.savedAddress.findMany.mockResolvedValue([ROW]);
   prismaMock.savedAddress.deleteMany.mockResolvedValue({ count: 1 });
@@ -242,10 +242,7 @@ describe("default address handling", () => {
       );
     }
 
-    expectFailure(
-      await updateAddress({ ...INPUT, id: ADDRESS_ID, isDefault: true }),
-      "CONFLICT"
-    );
+    expectFailure(await updateAddress({ ...INPUT, id: ADDRESS_ID, isDefault: true }), "CONFLICT");
     expectFailure(await setDefaultAddress(ADDRESS_ID), "CONFLICT");
   });
 

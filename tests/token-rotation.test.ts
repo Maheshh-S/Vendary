@@ -26,8 +26,8 @@ beforeEach(() => {
   txMock.passwordResetToken.create.mockImplementation(
     async (args: { data: Record<string, unknown> }) => ({ id: "reset_new", ...args.data })
   );
-  prismaMock.$transaction.mockImplementation(
-    async (callback: (tx: typeof txMock) => unknown) => callback(txMock)
+  prismaMock.$transaction.mockImplementation(async (callback: (tx: typeof txMock) => unknown) =>
+    callback(txMock)
   );
 });
 

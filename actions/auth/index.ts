@@ -1,240 +1,229 @@
-"use server"
-import { DEFAULT_LOGIN_REDIRECT } from "@/routes"
-import { AuthError } from "next-auth"
-import { signIn, signOut } from "@/auth"
-import * as z from "zod"
-import { generateVerificationToken } from "@/lib/token"
-import { sendVerificationEmail } from "@/lib/mail"
-import { LoginSchema } from "@/schemas/auth/login-schema"
-import { GetUserByEmail } from "../user"
-import { RegisterSchema, RegisterSchemaType } from "@/schemas/auth/register-schema"
-import {prisma} from "@/lib/db/prisma"
-import { getDummyHash } from "@/lib/dummy-hash"
-import bcrypt from "bcryptjs"
-import { getVerificationTokenByToken } from "../token"
-import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit"
-import { clientKey } from "@/lib/request-key"
+"use server";
+import { DEFAULT_LOGIN_REDIRECT } from "@/routes";
+import { AuthError } from "next-auth";
+import { signIn, signOut } from "@/auth";
+import * as z from "zod";
+import { generateVerificationToken } from "@/lib/token";
+import { sendVerificationEmail } from "@/lib/mail";
+import { LoginSchema } from "@/schemas/auth/login-schema";
+import { GetUserByEmail } from "../user";
+import { RegisterSchema, RegisterSchemaType } from "@/schemas/auth/register-schema";
+import { prisma } from "@/lib/db/prisma";
+import { getDummyHash } from "@/lib/dummy-hash";
+import bcrypt from "bcryptjs";
+import { getVerificationTokenByToken } from "../token";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { clientKey } from "@/lib/request-key";
 
 export const signOutUser = async () => {
-    try {
-        await signOut();
-    } catch (error) {
-        console.error("Error signing out:", error);
-        throw new Error("Failed to sign out");
-    }
-}
-
-export const signInProvider = async (provider: 'google') => {
-    if (!process.env.AUTH_GOOGLE_ID || !process.env.AUTH_GOOGLE_SECRET) {
-        return {
-            "error": "Google sign-in is not configured.",
-            success_status: false
-        }
-    }
-    try {
-        await signIn(provider, { redirectTo: DEFAULT_LOGIN_REDIRECT });
-    } catch (error) {
-        if(error instanceof AuthError){
-            switch (error.type) {
-                    case "UntrustedHost":
-                        return {
-                            "error" : "Untrusted host",
-                            success_status: false
-                        }
-                    case "AccessDenied":
-                        return {
-                            "error" : "Please Verify Your Email to Login.",
-                            success_status: false
-                        }
-
-                default:
-                    return {
-                        "error" : "Something Went Wrong!",
-                        success_status: false
-                    }
-            }
-        }
-        throw error;
-    }
+  try {
+    await signOut();
+  } catch (error) {
+    console.error("Error signing out:", error);
+    throw new Error("Failed to sign out");
+  }
 };
 
-export const Login = async (credentials : z.infer<typeof LoginSchema>) => {
-    const {
-        data,
-        success
-    } = LoginSchema.safeParse(credentials)
+export const signInProvider = async (provider: "google") => {
+  if (!process.env.AUTH_GOOGLE_ID || !process.env.AUTH_GOOGLE_SECRET) {
+    return {
+      error: "Google sign-in is not configured.",
+      success_status: false,
+    };
+  }
+  try {
+    await signIn(provider, { redirectTo: DEFAULT_LOGIN_REDIRECT });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      switch (error.type) {
+        case "UntrustedHost":
+          return {
+            error: "Untrusted host",
+            success_status: false,
+          };
+        case "AccessDenied":
+          return {
+            error: "Please Verify Your Email to Login.",
+            success_status: false,
+          };
 
-    if(!success){
-        throw new Error("Invalid email or password")
+        default:
+          return {
+            error: "Something Went Wrong!",
+            success_status: false,
+          };
+      }
     }
+    throw error;
+  }
+};
 
-    // Brute-force guard: 5 attempts per IP per minute, counted on every
-    // attempt (valid or not) so timing doesn't leak validity.
-    await enforceRateLimit({
-        ...RATE_LIMITS.login,
-        bucket: "login",
-        subject: await clientKey("login"),
-    });
+export const Login = async (credentials: z.infer<typeof LoginSchema>) => {
+  const { data, success } = LoginSchema.safeParse(credentials);
 
-    const {
-        email,
-        password
-    } = data;
+  if (!success) {
+    throw new Error("Invalid email or password");
+  }
 
-    const existingUser = await GetUserByEmail(email);
+  // Brute-force guard: 5 attempts per IP per minute, counted on every
+  // attempt (valid or not) so timing doesn't leak validity.
+  await enforceRateLimit({
+    ...RATE_LIMITS.login,
+    bucket: "login",
+    subject: await clientKey("login"),
+  });
 
-    if(!existingUser || !existingUser.email || !existingUser.password){
-        void await bcrypt.compare(password, await getDummyHash());
-        throw new Error("Invalid email or password")
-    }
+  const { email, password } = data;
 
-    if(!existingUser.emailVerified){
-        const verificationToken = await generateVerificationToken(existingUser.email);
+  const existingUser = await GetUserByEmail(email);
 
-        try {
-            await sendVerificationEmail(verificationToken.email, verificationToken.token)
-        } catch (error) {
-            console.error("Failed to send verification email:", error)
-            throw new Error("Could not send the verification email. Please try again.")
-        }
+  if (!existingUser || !existingUser.email || !existingUser.password) {
+    void (await bcrypt.compare(password, await getDummyHash()));
+    throw new Error("Invalid email or password");
+  }
 
-        return {
-            "success" : "Verification Email Sent. Check your inbox.",
-            success_status: true
-        }
-    }
+  if (!existingUser.emailVerified) {
+    const verificationToken = await generateVerificationToken(existingUser.email);
 
     try {
-        await signIn("credentials", {
-            email,
-            password,
-            redirectTo: DEFAULT_LOGIN_REDIRECT
-        })
+      await sendVerificationEmail(verificationToken.email, verificationToken.token);
     } catch (error) {
-        if(error instanceof AuthError){
-            switch (error.type) {
-                case "CredentialsSignin":
-                    throw new Error("Invalid email or password")
-
-                    case "UntrustedHost":
-                        throw new Error("Untrusted host")
-                    case "AccessDenied":
-                        throw new Error("Please Verify Your Email to Login.")
-
-                default:
-                    throw new Error("Something Went Wrong!")
-            }
-        }
-        throw error;
-    }
-
-    throw new Error("Unreachable")
-}
-
-
-export const Register = async (credentials : RegisterSchemaType) => {
-    const {
-        success,
-        data
-    } = RegisterSchema.safeParse(credentials)
-
-    if(!success){
-        throw new Error('Invalid Data!')
-    }
-
-    // Registration sends a verification email (Resend cost) — 5 per IP per
-    // 15 minutes.
-    await enforceRateLimit({
-        ...RATE_LIMITS.register,
-        bucket: "register",
-        subject: await clientKey("register"),
-    });
-
-    const user = await GetUserByEmail(data.email);
-    if(user){
-        await prisma.verificationToken.deleteMany({
-            where: {
-                email: data.email
-            }
-        })
-        const verificationToken = await generateVerificationToken(data.email)
-
-        try {
-            await sendVerificationEmail(verificationToken.email, verificationToken.token)
-        } catch (error) {
-            console.error("Failed to send verification email:", error)
-            throw new Error("Could not send the verification email. Please try again.")
-        }
-
-        return {
-            success: "Verification Email Sent.",
-        }
-        
-    }
-
-    const db = prisma;
-    const hashedPassword = await bcrypt.hash(data.password, 10);
-
-    await db.user.create({
-        data: {
-            email: data.email,
-            password: hashedPassword,
-            role: "USER",
-            firstName: data.firstName,
-            lastName: data.lastName
-        }
-    })
-
-    const verificationToken = await generateVerificationToken(data.email)
-
-    try {
-        await sendVerificationEmail(verificationToken.email, verificationToken.token)
-    } catch (error) {
-        console.error("Failed to send verification email:", error)
-        throw new Error("Could not send the verification email. Please try again.")
+      console.error("Failed to send verification email:", error);
+      throw new Error("Could not send the verification email. Please try again.");
     }
 
     return {
-        'success' : 'Confirmation Email Sent!'
+      success: "Verification Email Sent. Check your inbox.",
+      success_status: true,
+    };
+  }
+
+  try {
+    await signIn("credentials", {
+      email,
+      password,
+      redirectTo: DEFAULT_LOGIN_REDIRECT,
+    });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      switch (error.type) {
+        case "CredentialsSignin":
+          throw new Error("Invalid email or password");
+
+        case "UntrustedHost":
+          throw new Error("Untrusted host");
+        case "AccessDenied":
+          throw new Error("Please Verify Your Email to Login.");
+
+        default:
+          throw new Error("Something Went Wrong!");
+      }
     }
-}
+    throw error;
+  }
 
-export const newVerification = async(token: string) => {
-    const db = prisma;
-    const existing_token = await getVerificationTokenByToken(token);
+  throw new Error("Unreachable");
+};
 
-    if(!existing_token){
-        throw new Error("Invalid Token")
+export const Register = async (credentials: RegisterSchemaType) => {
+  const { success, data } = RegisterSchema.safeParse(credentials);
+
+  if (!success) {
+    throw new Error("Invalid Data!");
+  }
+
+  // Registration sends a verification email (Resend cost) — 5 per IP per
+  // 15 minutes.
+  await enforceRateLimit({
+    ...RATE_LIMITS.register,
+    bucket: "register",
+    subject: await clientKey("register"),
+  });
+
+  const user = await GetUserByEmail(data.email);
+  if (user) {
+    await prisma.verificationToken.deleteMany({
+      where: {
+        email: data.email,
+      },
+    });
+    const verificationToken = await generateVerificationToken(data.email);
+
+    try {
+      await sendVerificationEmail(verificationToken.email, verificationToken.token);
+    } catch (error) {
+      console.error("Failed to send verification email:", error);
+      throw new Error("Could not send the verification email. Please try again.");
     }
-    const hasExpired = new Date() > new Date(existing_token.expires);
-
-    if(hasExpired){
-        throw new Error("Token Expired")
-    }
-
-    const user = await GetUserByEmail(existing_token.email);
-
-    if(!user){
-        throw new Error("Invalid Token")
-    }
-
-    await db.user.update({
-        where: {
-            id: user.id
-        },
-        data:{
-            emailVerified: new Date(),
-            email: user.email
-        }
-    })
-
-    await db.verificationToken.delete({
-        where: {
-            id: existing_token.id,
-        }
-    })
 
     return {
-        success: "Email Verified"
-    }
-}
+      success: "Verification Email Sent.",
+    };
+  }
+
+  const db = prisma;
+  const hashedPassword = await bcrypt.hash(data.password, 10);
+
+  await db.user.create({
+    data: {
+      email: data.email,
+      password: hashedPassword,
+      role: "USER",
+      firstName: data.firstName,
+      lastName: data.lastName,
+    },
+  });
+
+  const verificationToken = await generateVerificationToken(data.email);
+
+  try {
+    await sendVerificationEmail(verificationToken.email, verificationToken.token);
+  } catch (error) {
+    console.error("Failed to send verification email:", error);
+    throw new Error("Could not send the verification email. Please try again.");
+  }
+
+  return {
+    success: "Confirmation Email Sent!",
+  };
+};
+
+export const newVerification = async (token: string) => {
+  const db = prisma;
+  const existing_token = await getVerificationTokenByToken(token);
+
+  if (!existing_token) {
+    throw new Error("Invalid Token");
+  }
+  const hasExpired = new Date() > new Date(existing_token.expires);
+
+  if (hasExpired) {
+    throw new Error("Token Expired");
+  }
+
+  const user = await GetUserByEmail(existing_token.email);
+
+  if (!user) {
+    throw new Error("Invalid Token");
+  }
+
+  await db.user.update({
+    where: {
+      id: user.id,
+    },
+    data: {
+      emailVerified: new Date(),
+      email: user.email,
+    },
+  });
+
+  await db.verificationToken.delete({
+    where: {
+      id: existing_token.id,
+    },
+  });
+
+  return {
+    success: "Email Verified",
+  };
+};

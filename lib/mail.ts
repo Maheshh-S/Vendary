@@ -34,8 +34,7 @@ type MailConfig = { from: string; resend: Resend };
 
 export const getOrderMailConfig = (): MailConfig | null => {
   const configuredFrom = process.env.EMAIL_FROM?.trim();
-  const from =
-    configuredFrom || (process.env.NODE_ENV === "development" ? DEVELOPMENT_SENDER : "");
+  const from = configuredFrom || (process.env.NODE_ENV === "development" ? DEVELOPMENT_SENDER : "");
   const resend = getResendClient();
   return from && resend ? { from, resend } : null;
 };
@@ -59,8 +58,7 @@ export const sendVerificationEmail = async (email: string, token: string): Promi
 
 /** Outcome of a reset send; the caller keeps its response constant either way. */
 export type PasswordResetEmailResult =
-  | { status: "sent" }
-  | { status: "skipped"; reason: "not_configured" | "rejected" };
+  { status: "sent" } | { status: "skipped"; reason: "not_configured" | "rejected" };
 
 /**
  * Sends the password reset link. Never throws: an unconfigured mailbox or a
@@ -78,7 +76,11 @@ export const sendPasswordResetEmail = async (
       (process.env.NODE_ENV === "development" ? DEVELOPMENT_SENDER : "");
     if (!resend || !from) {
       console.info(
-        JSON.stringify({ level: "info", event: "password_reset_email_skipped", reason: "not_configured" })
+        JSON.stringify({
+          level: "info",
+          event: "password_reset_email_skipped",
+          reason: "not_configured",
+        })
       );
       return { status: "skipped", reason: "not_configured" };
     }
@@ -102,9 +104,7 @@ export const sendPasswordResetEmail = async (
         `,
     });
     if (error) {
-      console.warn(
-        JSON.stringify({ level: "warn", event: "password_reset_email_rejected" })
-      );
+      console.warn(JSON.stringify({ level: "warn", event: "password_reset_email_rejected" }));
       return { status: "skipped", reason: "rejected" };
     }
     return { status: "sent" };
@@ -155,10 +155,7 @@ const toView = (order: OrderWithEmailData): OrderEmailView => {
     quantity: item.quantity,
     unitPaise: toPaise(item.price),
   }));
-  const subtotalPaise = items.reduce(
-    (total, item) => total + item.unitPaise * item.quantity,
-    0
-  );
+  const subtotalPaise = items.reduce((total, item) => total + item.unitPaise * item.quantity, 0);
 
   return {
     orderId: order.id,
@@ -212,9 +209,7 @@ const recipientsFor = (order: OrderWithEmailData): { to: string[]; bcc?: string[
   // The store inbox is a hidden copy: putting it in `to` would expose the
   // internal address to the customer on a reply-all.
   if (customer) {
-    return store && store !== customer
-      ? { to: [customer], bcc: [store] }
-      : { to: [customer] };
+    return store && store !== customer ? { to: [customer], bcc: [store] } : { to: [customer] };
   }
   return store ? { to: [store] } : { to: [] };
 };

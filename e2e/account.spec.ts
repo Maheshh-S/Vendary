@@ -138,9 +138,7 @@ test.describe("account settings", () => {
     await page.getByLabel("State").fill("Karnataka");
     await page.getByRole("button", { name: "Save address" }).click();
 
-    const card = page
-      .getByTestId("saved-address")
-      .filter({ hasText: "9 Clearance Lane" });
+    const card = page.getByTestId("saved-address").filter({ hasText: "9 Clearance Lane" });
     await expect(card).toBeVisible();
     await expect(card.getByText("Behind the temple")).toBeVisible();
     await expect(card.getByText("Opposite the school")).toBeVisible();
@@ -157,9 +155,7 @@ test.describe("account settings", () => {
     await editForm.getByRole("button", { name: "Save changes" }).click();
 
     await expect(page.getByText("Address updated")).toBeVisible();
-    const updatedCard = page
-      .getByTestId("saved-address")
-      .filter({ hasText: "9 Clearance Lane" });
+    const updatedCard = page.getByTestId("saved-address").filter({ hasText: "9 Clearance Lane" });
     await expect(updatedCard).toBeVisible();
     await expect(updatedCard.getByText("Clearing", { exact: true })).toHaveCount(0);
     await expect(updatedCard.getByText("Behind the temple")).toHaveCount(0);

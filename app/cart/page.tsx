@@ -8,12 +8,7 @@ import {
   DescriptionTerm,
 } from "@/components/ui/description-list";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogActions,
-  DialogBody,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogActions, DialogBody, DialogTitle } from "@/components/ui/dialog";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import useCart from "@/hooks/use-cart";
@@ -28,7 +23,11 @@ import { formatPrice } from "@/lib/locales";
 import { useLocale } from "@/providers/locale-provider";
 import { computeOrderTotals, GST_RATE } from "@/lib/money";
 import { MAX_CART_QUANTITY } from "@/lib/cart";
-import { hasBlockingQuoteIssue, quoteLineIssueLabel, shouldBlockCheckout } from "@/schemas/cart/quote-schema";
+import {
+  hasBlockingQuoteIssue,
+  quoteLineIssueLabel,
+  shouldBlockCheckout,
+} from "@/schemas/cart/quote-schema";
 import QuoteBanner from "@/modules/checkout/components/_quote-banner";
 
 export default function CartPage() {
@@ -50,9 +49,7 @@ export default function CartPage() {
     isLoading: quoteQuery.isLoading,
     errorMessage: quoteQuery.errorMessage,
   });
-  const quoteByProductId = new Map(
-    (quote?.lines ?? []).map((line) => [line.productId, line])
-  );
+  const quoteByProductId = new Map((quote?.lines ?? []).map((line) => [line.productId, line]));
 
   // The server quote is authoritative whenever it is available; before it
   // resolves (or if it fails) the local paise cart renders a best-effort total.
@@ -116,15 +113,15 @@ export default function CartPage() {
                   Discover our curated collection of products and add your favorites to your cart.
                 </p>
 
-                <Button 
-                  className="mt-8 px-6 py-2.5 flex items-center gap-2 text-white bg-blue-600 hover:bg-blue-700" 
+                <Button
+                  className="mt-8 px-6 py-2.5 flex items-center gap-2 text-white bg-blue-600 hover:bg-blue-700"
                   href={"/"}
                 >
                   Browse Products
                   <ArrowRightIcon className="h-4 w-4" />
                 </Button>
               </div>
-              
+
               <div className="relative">
                 <div className="absolute -inset-1 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 opacity-20 blur-sm"></div>
                 <div className="relative">
@@ -155,168 +152,148 @@ export default function CartPage() {
             />
 
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-            <div className="lg:col-span-8">
-              <div className="rounded-xl bg-white shadow-sm ring-1 ring-zinc-950/10 dark:bg-zinc-800 dark:ring-white/10">
-                <ul className="divide-y divide-zinc-200 dark:divide-zinc-700">
-                  {cartItems.map((item) => {
-                    const quoteLine = quoteByProductId.get(item.id);
-                    const unitPaise = quoteLine?.unitPaise ?? item.unitPaise;
-                    const imageSrc = quoteLine?.image ?? item.images[0]?.src;
-                    return (
-                    <li key={item.id} className="flex py-6 px-6">
-                      <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700">
-                        <Image
-                          height={100}
-                          width={100}
-                          src={imageSrc || "/assets/empty-cart.png"}
-                          alt={quoteLine?.name || item.name}
-                          className="h-full w-full object-cover object-center"
-                        />
-                      </div>
-
-                      <div className="ml-4 flex flex-1 flex-col">
-                        <div>
-                          <div className="flex justify-between text-base font-medium text-zinc-900 dark:text-white">
-                            <h3>
-                              <Link
-                                href={`/products/${item.id}`}
-                                className="hover:text-blue-600 dark:hover:text-blue-400"
-                              >
-                                {quoteLine?.name || item.name}
-                              </Link>
-                            </h3>
-                            <p className="ml-4">
-                              {fmtPaise(unitPaise * item.quantity)}
-                            </p>
+              <div className="lg:col-span-8">
+                <div className="rounded-xl bg-white shadow-sm ring-1 ring-zinc-950/10 dark:bg-zinc-800 dark:ring-white/10">
+                  <ul className="divide-y divide-zinc-200 dark:divide-zinc-700">
+                    {cartItems.map((item) => {
+                      const quoteLine = quoteByProductId.get(item.id);
+                      const unitPaise = quoteLine?.unitPaise ?? item.unitPaise;
+                      const imageSrc = quoteLine?.image ?? item.images[0]?.src;
+                      return (
+                        <li key={item.id} className="flex py-6 px-6">
+                          <div className="h-24 w-24 flex-shrink-0 overflow-hidden rounded-md border border-zinc-200 dark:border-zinc-700">
+                            <Image
+                              height={100}
+                              width={100}
+                              src={imageSrc || "/assets/empty-cart.png"}
+                              alt={quoteLine?.name || item.name}
+                              className="h-full w-full object-cover object-center"
+                            />
                           </div>
-                          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                            {fmtPaise(unitPaise)} each
-                          </p>
-                          {quoteLine?.issue && (
-                            <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">
-                              {quoteLineIssueLabel(quoteLine)}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex flex-1 items-end justify-between text-sm">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-zinc-600 dark:text-zinc-400">
-                              Qty
-                            </span>
-                            <div className="flex items-center border border-zinc-300 rounded dark:border-zinc-600">
-                              <button
-                                type="button"
-                                className="px-2 py-1 text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                                onClick={() =>
-                                  updateQuantity(item.id, item.quantity - 1)
-                                }
-                                disabled={item.quantity <= 1}
-                              >
-                                -
-                              </button>
-                              <span className="px-3 py-1 text-zinc-800 dark:text-zinc-200">
-                                {item.quantity}
-                              </span>
-                              <button
-                                type="button"
-                                className="px-2 py-1 text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                                onClick={() =>
-                                  updateQuantity(item.id, item.quantity + 1)
-                                }
-                                disabled={item.quantity >= MAX_CART_QUANTITY}
-                              >
-                                +
-                              </button>
+
+                          <div className="ml-4 flex flex-1 flex-col">
+                            <div>
+                              <div className="flex justify-between text-base font-medium text-zinc-900 dark:text-white">
+                                <h3>
+                                  <Link
+                                    href={`/products/${item.id}`}
+                                    className="hover:text-blue-600 dark:hover:text-blue-400"
+                                  >
+                                    {quoteLine?.name || item.name}
+                                  </Link>
+                                </h3>
+                                <p className="ml-4">{fmtPaise(unitPaise * item.quantity)}</p>
+                              </div>
+                              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                                {fmtPaise(unitPaise)} each
+                              </p>
+                              {quoteLine?.issue && (
+                                <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">
+                                  {quoteLineIssueLabel(quoteLine)}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex flex-1 items-end justify-between text-sm">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-zinc-600 dark:text-zinc-400">Qty</span>
+                                <div className="flex items-center border border-zinc-300 rounded dark:border-zinc-600">
+                                  <button
+                                    type="button"
+                                    className="px-2 py-1 text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                                    onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                                    disabled={item.quantity <= 1}
+                                  >
+                                    -
+                                  </button>
+                                  <span className="px-3 py-1 text-zinc-800 dark:text-zinc-200">
+                                    {item.quantity}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="px-2 py-1 text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                                    onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                                    disabled={item.quantity >= MAX_CART_QUANTITY}
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+
+                              <Button>
+                                <Trash2Icon size={16} onClick={() => removeItem(item.id)} />
+                              </Button>
                             </div>
                           </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
 
-                          <Button>
-                            <Trash2Icon size={16} onClick={() => removeItem(item.id)} />
-                          </Button>
-                        </div>
-                      </div>
-                    </li>
-                    );
-                  })}
-                </ul>
+                <div className="mt-6">
+                  <Button href="/products" color="light" className="w-full sm:w-auto">
+                    Continue Shopping
+                  </Button>
+                </div>
               </div>
 
-              <div className="mt-6">
-                <Button
-                  href="/products"
-                  color="light"
-                  className="w-full sm:w-auto"
-                >
-                  Continue Shopping
-                </Button>
-              </div>
-            </div>
+              <div className="lg:col-span-4">
+                <div className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/10 dark:bg-zinc-800 dark:ring-white/10">
+                  <h2 className="text-lg font-medium text-zinc-900 dark:text-white">
+                    Order Summary
+                  </h2>
 
-            <div className="lg:col-span-4">
-              <div className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-zinc-950/10 dark:bg-zinc-800 dark:ring-white/10">
-                <h2 className="text-lg font-medium text-zinc-900 dark:text-white">
-                  Order Summary
-                </h2>
+                  <DescriptionList className="mt-6">
+                    <DescriptionTerm>Subtotal</DescriptionTerm>
+                    <DescriptionDetails>{fmtPaise(totals.subtotalPaise)}</DescriptionDetails>
 
-                <DescriptionList className="mt-6">
-                  <DescriptionTerm>Subtotal</DescriptionTerm>
-                  <DescriptionDetails>
-                    {fmtPaise(totals.subtotalPaise)}
-                  </DescriptionDetails>
+                    <DescriptionTerm>Shipping</DescriptionTerm>
+                    <DescriptionDetails>Free</DescriptionDetails>
 
-                  <DescriptionTerm>Shipping</DescriptionTerm>
-                  <DescriptionDetails>Free</DescriptionDetails>
+                    <DescriptionTerm>Tax ({(GST_RATE * 100).toFixed(0)}%)</DescriptionTerm>
+                    <DescriptionDetails>{fmtPaise(totals.taxPaise)}</DescriptionDetails>
 
-                  <DescriptionTerm>Tax ({(GST_RATE * 100).toFixed(0)}%)</DescriptionTerm>
-                  <DescriptionDetails>
-                    {fmtPaise(totals.taxPaise)}
-                  </DescriptionDetails>
+                    <DescriptionTerm className="!border-t-2 pt-4 font-medium text-zinc-900 dark:text-white">
+                      Total
+                    </DescriptionTerm>
+                    <DescriptionDetails className="!border-t-2 pt-4 font-medium text-zinc-900 dark:text-white">
+                      {fmtPaise(totals.totalPaise)}
+                    </DescriptionDetails>
+                  </DescriptionList>
 
-                  <DescriptionTerm className="!border-t-2 pt-4 font-medium text-zinc-900 dark:text-white">
-                    Total
-                  </DescriptionTerm>
-                  <DescriptionDetails className="!border-t-2 pt-4 font-medium text-zinc-900 dark:text-white">
-                    {fmtPaise(totals.totalPaise)}
-                  </DescriptionDetails>
-                </DescriptionList>
+                  <Button
+                    className="mt-6 w-full py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
+                    color="sky"
+                    disabled={checkoutBlocked}
+                    onClick={() => setCheckoutConfirm(true)}
+                  >
+                    {quoteQuery.isLoading ? "Checking prices…" : "Proceed to Checkout"}
+                  </Button>
+                  {quoteQuery.errorMessage ? (
+                    <p className="mt-2 text-center text-xs text-amber-700 dark:text-amber-400">
+                      We couldn&apos;t verify current prices. Retry above before checking out.
+                    </p>
+                  ) : blocking ? (
+                    <p className="mt-2 text-center text-xs text-red-600 dark:text-red-400">
+                      Fix the items above to continue.
+                    </p>
+                  ) : quoteQuery.isLoading ? (
+                    <p className="mt-2 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                      Confirming prices and stock with the server…
+                    </p>
+                  ) : null}
 
-                <Button
-                  className="mt-6 w-full py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
-                  color="sky"
-                  disabled={checkoutBlocked}
-                  onClick={() => setCheckoutConfirm(true)}
-                >
-                  {quoteQuery.isLoading ? "Checking prices…" : "Proceed to Checkout"}
-                </Button>
-                {quoteQuery.errorMessage ? (
-                  <p className="mt-2 text-center text-xs text-amber-700 dark:text-amber-400">
-                    We couldn&apos;t verify current prices. Retry above before
-                    checking out.
-                  </p>
-                ) : blocking ? (
-                  <p className="mt-2 text-center text-xs text-red-600 dark:text-red-400">
-                    Fix the items above to continue.
-                  </p>
-                ) : quoteQuery.isLoading ? (
-                  <p className="mt-2 text-center text-xs text-zinc-500 dark:text-zinc-400">
-                    Confirming prices and stock with the server…
-                  </p>
-                ) : null}
-
-                <div className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                  <p>Payments powered by Razorpay — UPI, cards and netbanking</p>
+                  <div className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                    <p>Payments powered by Razorpay — UPI, cards and netbanking</p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
           </>
         )}
 
         {/* Improved checkout confirmation dialog */}
-        <Dialog
-          open={checkoutConfirm}
-          onClose={() => setCheckoutConfirm(false)}
-        >
+        <Dialog open={checkoutConfirm} onClose={() => setCheckoutConfirm(false)}>
           <DialogTitle>Ready to Complete Your Purchase?</DialogTitle>
           <DialogBody className="pt-6">
             <div className="space-y-4">
@@ -335,14 +312,26 @@ export default function CartPage() {
                   <span className="text-lg">{fmtPaise(totals.totalPaise)}</span>
                 </div>
               </div>
-              
+
               <p className="text-zinc-600 dark:text-zinc-400">
-                In the next step, you&apos;ll enter your shipping and payment information to complete your purchase.
+                In the next step, you&apos;ll enter your shipping and payment information to
+                complete your purchase.
               </p>
-              
+
               <div className="flex items-center space-x-2 text-sm text-zinc-500 dark:text-zinc-400">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                  />
                 </svg>
                 <span>Secure checkout with SSL encryption</span>
               </div>

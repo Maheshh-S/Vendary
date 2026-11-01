@@ -18,10 +18,12 @@ const keySecret = serverEnv("RAZORPAY_KEY_SECRET");
 const hasRazorpayKeys = !!keySecret && !!serverEnv("NEXT_PUBLIC_RAZORPAY_KEY_ID");
 
 test.describe("paid checkout @payment", () => {
-  test.skip(!hasRazorpayKeys, "Razorpay test keys required (RAZORPAY_KEY_SECRET / NEXT_PUBLIC_RAZORPAY_KEY_ID)");
+  test.skip(
+    !hasRazorpayKeys,
+    "Razorpay test keys required (RAZORPAY_KEY_SECRET / NEXT_PUBLIC_RAZORPAY_KEY_ID)"
+  );
 
   test("places a paid order and lands on my-orders with a confirmed order", async ({ page }) => {
-
     await page.route("**/checkout.razorpay.com/v1/checkout.js", (route) =>
       route.fulfill({
         contentType: "text/javascript",

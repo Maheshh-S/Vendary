@@ -22,13 +22,13 @@ export function PlaceholdersAndVanishInput({
   const [currentPlaceholder, setCurrentPlaceholder] = useState(0);
   const [value, setValue] = useState("");
   const [animating, setAnimating] = useState(false);
-  
+
   // Setup debounced value
   const [debounced] = useDebouncedValue(value, debounceMs);
 
   // Store the onDebouncedChange callback in a ref to prevent infinite loops
   const onDebouncedChangeRef = useRef(onDebouncedChange);
-  
+
   // Update the ref when the callback changes
   useEffect(() => {
     onDebouncedChangeRef.current = onDebouncedChange;
@@ -97,20 +97,11 @@ export function PlaceholdersAndVanishInput({
       const i = 4 * t * 800;
       for (let n = 0; n < 800; n++) {
         const e = i + 4 * n;
-        if (
-          pixelData[e] !== 0 &&
-          pixelData[e + 1] !== 0 &&
-          pixelData[e + 2] !== 0
-        ) {
+        if (pixelData[e] !== 0 && pixelData[e + 1] !== 0 && pixelData[e + 2] !== 0) {
           newData.push({
             x: n,
             y: t,
-            color: [
-              pixelData[e],
-              pixelData[e + 1],
-              pixelData[e + 2],
-              pixelData[e + 3],
-            ],
+            color: [pixelData[e], pixelData[e + 1], pixelData[e + 2], pixelData[e + 3]],
           });
         }
       }
@@ -200,7 +191,7 @@ export function PlaceholdersAndVanishInput({
       onSubmit(e);
     }
   };
-  
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!animating) {
       setValue(e.target.value);
@@ -209,7 +200,7 @@ export function PlaceholdersAndVanishInput({
       }
     }
   };
-  
+
   return (
     <form
       className={cn(

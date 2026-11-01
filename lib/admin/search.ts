@@ -37,8 +37,7 @@ export const parseAdminSearchQuery = (params: RawSearchParams): AdminSearchQuery
       : undefined;
 
   const rawPage = Number(firstValue(params.page));
-  const page =
-    Number.isInteger(rawPage) && rawPage >= 1 && rawPage <= MAX_ADMIN_PAGE ? rawPage : 1;
+  const page = Number.isInteger(rawPage) && rawPage >= 1 && rawPage <= MAX_ADMIN_PAGE ? rawPage : 1;
 
   return { q, page };
 };

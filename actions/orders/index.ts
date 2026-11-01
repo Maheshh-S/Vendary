@@ -22,7 +22,10 @@ import { verifyRazorpayPaymentSignature } from "@/lib/razorpay";
 import { getRazorpayClient, type RefundReason } from "@/lib/razorpay-client";
 import { runAction } from "@/lib/run-action";
 import { parseInput } from "@/lib/validation";
-import { confirmPaymentSchema, type ConfirmPaymentSchema } from "@/schemas/checkout/confirm-payment-schema";
+import {
+  confirmPaymentSchema,
+  type ConfirmPaymentSchema,
+} from "@/schemas/checkout/confirm-payment-schema";
 import {
   checkoutSessionSchema,
   placeOrderSchema,
@@ -71,7 +74,14 @@ const verifyAndPriceLines = async (checkoutSession: {
 }): Promise<{ lines: VerifiedLine[]; totals: ReturnType<typeof computeOrderTotals> }> => {
   const products = await prisma.product.findMany({
     where: { id: { in: checkoutSession.line_items.map((item) => item.productId) } },
-    select: { id: true, name: true, price: true, availability: true, stockQty: true, thumbnail: true },
+    select: {
+      id: true,
+      name: true,
+      price: true,
+      availability: true,
+      stockQty: true,
+      thumbnail: true,
+    },
   });
   const productById = new Map(products.map((product) => [product.id, product]));
 
@@ -79,13 +89,19 @@ const verifyAndPriceLines = async (checkoutSession: {
   for (const item of checkoutSession.line_items) {
     const product = productById.get(item.productId);
     if (!product) {
-      throw new AppError("OUT_OF_STOCK", "Some items in your cart are no longer available. Please refresh your cart.");
+      throw new AppError(
+        "OUT_OF_STOCK",
+        "Some items in your cart are no longer available. Please refresh your cart."
+      );
     }
     if (product.availability !== "IN_STOCK") {
       throw new AppError("OUT_OF_STOCK", `"${product.name}" is currently unavailable.`);
     }
     if (product.stockQty < item.quantity) {
-      throw new AppError("OUT_OF_STOCK", `Only ${product.stockQty} left of "${product.name}". Please update your cart.`);
+      throw new AppError(
+        "OUT_OF_STOCK",
+        `Only ${product.stockQty} left of "${product.name}". Please update your cart.`
+      );
     }
     lines.push({
       productId: product.id,
@@ -298,7 +314,11 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
 
     if (order.status !== "pending") {
       // A replay of a successful confirmation is a success, not an error.
-      if (order.status === "confirmed" || order.status === "shipped" || order.status === "delivered") {
+      if (
+        order.status === "confirmed" ||
+        order.status === "shipped" ||
+        order.status === "delivered"
+      ) {
         return { orderId: order.id };
       }
       throw new AppError("CONFLICT", "This order can no longer be confirmed.");
@@ -322,7 +342,10 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
         process.env.RAZORPAY_KEY_SECRET
       )
     ) {
-      throw new AppError("PAYMENT_FAILED", "We couldn't verify this payment. Please contact support.");
+      throw new AppError(
+        "PAYMENT_FAILED",
+        "We couldn't verify this payment. Please contact support."
+      );
     }
 
     const paidOrder = await getRazorpayClient().orders.fetch(order.transactionId);
@@ -341,12 +364,20 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
         where: { id: order.id, status: "pending" },
         data: { paymentId: proof.razorpayPaymentId },
       });
-      throw new AppError("PAYMENT_FAILED", "We couldn't verify the captured amount. Please contact support.");
+      throw new AppError(
+        "PAYMENT_FAILED",
+        "We couldn't verify the captured amount. Please contact support."
+      );
     }
 
     const orderTotalPaise = Math.round(Number(order.total) * 100);
     if (paidAmountPaise !== orderTotalPaise) {
-      const refund = await refundAndCloseForAction(order.id, proof.razorpayPaymentId, paidAmountPaise, "AMOUNT_MISMATCH");
+      const refund = await refundAndCloseForAction(
+        order.id,
+        proof.razorpayPaymentId,
+        paidAmountPaise,
+        "AMOUNT_MISMATCH"
+      );
       if (refund.outcome === "already_handled") {
         // The concurrent confirm won and already decremented stock.
         if (isFulfilledStatus(refund.status)) {
@@ -354,7 +385,10 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
         }
         throw new AppError("CONFLICT", "This order can no longer be confirmed.");
       }
-      throw new AppError("AMOUNT_MISMATCH", "The paid amount does not match this order. Your payment has been refunded.");
+      throw new AppError(
+        "AMOUNT_MISMATCH",
+        "The paid amount does not match this order. Your payment has been refunded."
+      );
     }
 
     // Re-price from current DB rows: a price change after init means the paid
@@ -364,7 +398,12 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
       currentTotals = await priceOrderItemsFromDb(order.items);
     } catch (error) {
       if (error instanceof AppError && error.code === "OUT_OF_STOCK") {
-        const refund = await refundAndCloseForAction(order.id, proof.razorpayPaymentId, paidAmountPaise, "OUT_OF_STOCK");
+        const refund = await refundAndCloseForAction(
+          order.id,
+          proof.razorpayPaymentId,
+          paidAmountPaise,
+          "OUT_OF_STOCK"
+        );
         if (refund.outcome === "already_handled") {
           if (isFulfilledStatus(refund.status)) {
             return { orderId: order.id };
@@ -376,14 +415,22 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
     }
 
     if (currentTotals.totalPaise !== paidAmountPaise) {
-      const refund = await refundAndCloseForAction(order.id, proof.razorpayPaymentId, paidAmountPaise, "PRICE_CHANGED");
+      const refund = await refundAndCloseForAction(
+        order.id,
+        proof.razorpayPaymentId,
+        paidAmountPaise,
+        "PRICE_CHANGED"
+      );
       if (refund.outcome === "already_handled") {
         if (isFulfilledStatus(refund.status)) {
           return { orderId: order.id };
         }
         throw new AppError("CONFLICT", "This order can no longer be confirmed.");
       }
-      throw new AppError("PRICE_CHANGED", "Prices changed while you were checking out. Your payment has been refunded.");
+      throw new AppError(
+        "PRICE_CHANGED",
+        "Prices changed while you were checking out. Your payment has been refunded."
+      );
     }
 
     let confirmation: Awaited<ReturnType<typeof confirmOrder>>;
@@ -391,7 +438,12 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
       confirmation = await confirmOrder(order.id, proof.razorpayPaymentId, session.user.id);
     } catch (error) {
       if (error instanceof AppError && error.code === "OUT_OF_STOCK") {
-        const refund = await refundAndCloseForAction(order.id, proof.razorpayPaymentId, paidAmountPaise, "OUT_OF_STOCK");
+        const refund = await refundAndCloseForAction(
+          order.id,
+          proof.razorpayPaymentId,
+          paidAmountPaise,
+          "OUT_OF_STOCK"
+        );
         if (refund.outcome === "already_handled") {
           if (isFulfilledStatus(refund.status)) {
             return { orderId: order.id };
@@ -525,7 +577,10 @@ export const updateOrderStatus = async (orderId: string, status: string) =>
         data: { status: to },
       });
       if (claimed.count === 0) {
-        throw new AppError("CONFLICT", "The order changed while you were updating it. Please refresh.");
+        throw new AppError(
+          "CONFLICT",
+          "The order changed while you were updating it. Please refresh."
+        );
       }
 
       // Only `pending -> confirmed` ever decremented stock; pending orders

@@ -1,15 +1,15 @@
-'use client'
+"use client";
 
-import { useEffect, useRef, useState } from 'react'
-import Image, { type ImageProps } from 'next/image'
-import Link from 'next/link'
-import clsx from 'clsx'
+import { useEffect, useRef, useState } from "react";
+import Image, { type ImageProps } from "next/image";
+import Link from "next/link";
+import clsx from "clsx";
 
-import { FormattedDate } from '@/components/ui/formatted-date'
+import { FormattedDate } from "@/components/ui/formatted-date";
 
-export const a = Link
+export const a = Link;
 
-type ImagePropsWithOptionalAlt = Omit<ImageProps, 'alt'> & { alt?: string }
+type ImagePropsWithOptionalAlt = Omit<ImageProps, "alt"> & { alt?: string };
 
 export const img = function Img(props: ImagePropsWithOptionalAlt) {
   return (
@@ -21,26 +21,20 @@ export const img = function Img(props: ImagePropsWithOptionalAlt) {
       />
       <div className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-gray-900/10 ring-inset dark:ring-white/10" />
     </div>
-  )
-}
+  );
+};
 
-function ContentWrapper({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<'div'>) {
+function ContentWrapper({ className, ...props }: React.ComponentPropsWithoutRef<"div">) {
   return (
     <div className="mx-auto max-w-7xl px-6 lg:flex lg:px-8">
       <div className="lg:ml-96 lg:flex lg:w-full lg:justify-end lg:pl-32">
         <div
-          className={clsx(
-            'mx-auto max-w-lg lg:mx-0 lg:w-0 lg:max-w-xl lg:flex-auto',
-            className,
-          )}
+          className={clsx("mx-auto max-w-lg lg:mx-0 lg:w-0 lg:max-w-xl lg:flex-auto", className)}
           {...props}
         />
       </div>
     </div>
-  )
+  );
 }
 
 function ArticleHeader({ id, date }: { id: string; date: string | Date }) {
@@ -66,7 +60,7 @@ function ArticleHeader({ id, date }: { id: string; date: string | Date }) {
         </div>
       </ContentWrapper>
     </header>
-  )
+  );
 }
 
 export const article = function Article({
@@ -74,40 +68,36 @@ export const article = function Article({
   date,
   children,
 }: {
-  id: string
-  date: string | Date
-  children: React.ReactNode
+  id: string;
+  date: string | Date;
+  children: React.ReactNode;
 }) {
-  const heightRef = useRef<React.ElementRef<'div'>>(null)
-  const [heightAdjustment, setHeightAdjustment] = useState(0)
+  const heightRef = useRef<React.ElementRef<"div">>(null);
+  const [heightAdjustment, setHeightAdjustment] = useState(0);
 
   useEffect(() => {
     if (!heightRef.current) {
-      return
+      return;
     }
 
     const observer = new window.ResizeObserver(() => {
       if (!heightRef.current) {
-        return
+        return;
       }
-      const { height } = heightRef.current.getBoundingClientRect()
-      const nextMultipleOf8 = 8 * Math.ceil(height / 8)
-      setHeightAdjustment(nextMultipleOf8 - height)
-    })
+      const { height } = heightRef.current.getBoundingClientRect();
+      const nextMultipleOf8 = 8 * Math.ceil(height / 8);
+      setHeightAdjustment(nextMultipleOf8 - height);
+    });
 
-    observer.observe(heightRef.current)
+    observer.observe(heightRef.current);
 
     return () => {
-      observer.disconnect()
-    }
-  }, [])
+      observer.disconnect();
+    };
+  }, []);
 
   return (
-    <article
-      id={id}
-      className="scroll-mt-16"
-      style={{ paddingBottom: `${heightAdjustment}px` }}
-    >
+    <article id={id} className="scroll-mt-16" style={{ paddingBottom: `${heightAdjustment}px` }}>
       <div ref={heightRef}>
         <ArticleHeader id={id} date={date} />
         <ContentWrapper className="typography" data-mdx-content>
@@ -115,18 +105,16 @@ export const article = function Article({
         </ContentWrapper>
       </div>
     </article>
-  )
-}
+  );
+};
 
 export const code = function Code({
   highlightedCode,
   ...props
-}: React.ComponentPropsWithoutRef<'code'> & { highlightedCode?: string }) {
+}: React.ComponentPropsWithoutRef<"code"> & { highlightedCode?: string }) {
   if (highlightedCode) {
-    return (
-      <code {...props} dangerouslySetInnerHTML={{ __html: highlightedCode }} />
-    )
+    return <code {...props} dangerouslySetInnerHTML={{ __html: highlightedCode }} />;
   }
 
-  return <code {...props} />
-}
+  return <code {...props} />;
+};

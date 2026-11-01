@@ -1,41 +1,44 @@
-"use client"
-import React, { useState } from 'react';
-import { Navbar, NavbarSection, NavbarItem, NavbarLabel, NavbarDivider, NavbarSpacer } from '@/components/ui/navbar';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogTitle, DialogDescription, DialogBody, DialogActions } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Divider } from '@/components/ui/divider';
-import useCart from '@/hooks/use-cart';
-import { SearchIcon, ShoppingBagIcon } from '../../constants/icons';
-import { Logo } from '@/components/global/logo';
-import { MenuIcon, XIcon } from 'lucide-react';
-import Link from 'next/link';
-import SignInForm from '@/modules/auth/components/sign-in-component';
-import { SearchDialog } from './search-input';
-import { Session } from 'next-auth';
-import UserButton from './user-button';
-import SignUpForm from '@/modules/auth/components/sign-up-component';
-import { formatINR } from '@/lib/format-inr';
+"use client";
+import React, { useState } from "react";
+import {
+  Navbar,
+  NavbarSection,
+  NavbarItem,
+  NavbarLabel,
+  NavbarDivider,
+  NavbarSpacer,
+} from "@/components/ui/navbar";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogTitle,
+  DialogDescription,
+  DialogBody,
+  DialogActions,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Divider } from "@/components/ui/divider";
+import useCart from "@/hooks/use-cart";
+import { SearchIcon, ShoppingBagIcon } from "../../constants/icons";
+import { Logo } from "@/components/global/logo";
+import { MenuIcon, XIcon } from "lucide-react";
+import Link from "next/link";
+import SignInForm from "@/modules/auth/components/sign-in-component";
+import { SearchDialog } from "./search-input";
+import { Session } from "next-auth";
+import UserButton from "./user-button";
+import SignUpForm from "@/modules/auth/components/sign-up-component";
+import { formatINR } from "@/lib/format-inr";
 
-const EcommerceNavbar = ({ session } : {session : Session | null}) => {
+const EcommerceNavbar = ({ session }: { session: Session | null }) => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const {
-    items: cartItems,
-    cartTotalPaise: totalPricePaise
-  } = useCart();
+  const { items: cartItems, cartTotalPaise: totalPricePaise } = useCart();
 
   const totalItems = cartItems.reduce((acc, item) => acc + item.quantity, 0);
-  
-  const categories = [
-    "Art",  
-    "Toys",  
-    "Pottery",  
-    "Weaves",  
-    "Jewelry",  
-    "Decor"
-];
-  
+
+  const categories = ["Art", "Toys", "Pottery", "Weaves", "Jewelry", "Decor"];
+
   return (
     <>
       <header className="border-b border-zinc-200 dark:border-zinc-800 z-40">
@@ -43,9 +46,9 @@ const EcommerceNavbar = ({ session } : {session : Session | null}) => {
           <Navbar>
             {/* Logo */}
             <Logo />
-            
+
             <NavbarDivider className="hidden md:block" />
-            
+
             {/* Categories - Hidden on mobile */}
             <NavbarSection className="hidden md:flex">
               {categories.map((category, index) => (
@@ -54,30 +57,32 @@ const EcommerceNavbar = ({ session } : {session : Session | null}) => {
                 </NavbarItem>
               ))}
             </NavbarSection>
-            
+
             <NavbarSpacer />
-            
+
             {/* Mobile Menu Button */}
             <NavbarItem className="md:hidden" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
               {mobileMenuOpen ? <XIcon className="h-6 w-6" /> : <MenuIcon className="h-6 w-6" />}
             </NavbarItem>
-            
+
             {/* Search */}
             <SearchDialog />
-            
+
             {/* User Account */}
-            { session ? <UserButton session={session} /> : (
+            {session ? (
+              <UserButton session={session} />
+            ) : (
               <>
-                <SignInForm type='modal' modalLabel='both' />
-                <SignUpForm type='modal' modalLabel='text' />
+                <SignInForm type="modal" modalLabel="both" />
+                <SignUpForm type="modal" modalLabel="text" />
               </>
             )}
-            
+
             {/* Cart Button */}
             <Link href={"/cart"}>
               <div className="relative">
                 <ShoppingBagIcon className="h-6 w-6" />
-                <Badge color='emerald' className="absolute -top-2 -right-2">
+                <Badge color="emerald" className="absolute -top-2 -right-2">
                   {totalItems}
                 </Badge>
               </div>
@@ -86,7 +91,7 @@ const EcommerceNavbar = ({ session } : {session : Session | null}) => {
           </Navbar>
         </div>
       </header>
-      
+
       {/* Mobile Menu */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 bg-white dark:bg-zinc-900 md:hidden">
@@ -101,7 +106,7 @@ const EcommerceNavbar = ({ session } : {session : Session | null}) => {
             <ul className="space-y-4">
               {categories.map((category, index) => (
                 <li key={index}>
-                  <Link 
+                  <Link
                     href={`/products?category=${category}`}
                     className="block py-2 text-lg font-medium"
                   >
@@ -119,12 +124,12 @@ const EcommerceNavbar = ({ session } : {session : Session | null}) => {
           </nav>
         </div>
       )}
-      
+
       {/* Cart Dialog */}
       <Dialog open={isCartOpen} onClose={() => setIsCartOpen(false)}>
         <DialogTitle>Your Shopping Cart</DialogTitle>
         <DialogDescription>You have {totalItems} items in your cart</DialogDescription>
-        
+
         <DialogBody>
           <div className="space-y-4">
             {cartItems.length > 0 ? (
@@ -140,11 +145,11 @@ const EcommerceNavbar = ({ session } : {session : Session | null}) => {
             ) : (
               <p className="text-center text-zinc-500">Your cart is empty</p>
             )}
-            
+
             {cartItems.length > 0 && (
               <>
                 <Divider />
-                
+
                 <div className="flex items-center justify-between">
                   <p className="font-medium">Total</p>
                   <p className="font-bold">{formatINR(totalPricePaise / 100)}</p>
@@ -153,7 +158,7 @@ const EcommerceNavbar = ({ session } : {session : Session | null}) => {
             )}
           </div>
         </DialogBody>
-        
+
         <DialogActions>
           <Button onClick={() => setIsCartOpen(false)} outline>
             Continue Shopping

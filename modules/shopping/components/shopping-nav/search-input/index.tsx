@@ -1,4 +1,4 @@
-"use client"
+"use client";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,12 +18,7 @@ export function SearchDialog() {
   //TODO: Add search functionality
   return (
     <div className="z-30">
-      <Button
-        outline
-        className="border-none"
-        type="button"
-        onClick={() => setIsOpen(true)}
-      >
+      <Button outline className="border-none" type="button" onClick={() => setIsOpen(true)}>
         <SearchIcon size={17} />
         <span className="sr-only">Search</span>
       </Button>

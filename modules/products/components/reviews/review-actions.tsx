@@ -1,60 +1,60 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { StarIcon } from "@heroicons/react/20/solid"
-import toast from "react-hot-toast"
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { StarIcon } from "@heroicons/react/20/solid";
+import toast from "react-hot-toast";
 
-import { deleteReview, updateReview } from "@/actions/products/reviews/manage-review"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogActions, DialogBody, DialogTitle } from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
-import { cn } from "@/lib/utils"
+import { deleteReview, updateReview } from "@/actions/products/reviews/manage-review";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogActions, DialogBody, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 /** Edit/delete controls for the signed-in user's own review. */
 export default function ReviewActions({
   review,
 }: {
-  review: { id: string; rating: number; review: string }
+  review: { id: string; rating: number; review: string };
 }) {
-  const router = useRouter()
-  const [isOpen, setIsOpen] = useState(false)
-  const [rating, setRating] = useState(review.rating)
-  const [body, setBody] = useState(review.review)
-  const [isPending, setIsPending] = useState(false)
+  const router = useRouter();
+  const [isOpen, setIsOpen] = useState(false);
+  const [rating, setRating] = useState(review.rating);
+  const [body, setBody] = useState(review.review);
+  const [isPending, setIsPending] = useState(false);
 
   const onSave = async () => {
-    setIsPending(true)
+    setIsPending(true);
     try {
-      const res = await updateReview({ id: review.id, rating, review: body })
+      const res = await updateReview({ id: review.id, rating, review: body });
       if (!res.ok) {
-        toast.error(res.message)
-        return
+        toast.error(res.message);
+        return;
       }
-      toast.success("Review updated")
-      setIsOpen(false)
-      router.refresh()
+      toast.success("Review updated");
+      setIsOpen(false);
+      router.refresh();
     } finally {
-      setIsPending(false)
+      setIsPending(false);
     }
-  }
+  };
 
   const onDelete = async () => {
-    if (!window.confirm("Delete your review? This cannot be undone.")) return
+    if (!window.confirm("Delete your review? This cannot be undone.")) return;
 
-    setIsPending(true)
+    setIsPending(true);
     try {
-      const res = await deleteReview(review.id)
+      const res = await deleteReview(review.id);
       if (!res.ok) {
-        toast.error(res.message)
-        return
+        toast.error(res.message);
+        return;
       }
-      toast.success("Review deleted")
-      router.refresh()
+      toast.success("Review deleted");
+      router.refresh();
     } finally {
-      setIsPending(false)
+      setIsPending(false);
     }
-  }
+  };
 
   return (
     <div className="flex items-center gap-3 text-xs">
@@ -88,10 +88,7 @@ export default function ReviewActions({
                 onClick={() => setRating(star)}
               >
                 <StarIcon
-                  className={cn(
-                    "size-6",
-                    star <= rating ? "text-yellow-400" : "text-gray-300"
-                  )}
+                  className={cn("size-6", star <= rating ? "text-yellow-400" : "text-gray-300")}
                 />
               </button>
             ))}
@@ -114,5 +111,5 @@ export default function ReviewActions({
         </DialogActions>
       </Dialog>
     </div>
-  )
+  );
 }

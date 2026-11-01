@@ -9,46 +9,54 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * confirm claim all execute for real.
  */
 
-const { authMock, prismaMock, txMock, razorpayMock, rateLimitMock, refundMock, revalidateMock, invalidateMock } =
-  vi.hoisted(() => {
-    const txMock = {
-      address: { create: vi.fn() },
-      order: {
-        create: vi.fn(),
-        updateMany: vi.fn(),
-        findUnique: vi.fn(),
-        findUniqueOrThrow: vi.fn(),
-      },
-      orderItem: { create: vi.fn(), createMany: vi.fn(), findMany: vi.fn() },
-      orderEvent: { create: vi.fn(), findFirst: vi.fn() },
-      refund: {
-        findUnique: vi.fn(),
-        create: vi.fn(),
-        update: vi.fn(),
-        updateMany: vi.fn(),
-      },
-      product: { updateMany: vi.fn() },
-    };
-    const prismaMock = {
-      product: { findMany: vi.fn() },
-      order: { findUnique: vi.fn(), updateMany: vi.fn() },
-      $transaction: vi.fn(),
-    };
-    const razorpayMock = {
-      orders: { create: vi.fn(), fetch: vi.fn() },
-      payments: { refund: vi.fn() },
-    };
-    return {
-      authMock: vi.fn(),
-      prismaMock,
-      txMock,
-      razorpayMock,
-      rateLimitMock: { enforceRateLimit: vi.fn() },
-      refundMock: vi.fn(),
-      revalidateMock: vi.fn(),
-      invalidateMock: vi.fn(),
-    };
-  });
+const {
+  authMock,
+  prismaMock,
+  txMock,
+  razorpayMock,
+  rateLimitMock,
+  refundMock,
+  revalidateMock,
+  invalidateMock,
+} = vi.hoisted(() => {
+  const txMock = {
+    address: { create: vi.fn() },
+    order: {
+      create: vi.fn(),
+      updateMany: vi.fn(),
+      findUnique: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
+    },
+    orderItem: { create: vi.fn(), createMany: vi.fn(), findMany: vi.fn() },
+    orderEvent: { create: vi.fn(), findFirst: vi.fn() },
+    refund: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
+    product: { updateMany: vi.fn() },
+  };
+  const prismaMock = {
+    product: { findMany: vi.fn() },
+    order: { findUnique: vi.fn(), updateMany: vi.fn() },
+    $transaction: vi.fn(),
+  };
+  const razorpayMock = {
+    orders: { create: vi.fn(), fetch: vi.fn() },
+    payments: { refund: vi.fn() },
+  };
+  return {
+    authMock: vi.fn(),
+    prismaMock,
+    txMock,
+    razorpayMock,
+    rateLimitMock: { enforceRateLimit: vi.fn() },
+    refundMock: vi.fn(),
+    revalidateMock: vi.fn(),
+    invalidateMock: vi.fn(),
+  };
+});
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/auth", () => ({ auth: authMock }));
@@ -246,13 +254,11 @@ beforeEach(() => {
     async (args: { where: { orderId: string } }) =>
       refundRows.find((refund) => refund.orderId === args.where.orderId) ?? null
   );
-  txMock.refund.create.mockImplementation(
-    async (args: { data: Omit<RefundRow, "id"> }) => {
-      const refund: RefundRow = { id: "refund_row_1", ...args.data };
-      refundRows.push(refund);
-      return { id: refund.id };
-    }
-  );
+  txMock.refund.create.mockImplementation(async (args: { data: Omit<RefundRow, "id"> }) => {
+    const refund: RefundRow = { id: "refund_row_1", ...args.data };
+    refundRows.push(refund);
+    return { id: refund.id };
+  });
   txMock.refund.update.mockImplementation(
     async (args: { where: { id: string }; data: Partial<RefundRow> }) => {
       const refund = refundRows.find((candidate) => candidate.id === args.where.id);
@@ -288,7 +294,11 @@ describe("createRazorpayOrder (durable checkout intent)", () => {
 
     const result = await createRazorpayOrder({ checkoutSession, orderData: addressData });
 
-    expect(result).toEqual({ ok: false, code: "UNAUTHORIZED", message: "Please sign in to continue." });
+    expect(result).toEqual({
+      ok: false,
+      code: "UNAUTHORIZED",
+      message: "Please sign in to continue.",
+    });
     expect(razorpayMock.orders.create).not.toHaveBeenCalled();
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
@@ -298,7 +308,12 @@ describe("createRazorpayOrder (durable checkout intent)", () => {
 
     expect(result.ok).toBe(true);
     expect(rateLimitMock.enforceRateLimit).toHaveBeenCalledWith(
-      expect.objectContaining({ bucket: "createRazorpayOrder", subject: USER_ID, limit: 10, windowMs: 60_000 })
+      expect.objectContaining({
+        bucket: "createRazorpayOrder",
+        subject: USER_ID,
+        limit: 10,
+        windowMs: 60_000,
+      })
     );
   });
 
@@ -398,7 +413,11 @@ describe("PlaceOrder (confirm with payment proof only)", () => {
 
     const result = await PlaceOrder(signedProof());
 
-    expect(result).toEqual({ ok: false, code: "UNAUTHORIZED", message: "Please sign in to continue." });
+    expect(result).toEqual({
+      ok: false,
+      code: "UNAUTHORIZED",
+      message: "Please sign in to continue.",
+    });
     expect(razorpayMock.orders.fetch).not.toHaveBeenCalled();
     expect(txMock.product.updateMany).not.toHaveBeenCalled();
   });
@@ -521,16 +540,14 @@ describe("PlaceOrder (confirm with payment proof only)", () => {
   it("refunds once through the late-capture backstop when a concurrent cancel owns the order", async () => {
     // The customer cancel wins the confirm claim after PlaceOrder read
     // `pending`, leaving the order cancelled with no proof recorded.
-    prismaMock.$transaction.mockImplementation(
-      async (callback: (tx: typeof txMock) => unknown) => {
-        if (txState.status === "pending") {
-          txState = { status: "cancelled", paymentId: "" };
-        }
-        const result = await callback(txMock);
-        orderState = { ...txState };
-        return result;
+    prismaMock.$transaction.mockImplementation(async (callback: (tx: typeof txMock) => unknown) => {
+      if (txState.status === "pending") {
+        txState = { status: "cancelled", paymentId: "" };
       }
-    );
+      const result = await callback(txMock);
+      orderState = { ...txState };
+      return result;
+    });
 
     const result = await PlaceOrder(signedProof());
 
@@ -672,7 +689,11 @@ describe("PlaceOrder (confirm with payment proof only)", () => {
 
     expect(refundMock).toHaveBeenCalledTimes(1);
     expect(refundMock).toHaveBeenCalledWith(
-      expect.objectContaining({ paymentId: RAZORPAY_PAYMENT_ID, amountPaise: ORDER_TOTAL_PAISE, reason: "PRICE_CHANGED" })
+      expect.objectContaining({
+        paymentId: RAZORPAY_PAYMENT_ID,
+        amountPaise: ORDER_TOTAL_PAISE,
+        reason: "PRICE_CHANGED",
+      })
     );
     expect(orderState).toEqual({ status: "refunded", paymentId: RAZORPAY_PAYMENT_ID });
     expect(txMock.product.updateMany).not.toHaveBeenCalled();

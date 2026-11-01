@@ -175,9 +175,7 @@ describe("sendOrderEmail", () => {
       sendMock.mock.invocationCallOrder[0]
     );
 
-    prismaMock.orderEvent.findMany.mockResolvedValue([
-      { metadata: { kind: "confirmation" } },
-    ]);
+    prismaMock.orderEvent.findMany.mockResolvedValue([{ metadata: { kind: "confirmation" } }]);
     const second = await sendOrderEmail(ORDER_ID, "confirmation");
 
     expect(second).toEqual({ status: "skipped", reason: "already_sent" });
@@ -309,9 +307,7 @@ describe("sendOrderEmail", () => {
       const result = await sendOrderEmail(ORDER_ID, kind);
 
       expect(result).toEqual({ status: "sent" });
-      expect(sentPayload().subject.toLowerCase()).toContain(
-        kind === "refunded" ? "refund" : kind
-      );
+      expect(sentPayload().subject.toLowerCase()).toContain(kind === "refunded" ? "refund" : kind);
     }
   });
 });

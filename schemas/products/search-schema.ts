@@ -1,4 +1,4 @@
-import * as z from "zod"
+import * as z from "zod";
 
 /**
  * Public search boundary. The term is trimmed before the bounds are applied,
@@ -10,6 +10,6 @@ export const searchProductsSchema = z.object({
     .trim()
     .min(2, "Search term must be at least 2 characters")
     .max(64, "Search term cannot exceed 64 characters"),
-})
+});
 
-export type SearchProductsInput = z.infer<typeof searchProductsSchema>
+export type SearchProductsInput = z.infer<typeof searchProductsSchema>;

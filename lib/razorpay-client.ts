@@ -14,7 +14,9 @@ export const getRazorpayClient = (): Razorpay => {
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
   if (!keyId || !keySecret) {
     // Fixed message only: the env values themselves are never logged.
-    console.error("[razorpay] client is not configured (NEXT_PUBLIC_RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET)");
+    console.error(
+      "[razorpay] client is not configured (NEXT_PUBLIC_RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET)"
+    );
     throw new Error("Razorpay client is not configured");
   }
   if (!client) {

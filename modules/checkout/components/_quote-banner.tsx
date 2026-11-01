@@ -48,9 +48,7 @@ export default function QuoteBanner({
         role="status"
         className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
       >
-        <p>
-          We couldn&apos;t verify current prices. Please retry before paying.
-        </p>
+        <p>We couldn&apos;t verify current prices. Please retry before paying.</p>
         {onRetry && (
           <button
             type="button"
@@ -96,11 +94,7 @@ export default function QuoteBanner({
           : "mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
       }
     >
-      {blocking && (
-        <p className="font-medium">
-          Some items need attention before you can pay.
-        </p>
-      )}
+      {blocking && <p className="font-medium">Some items need attention before you can pay.</p>}
       {issues.length > 0 && (
         <ul className="mt-1 list-disc space-y-1 pl-5">
           {issues.map((issue) => (
@@ -110,8 +104,7 @@ export default function QuoteBanner({
       )}
       {drifted && (
         <p className={issues.length > 0 ? "mt-2" : "font-medium"}>
-          Prices have changed since you added these items. The totals show the
-          current price.
+          Prices have changed since you added these items. The totals show the current price.
         </p>
       )}
     </div>

@@ -52,8 +52,8 @@ export default function CheckoutForm({
   /** Optional explanation rendered under the disabled payment button. */
   blockedMessage?: string;
 }) {
-  const [, setCountryName] = useState<string>('');
-  const [stateName, setStateName] = useState<string>('');
+  const [, setCountryName] = useState<string>("");
+  const [stateName, setStateName] = useState<string>("");
   const [savedLocation, setSavedLocation] = useState<{ country: string; state: string } | null>(
     null
   );
@@ -64,12 +64,12 @@ export default function CheckoutForm({
 
   // Load Razorpay script
   useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
     script.async = true;
     script.onload = () => setIsRazorpayLoaded(true);
     document.body.appendChild(script);
-    
+
     return () => {
       document.body.removeChild(script);
     };
@@ -85,14 +85,11 @@ export default function CheckoutForm({
       address: "",
       area: "",
       landmark: "",
-      country: ["", ""]
-    }
+      country: ["", ""],
+    },
   });
 
-  const {
-    mutate: OrderNow,
-    isPending
-  } = useMutation({
+  const { mutate: OrderNow, isPending } = useMutation({
     mutationKey: ["place-order"],
     mutationFn: PlaceOrder,
     onMutate: () => {
@@ -105,12 +102,12 @@ export default function CheckoutForm({
       }
       clearCart();
       toast.success("Order placed successfully", { id: "place-order" });
-      router.push('/my-orders');
+      router.push("/my-orders");
     },
     onError: (error) => {
       toast.error("Failed to place order", { id: "place-order" });
       console.error("Error placing order", error);
-    }
+    },
   });
 
   /**
@@ -118,9 +115,7 @@ export default function CheckoutForm({
    * etc. appear under the offending input; returns the first message for the
    * toast when the summary copy is too generic.
    */
-  const applyServerFieldErrors = (
-    fieldErrors?: Record<string, string[]>
-  ): string | undefined => {
+  const applyServerFieldErrors = (fieldErrors?: Record<string, string[]>): string | undefined => {
     if (!fieldErrors) return undefined;
 
     let firstMessage: string | undefined;
@@ -155,7 +150,7 @@ export default function CheckoutForm({
       };
       const init = await createRazorpayOrder({
         checkoutSession: chargeSession,
-        orderData
+        orderData,
       });
 
       if (!init.ok) {
@@ -177,34 +172,35 @@ export default function CheckoutForm({
         description: "Order Payment",
         order_id: razorpayOrderId,
         prefill: {
-          name: `${orderData.fName} ${orderData.lName || ''}`,
-          email: '', // You may want to add email to your form
-          contact: orderData.mobile
+          name: `${orderData.fName} ${orderData.lName || ""}`,
+          email: "", // You may want to add email to your form
+          contact: orderData.mobile,
         },
         notes: {
-          address: orderData.address
+          address: orderData.address,
         },
         theme: {
-          color: "#3B82F6" // Blue color to match your button
+          color: "#3B82F6", // Blue color to match your button
         },
-        handler: function(response: RazorpaySuccessResponse) {
+        handler: function (response: RazorpaySuccessResponse) {
           if (response.razorpay_order_id !== razorpayOrderId) {
-            toast.error("Payment does not match this order. Please contact support.", { id: "place-order" });
+            toast.error("Payment does not match this order. Please contact support.", {
+              id: "place-order",
+            });
             return;
           }
           // The server re-derives everything from the order created above.
           OrderNow({
             razorpayOrderId: response.razorpay_order_id,
             razorpayPaymentId: response.razorpay_payment_id,
-            razorpaySignature: response.razorpay_signature
+            razorpaySignature: response.razorpay_signature,
           });
-        }
+        },
       };
 
       // Initialize Razorpay
       const razorpay = new window.Razorpay(options);
       razorpay.open();
-      
     } catch (error) {
       toast.error("Payment initialization failed", { id: "razorpay-init" });
       console.error("Razorpay initialization failed:", error);
@@ -234,10 +230,9 @@ export default function CheckoutForm({
 
   function onSubmit(values: PlaceOrderSchema) {
     if (blocked) {
-      toast.error(
-        blockedMessage ?? "Please fix the items in your cart before paying.",
-        { id: "checkout-blocked" }
-      );
+      toast.error(blockedMessage ?? "Please fix the items in your cart before paying.", {
+        id: "checkout-blocked",
+      });
       return;
     }
     // Instead of directly placing order, initialize Razorpay payment
@@ -259,17 +254,13 @@ export default function CheckoutForm({
               <FormItem>
                 <FormLabel>First name</FormLabel>
                 <FormControl>
-                  <Input 
-                    placeholder="John"
-                    className="bg-transparent"
-                    {...field} 
-                  />
+                  <Input placeholder="John" className="bg-transparent" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="lName"
@@ -277,18 +268,14 @@ export default function CheckoutForm({
               <FormItem>
                 <FormLabel>Last name</FormLabel>
                 <FormControl>
-                  <Input 
-                    placeholder="Doe"
-                    className="bg-transparent"
-                    {...field} 
-                  />
+                  <Input placeholder="Doe" className="bg-transparent" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
         </div>
-        
+
         <FormField
           control={form.control}
           name="mobile"
@@ -307,7 +294,7 @@ export default function CheckoutForm({
             </FormItem>
           )}
         />
-      
+
         <FormField
           control={form.control}
           name="address"
@@ -315,17 +302,17 @@ export default function CheckoutForm({
             <FormItem>
               <FormLabel>Address</FormLabel>
               <FormControl>
-                <Input 
+                <Input
                   placeholder="123 Main Street, Apt 4B"
                   className="bg-transparent"
-                  {...field} 
+                  {...field}
                 />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField
             control={form.control}
@@ -334,17 +321,13 @@ export default function CheckoutForm({
               <FormItem>
                 <FormLabel>Area/Neighborhood</FormLabel>
                 <FormControl>
-                  <Input 
-                    placeholder="Downtown"
-                    className="bg-transparent"
-                    {...field} 
-                  />
+                  <Input placeholder="Downtown" className="bg-transparent" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="pinCode"
@@ -352,18 +335,14 @@ export default function CheckoutForm({
               <FormItem>
                 <FormLabel>Postal Code</FormLabel>
                 <FormControl>
-                  <Input 
-                    placeholder="560001"
-                    className="bg-transparent"
-                    {...field} 
-                  />
+                  <Input placeholder="560001" className="bg-transparent" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
         </div>
-        
+
         <FormField
           control={form.control}
           name="landmark"
@@ -371,17 +350,13 @@ export default function CheckoutForm({
             <FormItem>
               <FormLabel>Landmark</FormLabel>
               <FormControl>
-                <Input 
-                  placeholder="Near Central Park"
-                  className="bg-transparent"
-                  {...field} 
-                />
+                <Input placeholder="Near Central Park" className="bg-transparent" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        
+
         <FormField
           control={form.control}
           name="country"
@@ -393,12 +368,15 @@ export default function CheckoutForm({
                   initialCountryName={savedLocation?.country}
                   initialStateName={savedLocation?.state}
                   onCountryChange={(country) => {
-                    setCountryName(country?.name || '');
-                    form.setValue(field.name, [country?.name || '', stateName || '']);
+                    setCountryName(country?.name || "");
+                    form.setValue(field.name, [country?.name || "", stateName || ""]);
                   }}
                   onStateChange={(state) => {
-                    setStateName(state?.name || '');
-                    form.setValue(field.name, [form.getValues(field.name)[0] || '', state?.name || '']);
+                    setStateName(state?.name || "");
+                    form.setValue(field.name, [
+                      form.getValues(field.name)[0] || "",
+                      state?.name || "",
+                    ]);
                   }}
                 />
               </FormControl>
@@ -406,9 +384,9 @@ export default function CheckoutForm({
             </FormItem>
           )}
         />
-        
-        <Button 
-          type="submit" 
+
+        <Button
+          type="submit"
           disabled={isPending || !isRazorpayLoaded || blocked}
           className="w-full mt-8 bg-blue-600 hover:bg-blue-700 transition-colors"
         >

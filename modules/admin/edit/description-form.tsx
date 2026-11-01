@@ -1,4 +1,4 @@
-"use client"
+"use client";
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,13 +23,12 @@ type Props = {
 
 const DescriptionForm = ({ description, shortDescription, productId }: Props) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [shortDescriptionValue, setShortDescriptionValue] = useState<string | null>(shortDescription);
+  const [shortDescriptionValue, setShortDescriptionValue] = useState<string | null>(
+    shortDescription
+  );
   const [longDescriptionValue, setLongDescriptionValue] = useState<string | null>(description);
 
-  const {
-    mutate: updateShortDescription,
-    isPending: isShortDescriptionPending,
-  } = useMutation({
+  const { mutate: updateShortDescription, isPending: isShortDescriptionPending } = useMutation({
     mutationKey: ["update-short-description", productId],
     mutationFn: editShortDescription,
     onSuccess: (res) => {
@@ -41,13 +40,10 @@ const DescriptionForm = ({ description, shortDescription, productId }: Props) =>
     },
     onError: () => {
       toast.error("Failed to update short description");
-    }
+    },
   });
 
-  const {
-    mutate: updateLongDescription,
-    isPending: isLongDescriptionPending,
-  } = useMutation({
+  const { mutate: updateLongDescription, isPending: isLongDescriptionPending } = useMutation({
     mutationKey: ["update-long-description", productId],
     mutationFn: editLongDescription,
     onSuccess: (res) => {
@@ -59,7 +55,7 @@ const DescriptionForm = ({ description, shortDescription, productId }: Props) =>
     },
     onError: () => {
       toast.error("Failed to update long description");
-    }
+    },
   });
 
   const handleShortBlur = () => {

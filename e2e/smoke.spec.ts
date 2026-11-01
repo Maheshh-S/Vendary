@@ -15,7 +15,9 @@ test.describe("storefront smoke", () => {
     await expect(page.getByText(/₹/).first()).toBeVisible();
   });
 
-  test("guest hitting /checkout is redirected away (login required before payment)", async ({ page }) => {
+  test("guest hitting /checkout is redirected away (login required before payment)", async ({
+    page,
+  }) => {
     await page.goto("/checkout");
     await expect(page).not.toHaveURL(/\/checkout/);
   });

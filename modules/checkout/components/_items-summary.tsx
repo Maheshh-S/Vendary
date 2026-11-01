@@ -1,20 +1,20 @@
 "use client";
 
-import USDToINRConverter from '@/components/global/currency-converter';
-import { Divider } from '@/components/ui/divider';
-import { formatPrice } from '@/lib/locales';
-import { useLocale } from '@/providers/locale-provider';
-import { computeOrderTotals, GST_RATE } from '@/lib/money';
-import { CheckoutSession } from '@/modules/products/types/checkout';
-import { quoteLineIssueLabel } from '@/schemas/cart/quote-schema';
-import type { CartQuote, CartQuoteIssue } from '@/schemas/cart/quote-schema';
-import React from 'react';
+import USDToINRConverter from "@/components/global/currency-converter";
+import { Divider } from "@/components/ui/divider";
+import { formatPrice } from "@/lib/locales";
+import { useLocale } from "@/providers/locale-provider";
+import { computeOrderTotals, GST_RATE } from "@/lib/money";
+import { CheckoutSession } from "@/modules/products/types/checkout";
+import { quoteLineIssueLabel } from "@/schemas/cart/quote-schema";
+import type { CartQuote, CartQuoteIssue } from "@/schemas/cart/quote-schema";
+import React from "react";
 
 type Props = {
-  checkoutSession?: CheckoutSession
+  checkoutSession?: CheckoutSession;
   /** Authoritative server quote; falls back to the stored session snapshot. */
-  quote?: CartQuote | null
-}
+  quote?: CartQuote | null;
+};
 
 type SummaryLine = {
   productId: string;
@@ -35,8 +35,8 @@ const ItemsSummary = ({ checkoutSession, quote }: Props) => {
   const lineItems = checkoutSession?.line_items || [];
 
   function truncateText(text: string | null, maxLength: number = 100) {
-    if (!text) return '';
-    return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+    if (!text) return "";
+    return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
   }
 
   // The quote re-prices from the database (same math the server charges with);
@@ -90,7 +90,7 @@ const ItemsSummary = ({ checkoutSession, quote }: Props) => {
   return (
     <div className="py-6">
       <h1 className="text-2xl font-medium mb-6">Order Summary</h1>
-      
+
       {lines.length === 0 ? (
         <div className="py-12 text-center">
           <p className="text-gray-500">No items in your cart</p>
@@ -102,12 +102,15 @@ const ItemsSummary = ({ checkoutSession, quote }: Props) => {
             {lines.map((line, index) => {
               const issue = issueLabel(line);
               return (
-                <div key={`${line.productId}-${index}`} className="flex items-center justify-between py-3">
+                <div
+                  key={`${line.productId}-${index}`}
+                  className="flex items-center justify-between py-3"
+                >
                   <div className="flex items-center space-x-3">
                     {line.image && (
                       <div className="flex-shrink-0">
-                        <img 
-                          src={line.image} 
+                        <img
+                          src={line.image}
                           alt={line.name}
                           className="w-16 h-16 object-cover rounded-md"
                         />
@@ -124,11 +127,7 @@ const ItemsSummary = ({ checkoutSession, quote }: Props) => {
                           {line.quantity}
                         </span>
                       </div>
-                      {issue && (
-                        <p className="mt-1 text-xs font-medium text-red-600">
-                          {issue}
-                        </p>
-                      )}
+                      {issue && <p className="mt-1 text-xs font-medium text-red-600">{issue}</p>}
                     </div>
                   </div>
                   <div className="font-medium">
@@ -138,10 +137,10 @@ const ItemsSummary = ({ checkoutSession, quote }: Props) => {
               );
             })}
           </div>
-          
+
           {/* Divider */}
           <div className="h-px bg-gray-100 my-4"></div>
-          
+
           {/* Order totals */}
           <div className="space-y-3">
             <div className="flex justify-between">

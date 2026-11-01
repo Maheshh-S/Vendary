@@ -1,68 +1,70 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { IconLoader } from "@tabler/icons-react"
+import { useState } from "react";
+import Link from "next/link";
+import { IconLoader } from "@tabler/icons-react";
 
-import { resetPassword } from "@/actions/auth/password-reset"
-import { Button } from "@/components/ui/button"
-import { Field, Label } from "@/components/ui/fieldset"
-import { Input } from "@/components/ui/input"
+import { resetPassword } from "@/actions/auth/password-reset";
+import { Button } from "@/components/ui/button";
+import { Field, Label } from "@/components/ui/fieldset";
+import { Input } from "@/components/ui/input";
 
 export default function ResetPasswordForm({ token }: { token: string }) {
-  const [password, setPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [isPending, setIsPending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState(false)
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
 
-  const missingToken = token.trim() === ""
+  const missingToken = token.trim() === "";
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setError(null)
+    event.preventDefault();
+    setError(null);
 
     if (password.length < 8) {
-      setError("Password must be at least 8 characters long.")
-      return
+      setError("Password must be at least 8 characters long.");
+      return;
     }
     if (password.length > 72) {
-      setError("Password cannot exceed 72 characters.")
-      return
+      setError("Password cannot exceed 72 characters.");
+      return;
     }
     if (password !== confirmPassword) {
-      setError("Both passwords must match.")
-      return
+      setError("Both passwords must match.");
+      return;
     }
 
-    setIsPending(true)
+    setIsPending(true);
     try {
-      const result = await resetPassword(token, password)
+      const result = await resetPassword(token, password);
       if (!result.ok) {
-        setError(result.message)
-        return
+        setError(result.message);
+        return;
       }
-      setDone(true)
+      setDone(true);
     } finally {
-      setIsPending(false)
+      setIsPending(false);
     }
-  }
+  };
 
   if (missingToken) {
     return (
       <div className="mx-auto w-full max-w-md p-4 md:p-8">
         <h2 className="text-xl font-bold">Invalid reset link</h2>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" role="alert">
-          This link is missing its reset token. Request a new email from the
-          forgot-password page.
+          This link is missing its reset token. Request a new email from the forgot-password page.
         </p>
         <p className="mt-6 text-sm">
-          <Link href="/forgot-password" className="font-medium text-blue-600 hover:underline dark:text-blue-400">
+          <Link
+            href="/forgot-password"
+            className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+          >
             Request a new reset link
           </Link>
         </p>
       </div>
-    )
+    );
   }
 
   if (done) {
@@ -70,15 +72,14 @@ export default function ResetPasswordForm({ token }: { token: string }) {
       <div className="mx-auto w-full max-w-md p-4 md:p-8">
         <h2 className="text-xl font-bold">Password updated</h2>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" role="status">
-          Your password has been changed. Sign in with your new password to continue.
-          Other devices stay signed in until their session expires, so sign out on
-          any shared device.
+          Your password has been changed. Sign in with your new password to continue. Other devices
+          stay signed in until their session expires, so sign out on any shared device.
         </p>
         <Button href="/login" className="mt-6 w-full">
           Go to sign in
         </Button>
       </div>
-    )
+    );
   }
 
   return (
@@ -125,5 +126,5 @@ export default function ResetPasswordForm({ token }: { token: string }) {
         </Button>
       </form>
     </div>
-  )
+  );
 }

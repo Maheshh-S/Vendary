@@ -1,9 +1,7 @@
-import React from 'react'
+import React from "react";
 
 const AmazonPage = () => {
-  return (
-    <div>AmazonPage</div>
-  )
-}
+  return <div>AmazonPage</div>;
+};
 
-export default AmazonPage
+export default AmazonPage;

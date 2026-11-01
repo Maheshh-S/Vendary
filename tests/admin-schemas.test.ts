@@ -1,10 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ALLOWED_IMAGE_HOSTS, isAllowedImageUrl } from "@/lib/images";
-import {
-  addImagesInputSchema,
-  imageFormSchema,
-} from "@/schemas/admin/products/add-image-schema";
+import { addImagesInputSchema, imageFormSchema } from "@/schemas/admin/products/add-image-schema";
 import {
   createProductSchema,
   productFormSchema,
@@ -15,16 +12,15 @@ import {
   editLongDescriptionSchema,
   editShortDescriptionSchema,
 } from "@/schemas/admin/products/edit-description-schema";
-import {
-  editPriceSchema,
-  formatPriceForStorage,
-} from "@/schemas/admin/products/edit-price-schema";
+import { editPriceSchema, formatPriceForStorage } from "@/schemas/admin/products/edit-price-schema";
 import { takeOfflineSchema } from "@/schemas/admin/products/take-offline-schema";
 
 const VALID_PRODUCT_ID = "clx0product0000000000000000";
 
-const accepted = (schema: { safeParse: (value: unknown) => { success: boolean } }, value: unknown) =>
-  schema.safeParse(value).success;
+const accepted = (
+  schema: { safeParse: (value: unknown) => { success: boolean } },
+  value: unknown
+) => schema.safeParse(value).success;
 
 describe("lib/images", () => {
   it("exports exactly the hosts next.config derives remotePatterns from", () => {
@@ -156,16 +152,31 @@ describe("edit description schemas", () => {
 
   it("requires a bounded product id on both", () => {
     for (const schema of [editShortDescriptionSchema, editLongDescriptionSchema]) {
-      expect(accepted(schema, { productId: "", shortDescription: "a".repeat(20), longDescription: "a".repeat(20) })).toBe(false);
-      expect(accepted(schema, { productId: "x".repeat(65), shortDescription: "a".repeat(20), longDescription: "a".repeat(20) })).toBe(false);
+      expect(
+        accepted(schema, {
+          productId: "",
+          shortDescription: "a".repeat(20),
+          longDescription: "a".repeat(20),
+        })
+      ).toBe(false);
+      expect(
+        accepted(schema, {
+          productId: "x".repeat(65),
+          shortDescription: "a".repeat(20),
+          longDescription: "a".repeat(20),
+        })
+      ).toBe(false);
     }
   });
 });
 
 describe("takeOfflineSchema", () => {
-  it.each(["IN_STOCK", "OUT_OF_STOCK", "PRE_ORDER"])("accepts the %s enum value", (availability) => {
-    expect(accepted(takeOfflineSchema, { productId: VALID_PRODUCT_ID, availability })).toBe(true);
-  });
+  it.each(["IN_STOCK", "OUT_OF_STOCK", "PRE_ORDER"])(
+    "accepts the %s enum value",
+    (availability) => {
+      expect(accepted(takeOfflineSchema, { productId: VALID_PRODUCT_ID, availability })).toBe(true);
+    }
+  );
 
   it.each(["in_stock", "SOLD_OUT", "", null, 1])("rejects %j", (availability) => {
     expect(accepted(takeOfflineSchema, { productId: VALID_PRODUCT_ID, availability })).toBe(false);
@@ -173,7 +184,9 @@ describe("takeOfflineSchema", () => {
 
   it("requires a bounded product id", () => {
     expect(accepted(takeOfflineSchema, { productId: "", availability: "IN_STOCK" })).toBe(false);
-    expect(accepted(takeOfflineSchema, { productId: "x".repeat(65), availability: "IN_STOCK" })).toBe(false);
+    expect(
+      accepted(takeOfflineSchema, { productId: "x".repeat(65), availability: "IN_STOCK" })
+    ).toBe(false);
   });
 });
 
@@ -250,10 +263,23 @@ describe("createProductSchema", () => {
 
   it("bounds stock to a whole number in 0..100000", () => {
     for (const stock of [0, "0", 100_000, "100000"]) {
-      expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, stock }), String(stock)).toBe(true);
+      expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, stock }), String(stock)).toBe(
+        true
+      );
     }
-    for (const stock of [-1, 1.5, "1.5", 100_001, "100001", "abc", Number.NaN, Number.POSITIVE_INFINITY]) {
-      expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, stock }), String(stock)).toBe(false);
+    for (const stock of [
+      -1,
+      1.5,
+      "1.5",
+      100_001,
+      "100001",
+      "abc",
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+    ]) {
+      expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, stock }), String(stock)).toBe(
+        false
+      );
     }
   });
 
@@ -267,29 +293,55 @@ describe("createProductSchema", () => {
       ["shippingTime", "a".repeat(81)],
     ];
     for (const [field, value] of cases) {
-      expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, [field]: value }), field).toBe(false);
+      expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, [field]: value }), field).toBe(
+        false
+      );
     }
-    expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, name: "ab", description: "a".repeat(10), shippingTime: "a".repeat(80) })).toBe(true);
+    expect(
+      accepted(createProductSchema, {
+        ...VALID_CREATE_INPUT,
+        name: "ab",
+        description: "a".repeat(10),
+        shippingTime: "a".repeat(80),
+      })
+    ).toBe(true);
   });
 
   it("bounds optional short description (10-300) and tag (40)", () => {
-    expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, shortDescription: "a".repeat(9) })).toBe(false);
-    expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, shortDescription: "a".repeat(10) })).toBe(true);
-    expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, shortDescription: "a".repeat(300) })).toBe(true);
-    expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, shortDescription: "a".repeat(301) })).toBe(false);
-    expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, tag: "a".repeat(40) })).toBe(true);
-    expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, tag: "a".repeat(41) })).toBe(false);
+    expect(
+      accepted(createProductSchema, { ...VALID_CREATE_INPUT, shortDescription: "a".repeat(9) })
+    ).toBe(false);
+    expect(
+      accepted(createProductSchema, { ...VALID_CREATE_INPUT, shortDescription: "a".repeat(10) })
+    ).toBe(true);
+    expect(
+      accepted(createProductSchema, { ...VALID_CREATE_INPUT, shortDescription: "a".repeat(300) })
+    ).toBe(true);
+    expect(
+      accepted(createProductSchema, { ...VALID_CREATE_INPUT, shortDescription: "a".repeat(301) })
+    ).toBe(false);
+    expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, tag: "a".repeat(40) })).toBe(
+      true
+    );
+    expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, tag: "a".repeat(41) })).toBe(
+      false
+    );
   });
 
   it("requires a category id", () => {
     expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, categoryId: "" })).toBe(false);
-    expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, categoryId: "x".repeat(65) })).toBe(false);
+    expect(
+      accepted(createProductSchema, { ...VALID_CREATE_INPUT, categoryId: "x".repeat(65) })
+    ).toBe(false);
   });
 
   it("only accepts thumbnails from the shared image allowlist", () => {
     for (const host of ALLOWED_IMAGE_HOSTS) {
       expect(
-        accepted(createProductSchema, { ...VALID_CREATE_INPUT, thumbnail: `https://${host}/photo.jpg` }),
+        accepted(createProductSchema, {
+          ...VALID_CREATE_INPUT,
+          thumbnail: `https://${host}/photo.jpg`,
+        }),
         host
       ).toBe(true);
     }
@@ -299,7 +351,9 @@ describe("createProductSchema", () => {
       "javascript:alert(1)",
       `https://images.unsplash.com/${"a".repeat(2048)}`,
     ]) {
-      expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, thumbnail }), thumbnail).toBe(false);
+      expect(accepted(createProductSchema, { ...VALID_CREATE_INPUT, thumbnail }), thumbnail).toBe(
+        false
+      );
     }
   });
 });
@@ -312,11 +366,15 @@ describe("image schemas", () => {
     const one = imageFormSchema.parse({ images: [image(ALLOWED_URL)] });
     expect(one.images).toEqual([{ url: ALLOWED_URL, isMain: false }]);
 
-    const eight = Array.from({ length: 8 }, (_, index) => image(`${ALLOWED_URL}-${index}`, index === 0));
+    const eight = Array.from({ length: 8 }, (_, index) =>
+      image(`${ALLOWED_URL}-${index}`, index === 0)
+    );
     expect(accepted(imageFormSchema, { images: eight })).toBe(true);
 
     expect(accepted(imageFormSchema, { images: [] })).toBe(false);
-    expect(accepted(imageFormSchema, { images: Array.from({ length: 9 }, () => image(ALLOWED_URL)) })).toBe(false);
+    expect(
+      accepted(imageFormSchema, { images: Array.from({ length: 9 }, () => image(ALLOWED_URL)) })
+    ).toBe(false);
   });
 
   it("rejects non-allowlisted hosts, non-https protocols and malformed URLs", () => {
@@ -346,7 +404,9 @@ describe("image schemas", () => {
       expect(parsed.error.issues[0]?.path).toEqual(["images"]);
     }
 
-    expect(accepted(imageFormSchema, { images: [image(ALLOWED_URL, true), image(`${ALLOWED_URL}-2`)] })).toBe(true);
+    expect(
+      accepted(imageFormSchema, { images: [image(ALLOWED_URL, true), image(`${ALLOWED_URL}-2`)] })
+    ).toBe(true);
   });
 
   it("addImagesInputSchema also requires a bounded product id", () => {

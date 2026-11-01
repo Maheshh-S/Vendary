@@ -66,9 +66,7 @@ const readQuantity = (value: unknown): number => {
 const readImages = (value: unknown): CartImage[] => {
   if (!Array.isArray(value)) return [];
   return value.flatMap((image) =>
-    isRecord(image) && typeof image.src === "string" && image.src !== ""
-      ? [{ src: image.src }]
-      : []
+    isRecord(image) && typeof image.src === "string" && image.src !== "" ? [{ src: image.src }] : []
   );
 };
 
@@ -97,10 +95,7 @@ export function normalizeCartItems(value: unknown): CartItem[] {
 
     const existing = byId.get(id);
     if (existing) {
-      existing.quantity = Math.min(
-        MAX_CART_QUANTITY,
-        existing.quantity + quantity
-      );
+      existing.quantity = Math.min(MAX_CART_QUANTITY, existing.quantity + quantity);
       continue;
     }
 
@@ -124,10 +119,7 @@ export function clampCartQuantity(quantity: number): number {
  * (returns the existing list unchanged); quantity updates for an existing
  * line are always allowed.
  */
-export function mergeCartItem(
-  items: readonly CartItem[],
-  item: CartItem
-): CartItem[] {
+export function mergeCartItem(items: readonly CartItem[], item: CartItem): CartItem[] {
   const existing = items.find((candidate) => candidate.id === item.id);
   if (existing) {
     return items.map((candidate) =>
@@ -149,8 +141,5 @@ export function mergeCartItem(
 
 /** Sum of every line in paise — the same unit the server quote returns. */
 export function cartTotalPaise(items: readonly CartItem[]): number {
-  return items.reduce(
-    (total, item) => total + item.unitPaise * item.quantity,
-    0
-  );
+  return items.reduce((total, item) => total + item.unitPaise * item.quantity, 0);
 }

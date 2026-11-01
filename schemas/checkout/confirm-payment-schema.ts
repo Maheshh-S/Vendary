@@ -12,7 +12,10 @@ import { z } from "zod";
 export const confirmPaymentSchema = z.object({
   razorpayOrderId: z.string().min(1, "Payment order is required").max(64, "Invalid payment order"),
   razorpayPaymentId: z.string().min(1, "Payment id is required").max(64, "Invalid payment id"),
-  razorpaySignature: z.string().min(1, "Payment signature is required").max(128, "Invalid payment signature"),
+  razorpaySignature: z
+    .string()
+    .min(1, "Payment signature is required")
+    .max(128, "Invalid payment signature"),
 });
 
 export type ConfirmPaymentSchema = z.infer<typeof confirmPaymentSchema>;

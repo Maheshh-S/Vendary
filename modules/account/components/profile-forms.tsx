@@ -1,21 +1,21 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useRouter } from "next/navigation"
-import toast from "react-hot-toast"
-import * as z from "zod"
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
+import * as z from "zod";
 
-import { changePassword, updateProfile } from "@/actions/account/profile"
-import { Button } from "@/components/ui/button"
-import { Field, Label } from "@/components/ui/fieldset"
-import { Input } from "@/components/ui/input"
+import { changePassword, updateProfile } from "@/actions/account/profile";
+import { Button } from "@/components/ui/button";
+import { Field, Label } from "@/components/ui/fieldset";
+import { Input } from "@/components/ui/input";
 import {
   ChangePasswordSchema,
   ProfileSchema,
   type ProfileInput,
-} from "@/schemas/account/profile-schema"
+} from "@/schemas/account/profile-schema";
 
 /** The action never sees the confirmation field; this is a form-only check. */
 const PasswordFormSchema = ChangePasswordSchema.extend({
@@ -23,17 +23,17 @@ const PasswordFormSchema = ChangePasswordSchema.extend({
 }).refine((values) => values.newPassword === values.confirmPassword, {
   path: ["confirmPassword"],
   message: "Both passwords must match.",
-})
+});
 
-type PasswordFormValues = z.infer<typeof PasswordFormSchema>
+type PasswordFormValues = z.infer<typeof PasswordFormSchema>;
 
 export function ProfileForm({
   initial,
 }: {
-  initial: { firstName: string; lastName: string; avatarUrl: string }
+  initial: { firstName: string; lastName: string; avatarUrl: string };
 }) {
-  const router = useRouter()
-  const [isPending, setIsPending] = useState(false)
+  const router = useRouter();
+  const [isPending, setIsPending] = useState(false);
   const {
     register,
     handleSubmit,
@@ -42,29 +42,29 @@ export function ProfileForm({
   } = useForm<ProfileInput>({
     resolver: zodResolver(ProfileSchema),
     defaultValues: initial,
-  })
+  });
 
   const onSubmit = async (values: ProfileInput) => {
-    setIsPending(true)
+    setIsPending(true);
     try {
-      const result = await updateProfile(values)
+      const result = await updateProfile(values);
       if (!result.ok) {
         if (result.fieldErrors) {
           for (const [field, messages] of Object.entries(result.fieldErrors)) {
             if (field in ProfileSchema.shape && messages[0]) {
-              setError(field as keyof ProfileInput, { type: "server", message: messages[0] })
+              setError(field as keyof ProfileInput, { type: "server", message: messages[0] });
             }
           }
         }
-        toast.error(result.message)
-        return
+        toast.error(result.message);
+        return;
       }
-      toast.success("Profile updated")
-      router.refresh()
+      toast.success("Profile updated");
+      router.refresh();
     } finally {
-      setIsPending(false)
+      setIsPending(false);
     }
-  }
+  };
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
@@ -96,20 +96,20 @@ export function ProfileForm({
           <p className="mt-1 text-sm text-red-600">{errors.avatarUrl.message}</p>
         )}
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Only images from the allowed hosts (Unsplash, Pexels, Amazon, Pixabay,
-          Tailwind, Google) can be used. Leave blank to remove your avatar.
+          Only images from the allowed hosts (Unsplash, Pexels, Amazon, Pixabay, Tailwind, Google)
+          can be used. Leave blank to remove your avatar.
         </p>
       </Field>
       <Button type="submit" disabled={isPending}>
         {isPending ? "Saving…" : "Save profile"}
       </Button>
     </form>
-  )
+  );
 }
 
 export function PasswordForm() {
-  const [isPending, setIsPending] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
+  const [isPending, setIsPending] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -119,40 +119,40 @@ export function PasswordForm() {
   } = useForm<PasswordFormValues>({
     resolver: zodResolver(PasswordFormSchema),
     defaultValues: { currentPassword: "", newPassword: "", confirmPassword: "" },
-  })
+  });
 
   const onSubmit = async (values: PasswordFormValues) => {
-    setMessage(null)
+    setMessage(null);
 
-    setIsPending(true)
+    setIsPending(true);
     try {
       const result = await changePassword({
         currentPassword: values.currentPassword,
         newPassword: values.newPassword,
-      })
+      });
       if (!result.ok) {
         if (result.fieldErrors?.currentPassword?.[0]) {
           setError("currentPassword", {
             type: "server",
             message: result.fieldErrors.currentPassword[0],
-          })
+          });
         }
         if (result.fieldErrors?.newPassword?.[0]) {
           setError("newPassword", {
             type: "server",
             message: result.fieldErrors.newPassword[0],
-          })
+          });
         }
-        toast.error(result.message)
-        return
+        toast.error(result.message);
+        return;
       }
-      reset()
-      setMessage("Password changed. Other devices stay signed in until their session expires.")
-      toast.success("Password changed")
+      reset();
+      setMessage("Password changed. Other devices stay signed in until their session expires.");
+      toast.success("Password changed");
     } finally {
-      setIsPending(false)
+      setIsPending(false);
     }
-  }
+  };
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
@@ -200,12 +200,12 @@ export function PasswordForm() {
         </p>
       )}
       <p className="text-xs text-gray-500 dark:text-gray-400">
-        Changing your password does not sign out other devices: existing sessions
-        stay valid until they expire. Sign out manually on shared devices.
+        Changing your password does not sign out other devices: existing sessions stay valid until
+        they expire. Sign out manually on shared devices.
       </p>
       <Button type="submit" disabled={isPending}>
         {isPending ? "Saving…" : "Change password"}
       </Button>
     </form>
-  )
+  );
 }

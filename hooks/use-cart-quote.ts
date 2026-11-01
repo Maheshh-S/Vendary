@@ -16,9 +16,7 @@ export type CartQuoteLineInput = {
  * additions refetch while untouched carts stay cached.
  */
 export function useCartQuote(lineItems: readonly CartQuoteLineInput[]) {
-  const queryKey = lineItems
-    .map((line) => `${line.productId}:${line.quantity}`)
-    .join("|");
+  const queryKey = lineItems.map((line) => `${line.productId}:${line.quantity}`).join("|");
 
   const query = useQuery({
     queryKey: ["cart-quote", queryKey],

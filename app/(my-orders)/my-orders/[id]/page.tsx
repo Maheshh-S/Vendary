@@ -85,8 +85,7 @@ export default async function OrderDetailPage({ params }: Props) {
   const taxPaise = Math.round(Number(order.taxAmount) * 100);
   const totalPaise = Math.round(Number(order.total) * 100);
   const maskedPaymentId = maskPaymentId(order.paymentId);
-  const address =
-    order.address?.firstName || order.address?.address ? order.address : null;
+  const address = order.address?.firstName || order.address?.address ? order.address : null;
 
   return (
     <div className="mx-auto my-8 min-h-screen max-w-4xl px-4 sm:px-6 lg:px-8">
@@ -176,15 +175,11 @@ export default async function OrderDetailPage({ params }: Props) {
             </div>
             <div className="flex justify-between">
               <dt className="text-gray-600 dark:text-gray-400">Tax (GST)</dt>
-              <dd className="text-gray-900 dark:text-white">
-                {formatCurrencyPaise(taxPaise)}
-              </dd>
+              <dd className="text-gray-900 dark:text-white">{formatCurrencyPaise(taxPaise)}</dd>
             </div>
             <div className="flex justify-between border-t border-gray-200 pt-2 text-base font-semibold dark:border-gray-800">
               <dt className="text-gray-900 dark:text-white">Total</dt>
-              <dd className="text-gray-900 dark:text-white">
-                {formatCurrencyPaise(totalPaise)}
-              </dd>
+              <dd className="text-gray-900 dark:text-white">{formatCurrencyPaise(totalPaise)}</dd>
             </div>
           </dl>
         </section>
@@ -209,9 +204,7 @@ export default async function OrderDetailPage({ params }: Props) {
                 {address.phone}
               </p>
             ) : (
-              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                No address on file.
-              </p>
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">No address on file.</p>
             )}
           </section>
 
@@ -219,13 +212,9 @@ export default async function OrderDetailPage({ params }: Props) {
             <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
               Payment
             </h2>
-            <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">
-              {order.paymentMethod}
-            </p>
+            <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">{order.paymentMethod}</p>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              {maskedPaymentId
-                ? `Payment ${maskedPaymentId}`
-                : "Payment not captured yet."}
+              {maskedPaymentId ? `Payment ${maskedPaymentId}` : "Payment not captured yet."}
             </p>
           </section>
 

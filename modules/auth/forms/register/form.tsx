@@ -8,12 +8,9 @@ import { PROJECT_NAME } from "@/metadata";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import toast from "react-hot-toast";
-import {
-  RegisterSchema,
-  RegisterSchemaType,
-} from "@/schemas/auth/register-schema";
+import { RegisterSchema, RegisterSchemaType } from "@/schemas/auth/register-schema";
 import { useMutation } from "@tanstack/react-query";
-import {Register} from "@/actions/auth";
+import { Register } from "@/actions/auth";
 import GoogleSignInButton from "@/modules/auth/components/google-sign-in-button";
 
 type Props = {
@@ -30,11 +27,8 @@ export default function FormSignUp({ onSuccess }: Props) {
     resolver: zodResolver(RegisterSchema),
   });
 
-  const {
-    mutate: registerUser,
-    isPending
-  } = useMutation({
-    mutationKey: ['register'],
+  const { mutate: registerUser, isPending } = useMutation({
+    mutationKey: ["register"],
     mutationFn: Register,
     onMutate: () => {
       toast.loading("Creating your account", { id: "register" });
@@ -45,12 +39,11 @@ export default function FormSignUp({ onSuccess }: Props) {
       onSuccess?.();
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Something went wrong",
-        { id: "register" }
-      );
-    }
-  })
+      toast.error(error instanceof Error ? error.message : "Something went wrong", {
+        id: "register",
+      });
+    },
+  });
 
   const onSubmit = (data: RegisterSchemaType) => {
     registerUser(data);
@@ -65,12 +58,7 @@ export default function FormSignUp({ onSuccess }: Props) {
         <div className="flex flex-col space-y-2 md:flex-row md:space-y-0 md:space-x-2">
           <Field className="w-full">
             <Label htmlFor="firstname">First name</Label>
-            <Input
-              {...register("firstName")}
-              id="firstname"
-              placeholder="Tyler"
-              type="text"
-            />
+            <Input {...register("firstName")} id="firstname" placeholder="Tyler" type="text" />
             {errors.firstName && (
               <p className="dark:text-red-300 text-red-800 text-sm mt-1">
                 {errors.firstName.message}
@@ -79,12 +67,7 @@ export default function FormSignUp({ onSuccess }: Props) {
           </Field>
           <Field className="w-full">
             <Label htmlFor="lastname">Last name</Label>
-            <Input
-              {...register("lastName")}
-              id="lastname"
-              placeholder="Durden"
-              type="text"
-            />
+            <Input {...register("lastName")} id="lastname" placeholder="Durden" type="text" />
             {errors.lastName && (
               <p className="dark:text-red-300 text-red-800 text-sm mt-1">
                 {errors.lastName.message}
@@ -101,27 +84,18 @@ export default function FormSignUp({ onSuccess }: Props) {
             type="email"
           />
           {errors.email && (
-            <p className="dark:text-red-300 text-red-800 text-sm mt-1">
-              {errors.email.message}
-            </p>
+            <p className="dark:text-red-300 text-red-800 text-sm mt-1">{errors.email.message}</p>
           )}
         </Field>
         <Field className="my-4">
           <Label htmlFor="password">Password</Label>
-          <Input
-            {...register("password")}
-            id="password"
-            placeholder="••••••••"
-            type="password"
-          />
+          <Input {...register("password")} id="password" placeholder="••••••••" type="password" />
           {errors.password && (
-            <p className="dark:text-red-300 text-red-800 text-sm mt-1">
-              {errors.password.message}
-            </p>
+            <p className="dark:text-red-300 text-red-800 text-sm mt-1">{errors.password.message}</p>
           )}
         </Field>
         <Button disabled={isPending} type="submit" className="w-full cursor-pointer mt-6">
-          { isPending ? <IconLoader size={22} className="animate-spin" />: "Sign up" }
+          {isPending ? <IconLoader size={22} className="animate-spin" /> : "Sign up"}
         </Button>
 
         <div className="my-8 h-[1px] w-full bg-gradient-to-r from-transparent via-neutral-300 to-transparent dark:via-neutral-700" />
