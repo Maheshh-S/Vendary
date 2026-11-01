@@ -74,4 +74,11 @@ describe("invoiceNumber", () => {
     expect(invoiceYear("2025-06-15T10:00:00.000Z")).toBe(2025);
     expect(invoiceYear(new Date("2026-06-15T10:00:00.000Z"))).toBe(2026);
   });
+
+  it("uses the Asia/Kolkata year for orders around the IST new year", () => {
+    // 2025-12-31T20:00Z is already 2026-01-01 01:30 in India.
+    expect(invoiceYear("2025-12-31T20:00:00.000Z")).toBe(2026);
+    // 2025-12-31T18:00Z is still 2025-12-31 23:30 in India.
+    expect(invoiceYear("2025-12-31T18:00:00.000Z")).toBe(2025);
+  });
 });

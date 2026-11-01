@@ -103,6 +103,10 @@ model SavedAddress {
   updatedAt  DateTime @updatedAt
 
   @@index([userId])
+  // NOTE: migration `20261201001000_saved_address_default_unique` adds a
+  // partial unique index on (`userId`) WHERE `isDefault`. Prisma cannot express
+  // partial indexes here; a plain `@@unique([userId, isDefault])` would wrongly
+  // forbid multiple non-default addresses, so it is deliberately absent.
 }
 
 model Product {

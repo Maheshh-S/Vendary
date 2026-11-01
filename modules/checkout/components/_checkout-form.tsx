@@ -221,7 +221,9 @@ export default function CheckoutForm({
     form.setValue("lName", address.lastName);
     // The catalog stores the bare 10-digit number; PhoneInput expects E.164.
     form.setValue("mobile", address.phone ? `+91${address.phone}` : "");
-    form.setValue("address", address.line1);
+    // A saved address has two street lines; checkout has one input. Join them
+    // so line 2 is not dropped when the form is prefilled.
+    form.setValue("address", [address.line1, address.line2].filter(Boolean).join(", "));
     form.setValue("area", address.area);
     form.setValue("pinCode", address.postalCode);
     form.setValue("landmark", address.landmark ?? "");

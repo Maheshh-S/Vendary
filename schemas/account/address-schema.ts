@@ -12,8 +12,10 @@ const optionalText = (max: number, message: string) =>
 
 /**
  * Saved-address input contract. Phone and postal rules mirror
- * `placeOrderSchema` so an address saved here always passes checkout
- * validation unchanged.
+ * `placeOrderSchema` where the two forms overlap; checkout additionally
+ * requires a landmark and takes a single street line (the checkout prefill
+ * joins `line1` and `line2`), so a saved address can still need a landmark
+ * entered before checkout accepts it.
  */
 export const SavedAddressInputSchema = z.object({
   label: optionalText(40, "Label is too long"),

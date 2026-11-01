@@ -54,3 +54,18 @@ export const ADMIN_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 
 export const canAdminTransition = (from: OrderStatus, to: OrderStatus): boolean =>
   ADMIN_TRANSITIONS[from]?.includes(to) ?? false;
+
+/**
+ * Statuses that imply a captured, un-reversed payment. Only these orders have
+ * a paid tax invoice: `pending` is unpaid, a `cancelled` order may never have
+ * been paid, and `refunded` has been reversed. The order detail only links to
+ * the invoice for these statuses and the invoice route 404s for the rest.
+ */
+export const INVOICE_ELIGIBLE_STATUSES: readonly OrderStatus[] = [
+  "confirmed",
+  "shipped",
+  "delivered",
+];
+
+export const isInvoiceEligible = (status: OrderStatus): boolean =>
+  INVOICE_ELIGIBLE_STATUSES.includes(status);

@@ -124,6 +124,26 @@ describe("address ownership", () => {
     });
   });
 
+  it("writes null when optional fields are cleared on update", async () => {
+    // Blank inputs normalize to `undefined`, which Prisma omits from an
+    // update; the action must turn them into explicit nulls so clearing
+    // label/line 2/landmark actually persists.
+    expectSuccess(
+      await updateAddress({
+        ...INPUT,
+        id: ADDRESS_ID,
+        label: "  ",
+        line2: "",
+        landmark: undefined,
+      })
+    );
+
+    expect(txMock.savedAddress.update).toHaveBeenCalledWith({
+      where: { id: ADDRESS_ID },
+      data: expect.objectContaining({ label: null, line2: null, landmark: null }),
+    });
+  });
+
   it("returns NOT_FOUND for a foreign or missing address", async () => {
     txMock.savedAddress.findFirst.mockResolvedValue(null);
     expectFailure(await updateAddress({ ...INPUT, id: ADDRESS_ID }), "NOT_FOUND");
@@ -206,5 +226,37 @@ describe("default address handling", () => {
       where: { userId: USER_ID, isDefault: true, id: { not: ADDRESS_ID } },
       data: { isDefault: false },
     });
+  });
+
+  it("maps the one-default unique violation to CONFLICT on every default path", async () => {
+    // The partial unique index is the backstop for two concurrent writers
+    // that both cleared then wrote a default. Each path must surface a
+    // refreshable CONFLICT, never INTERNAL.
+    prismaMock.$transaction.mockRejectedValue({ code: "P2002" });
+
+    const createResult = await createAddress({ ...INPUT, isDefault: true });
+    expectFailure(createResult, "CONFLICT");
+    if (!createResult.ok) {
+      expect(createResult.message).toBe(
+        "You already have a default address; refresh and try again."
+      );
+    }
+
+    expectFailure(
+      await updateAddress({ ...INPUT, id: ADDRESS_ID, isDefault: true }),
+      "CONFLICT"
+    );
+    expectFailure(await setDefaultAddress(ADDRESS_ID), "CONFLICT");
+  });
+
+  it("rethrows non-unique transaction failures untouched", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    prismaMock.$transaction.mockRejectedValue(new Error("connection reset"));
+
+    try {
+      expectFailure(await createAddress(INPUT), "INTERNAL");
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

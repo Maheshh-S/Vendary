@@ -24,8 +24,18 @@ const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const addressIds: string[] = [];
 let foreignUserId = "";
 let ownerOrderId = "";
+let pendingOrderId = "";
 let foreignOrderId = "";
 let ownerOrderCreatedAt = new Date();
+
+/** Matches `invoiceYear` in lib/orders/invoice.ts (IST, not the runner zone). */
+const invoiceYearFor = (value: Date): number =>
+  Number(
+    new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+    }).format(new Date(value))
+  );
 
 test.describe("printable invoice", () => {
   test.beforeAll(async () => {
@@ -109,6 +119,47 @@ test.describe("printable invoice", () => {
     ownerOrderId = ownerOrder.id;
     ownerOrderCreatedAt = ownerOrder.createdAt;
 
+    // An unpaid order must never expose a paid tax invoice. `Order.addressId`
+    // is unique, so this fixture gets its own address snapshot.
+    const pendingAddress = await prisma.address.create({
+      data: {
+        firstName: "Invoice",
+        lastName: "Pending",
+        phone: "9876543212",
+        address: "9 Pending Road",
+        area: "Indiranagar",
+        landmark: "Near the pending gate",
+        postalCode: "560038",
+        state: "Karnataka",
+        country: "India",
+      },
+    });
+    addressIds.push(pendingAddress.id);
+
+    const pendingOrder = await prisma.order.create({
+      data: {
+        userId: admin.id,
+        status: "pending",
+        total: "108.00",
+        taxAmount: "8.00",
+        addressId: pendingAddress.id,
+        paymentMethod: "RAZORPAY",
+        paymentId: "",
+        transactionId: `e2e_invoice_pending_${suffix}`,
+        items: {
+          create: [
+            {
+              productId: null,
+              productName: "Pending Invoice Item",
+              quantity: 1,
+              price: "100.00",
+            },
+          ],
+        },
+      },
+    });
+    pendingOrderId = pendingOrder.id;
+
     const foreignOrder = await prisma.order.create({
       data: {
         userId: foreignUserId,
@@ -138,7 +189,7 @@ test.describe("printable invoice", () => {
     if (!connectionString || !fixtureDbSafe) return;
 
     await prisma.order.deleteMany({
-      where: { id: { in: [ownerOrderId, foreignOrderId].filter(Boolean) } },
+      where: { id: { in: [ownerOrderId, pendingOrderId, foreignOrderId].filter(Boolean) } },
     });
     await prisma.address.deleteMany({ where: { id: { in: addressIds } } });
     if (foreignUserId) {
@@ -155,7 +206,7 @@ test.describe("printable invoice", () => {
     await page.getByRole("link", { name: "Invoice" }).click();
     await expect(page).toHaveURL(new RegExp(`/my-orders/${ownerOrderId}/invoice$`));
 
-    const expectedNumber = `INV-${new Date(ownerOrderCreatedAt).getFullYear()}-${ownerOrderId.slice(0, 8)}`;
+    const expectedNumber = `INV-${invoiceYearFor(ownerOrderCreatedAt)}-${ownerOrderId.slice(0, 8)}`;
     await expect(page.getByTestId("invoice-number")).toHaveText(expectedNumber);
     await expect(page.getByText("Invoice Snapshot Item")).toBeVisible();
     await expect(page.getByText("Invoice Second Item")).toBeVisible();
@@ -164,6 +215,19 @@ test.describe("printable invoice", () => {
     await expect(page.getByTestId("invoice-total")).toContainText("1,548.70");
     await expect(page.getByTestId("print-invoice")).toBeVisible();
     await expect(page.getByText("Invoice Owner")).toBeVisible();
+  });
+
+  test("a pending order has no invoice link and its invoice URL 404s", async ({ page }) => {
+    await login(page);
+    await page.goto(`/my-orders/${pendingOrderId}`);
+
+    // The detail page only offers the invoice for paid statuses.
+    await expect(page.getByRole("link", { name: "Invoice" })).toHaveCount(0);
+
+    // A direct URL must not produce a "Tax Invoice / Paid in INR" document
+    // for an unpaid order.
+    const response = await page.goto(`/my-orders/${pendingOrderId}/invoice`);
+    expect(response?.status()).toBe(404);
   });
 
   test("foreign and missing invoice ids both 404", async ({ page }) => {

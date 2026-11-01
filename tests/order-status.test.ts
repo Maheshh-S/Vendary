@@ -63,9 +63,11 @@ import type { ActionErrorCode, ActionResult } from "@/lib/action-result";
 import { AppError } from "@/lib/errors";
 import {
   ADMIN_TRANSITIONS,
+  INVOICE_ELIGIBLE_STATUSES,
   ORDER_TRANSITIONS,
   canAdminTransition,
   canTransition,
+  isInvoiceEligible,
 } from "@/lib/orders/status";
 
 const ALL_STATUSES: OrderStatus[] = [
@@ -204,6 +206,23 @@ describe("ADMIN_TRANSITIONS / canAdminTransition", () => {
         expect(canAdminTransition(from, to)).toBe(ADMIN_TRANSITIONS[from].includes(to));
       }
     }
+  });
+});
+
+describe("isInvoiceEligible", () => {
+  it("only treats captured, un-reversed statuses as invoiceable", () => {
+    expect(INVOICE_ELIGIBLE_STATUSES).toEqual(["confirmed", "shipped", "delivered"]);
+    for (const status of ALL_STATUSES) {
+      expect(isInvoiceEligible(status)).toBe(
+        status === "confirmed" || status === "shipped" || status === "delivered"
+      );
+    }
+  });
+
+  it("rejects pending, cancelled and refunded orders", () => {
+    expect(isInvoiceEligible("pending")).toBe(false);
+    expect(isInvoiceEligible("cancelled")).toBe(false);
+    expect(isInvoiceEligible("refunded")).toBe(false);
   });
 });
 

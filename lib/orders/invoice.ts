@@ -46,5 +46,12 @@ export const computeInvoiceTotals = (order: {
 export const invoiceNumber = (orderId: string, year: number): string =>
   `INV-${year}-${orderId.slice(0, 8)}`
 
+// Invoices are Indian tax documents: derive the year in IST so an order placed
+// on Dec 31 in UTC but after midnight in India gets the new financial year.
+const invoiceYearFormatter = new Intl.DateTimeFormat("en-IN", {
+  timeZone: "Asia/Kolkata",
+  year: "numeric",
+})
+
 export const invoiceYear = (createdAt: Date | string): number =>
-  new Date(createdAt).getFullYear()
+  Number(invoiceYearFormatter.format(new Date(createdAt)))

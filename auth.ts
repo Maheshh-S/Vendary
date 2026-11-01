@@ -34,7 +34,14 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
 			if(!existingUser) return token;
 			token.role = existingUser.role;
 			token.email = existingUser.email;
-			token.name = existingUser.firstName + " " + existingUser.lastName;
+			const nameParts = [existingUser.firstName, existingUser.lastName]
+				.map((part) => part?.trim())
+				.filter((part): part is string => Boolean(part));
+			// Prefer the stored display name; otherwise join only the parts that
+			// exist so an OAuth user without a first/last name never shows
+			// "null null" in the header.
+			token.name =
+				existingUser.name?.trim() || (nameParts.length > 0 ? nameParts.join(" ") : null);
 			token.picture = existingUser.image ?? existingUser.profilePic ?? null;
 
 			return token;

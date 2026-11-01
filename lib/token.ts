@@ -32,19 +32,23 @@ export const generatePasswordResetToken = async (email: string) => {
     const expires = new Date(new Date().getTime() + PASSWORD_RESET_TOKEN_EXPIRE_TIME * 1000);
 
     // Only one live reset token per email: clearing the email's tokens also
-    // invalidates any older links the user may still have in an inbox.
-    await db.passwordResetToken.deleteMany({
-        where: {
-            email: email
-        }
-    })
+    // invalidates any older links the user may still have in an inbox. The
+    // delete and insert share one transaction so a failure between them cannot
+    // leave the account with zero valid links.
+    const passwordResetToken = await db.$transaction(async (tx) => {
+        await tx.passwordResetToken.deleteMany({
+            where: {
+                email: email
+            }
+        })
 
-    const passwordREsetToken = await db.passwordResetToken.create({
-        data: {
-            email: email,
-            token: token,
-            expires: expires
-        }
+        return tx.passwordResetToken.create({
+            data: {
+                email: email,
+                token: token,
+                expires: expires
+            }
+        })
     })
-    return passwordREsetToken;
+    return passwordResetToken;
 }

@@ -121,4 +121,55 @@ test.describe("account settings", () => {
     expect(stored.filter((row) => row.isDefault)).toHaveLength(1);
     expect(stored.find((row) => row.isDefault)?.label).toBe("Office");
   });
+
+  test("edits an address and clears label, line 2 and landmark", async ({ page }) => {
+    await loginWith(page, ACCOUNT);
+    await page.goto("/account/addresses");
+
+    await page.getByLabel("Label (optional)").fill("Clearing");
+    await page.getByLabel("First name").fill("Asha");
+    await page.getByLabel("Last name").fill("Rao");
+    await page.getByLabel("Phone number").fill("9876543210");
+    await page.getByLabel("Postal code").fill("560001");
+    await page.getByLabel("Address", { exact: true }).fill("9 Clearance Lane");
+    await page.getByLabel("Address line 2 (optional)").fill("Behind the temple");
+    await page.getByLabel("Area/Neighborhood").fill("Indiranagar");
+    await page.getByLabel("Landmark (optional)").fill("Opposite the school");
+    await page.getByLabel("State").fill("Karnataka");
+    await page.getByRole("button", { name: "Save address" }).click();
+
+    const card = page
+      .getByTestId("saved-address")
+      .filter({ hasText: "9 Clearance Lane" });
+    await expect(card).toBeVisible();
+    await expect(card.getByText("Behind the temple")).toBeVisible();
+    await expect(card.getByText("Opposite the school")).toBeVisible();
+
+    await card.getByRole("button", { name: "Edit" }).click();
+    // The always-present "Add an address" form shares every label, so scope
+    // the edits to the card that opened the edit form.
+    const editForm = page
+      .locator("li")
+      .filter({ has: page.getByRole("heading", { name: "Edit address" }) });
+    await editForm.getByLabel("Label (optional)").fill("");
+    await editForm.getByLabel("Address line 2 (optional)").fill("");
+    await editForm.getByLabel("Landmark (optional)").fill("");
+    await editForm.getByRole("button", { name: "Save changes" }).click();
+
+    await expect(page.getByText("Address updated")).toBeVisible();
+    const updatedCard = page
+      .getByTestId("saved-address")
+      .filter({ hasText: "9 Clearance Lane" });
+    await expect(updatedCard).toBeVisible();
+    await expect(updatedCard.getByText("Clearing", { exact: true })).toHaveCount(0);
+    await expect(updatedCard.getByText("Behind the temple")).toHaveCount(0);
+    await expect(updatedCard.getByText("Opposite the school")).toHaveCount(0);
+    // The card title falls back to the recipient name once the label is gone.
+    await expect(updatedCard.getByText("Asha Rao", { exact: true })).toBeVisible();
+
+    const stored = await prisma.savedAddress.findFirst({
+      where: { userId, line1: "9 Clearance Lane" },
+    });
+    expect(stored).toMatchObject({ label: null, line2: null, landmark: null });
+  });
 });

@@ -254,3 +254,80 @@
 - `getPasswordResetTokenByEmail` is fixed and covered, but generation now uses
   `deleteMany` (all tokens) rather than the helper; the helper is kept as the
   single-token lookup API.
+
+---
+
+## Fix round 1
+
+Two Important review findings plus selected cheap minors.
+
+### Changes
+
+1. **Cleared address fields now persist.** `updateAddress` maps blank
+   `label`/`line2`/`landmark` (normalized to `undefined` by the schema) to
+   explicit `null`, so editing an address can actually clear them. Covered by
+   a unit test asserting the update payload and an e2e test that clears all
+   three fields through the edit form and verifies both the card and the DB row.
+2. **Invoices are paid-only.** `lib/orders/status.ts` exports
+   `INVOICE_ELIGIBLE_STATUSES` (`confirmed`, `shipped`, `delivered`) and
+   `isInvoiceEligible`. The order detail only renders the Invoice link for
+   those statuses, and the invoice page returns `notFound()` for any other
+   status (pending/cancelled/refunded) even via a direct URL. The owner-only
+   query is unchanged. Covered by a unit test over all statuses and an e2e test
+   that a pending order shows no link and its invoice URL 404s; the existing
+   confirmed-order invoice test still renders.
+3. **One default address enforced in the database.** New migration
+   `20261201001000_saved_address_default_unique` adds the partial unique index
+   `CREATE UNIQUE INDEX "SavedAddress_userId_default_key" ON "SavedAddress"("userId") WHERE "isDefault";`.
+   `createAddress`, `updateAddress` (when setting default) and
+   `setDefaultAddress` catch Prisma `P2002` and return `CONFLICT` ("You already
+   have a default address; refresh and try again."). The max-10 behavior is
+   unchanged; the schema carries a note because Prisma cannot express partial
+   indexes.
+4. **Reset-token rotation is transactional.** `generatePasswordResetToken`
+   wraps the `deleteMany` (by email) + `create` in one `prisma.$transaction`,
+   so a failed insert cannot leave the account with zero valid links. New
+   `tests/token-rotation.test.ts` pins the single transaction and call order.
+5. **OAuth header name.** The `jwt` callback uses the DB `name` and otherwise
+   joins only non-empty `firstName`/`lastName` parts, so a user without either
+   no longer shows "null null".
+6. **Invoice year is IST.** `invoiceYear` formats with
+   `Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", year: "numeric" })`;
+   a UTC New Year's Eve order that is already the next day in India gets the
+   new year. Unit cases cover both sides of the IST boundary.
+7. **Checkout keeps address line 2.** The saved-address prefill joins
+   `line1` and `line2` into the single checkout `address` field. The address
+   schema comment no longer claims a saved address always passes checkout
+   validation unchanged (checkout still requires a landmark, left to the user).
+
+### Commands / results
+
+| Command | Result |
+| --- | --- |
+| `DATABASE_URL=postgresql://vendary:vendary@localhost:5432/vendary npx prisma migrate deploy` | applied `20261201001000_saved_address_default_unique` (11 migrations) |
+| `bunx prisma generate` | Prisma Client v6.6.0 generated |
+| `npx vitest run` | 30 passed, 1 skipped (DB-gated integration); 656 tests passed |
+| `npx tsc --noEmit` | pass |
+| `npm run lint` | no warnings or errors |
+| `DATABASE_URL=… npm run e2e -- --grep-invert @payment` | 26 passed (includes the new address-clear and pending-invoice tests) |
+| Placeholder build (`DATABASE_URL=postgresql://ci:ci@localhost:5432/ci AUTH_SECRET=ci-placeholder-secret npm run build`) | pass |
+
+### Files changed
+
+- `actions/account/addresses.ts` — null mapping; P2002 → CONFLICT on all
+  default-writing paths.
+- `lib/orders/status.ts`, `app/(my-orders)/my-orders/[id]/page.tsx`,
+  `app/(my-orders)/my-orders/[id]/invoice/page.tsx` — invoice gating.
+- `prisma/migrations/20261201001000_saved_address_default_unique/migration.sql`,
+  `prisma/schema.prisma` — partial unique index + note.
+- `lib/token.ts` — transactional reset-token rotation.
+- `auth.ts` — OAuth display-name derivation.
+- `lib/orders/invoice.ts` — IST invoice year.
+- `modules/checkout/components/_checkout-form.tsx` — prefill joins line 1/2.
+- `schemas/account/address-schema.ts` — accurate checkout-validation comment.
+- `tests/address-actions.test.ts`, `tests/order-status.test.ts`,
+  `tests/invoice-totals.test.ts`, `tests/token-rotation.test.ts` — unit
+  coverage for the fixes.
+- `e2e/account.spec.ts`, `e2e/invoice.spec.ts` — address-clear and
+  pending-invoice 404 coverage; invoice year expectation now IST.
+

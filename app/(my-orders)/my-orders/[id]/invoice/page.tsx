@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/db/prisma"
 import { serializePrismaObject } from "@/lib/db/serializer"
+import { isInvoiceEligible } from "@/lib/orders/status"
 import Invoice, { type InvoiceOrderView } from "@/modules/orders/components/invoice"
 
 import "./print.css"
@@ -15,7 +16,10 @@ export const metadata = { title: "Invoice | Vendary" }
 
 /**
  * Owner-only invoice. Ownership is part of the query so a foreign id is
- * indistinguishable from a missing one (both 404).
+ * indistinguishable from a missing one (both 404). Only paid statuses have an
+ * invoice: an unpaid `pending` order, an unpaid `cancelled` order and a
+ * reversed `refunded` order must never render a "Tax Invoice / Paid" document,
+ * even via a direct URL.
  */
 export default async function InvoicePage({ params }: Props) {
   const { id } = await params
@@ -28,7 +32,7 @@ export default async function InvoicePage({ params }: Props) {
     where: { id, userId: session.user.id },
     include: { items: true, address: true },
   })
-  if (!order) {
+  if (!order || !isInvoiceEligible(order.status)) {
     notFound()
   }
 

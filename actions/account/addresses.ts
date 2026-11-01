@@ -18,6 +18,27 @@ import {
 
 const ADDRESS_BOOK_PATH = "/account/addresses"
 
+const DEFAULT_CONFLICT_MESSAGE =
+  "You already have a default address; refresh and try again."
+
+const isUniqueViolation = (error: unknown): boolean =>
+  typeof error === "object" &&
+  error !== null &&
+  (error as { code?: unknown }).code === "P2002"
+
+/**
+ * The partial unique index on `SavedAddress(userId) WHERE isDefault` allows a
+ * single default row per user. Two concurrent writers can both clear then
+ * write; the loser gets P2002 and is told to refresh instead of seeing an
+ * internal error.
+ */
+const throwIfDefaultConflict = (error: unknown): never => {
+  if (isUniqueViolation(error)) {
+    throw new AppError("CONFLICT", DEFAULT_CONFLICT_MESSAGE)
+  }
+  throw error
+}
+
 /**
  * Lists the signed-in user's address book. Every query below filters on
  * `session.user.id`: a foreign id is indistinguishable from a missing one and
@@ -42,31 +63,33 @@ export const createAddress = async (input: SavedAddressInput) =>
     const session = await requireUser()
     const data = parseInput(SavedAddressInputSchema, input)
 
-    const created = await prisma.$transaction(async (tx) => {
-      const count = await tx.savedAddress.count({
-        where: { userId: session.user.id },
-      })
-      if (count >= MAX_SAVED_ADDRESSES) {
-        throw new AppError(
-          "CONFLICT",
-          `You can save up to ${MAX_SAVED_ADDRESSES} addresses. Delete one to add another.`
-        )
-      }
-
-      const makeDefault = data.isDefault || count === 0
-      if (makeDefault) {
-        // One default per user: clear the old one and the insert commit (or
-        // roll back) together.
-        await tx.savedAddress.updateMany({
-          where: { userId: session.user.id, isDefault: true },
-          data: { isDefault: false },
+    const created = await prisma
+      .$transaction(async (tx) => {
+        const count = await tx.savedAddress.count({
+          where: { userId: session.user.id },
         })
-      }
+        if (count >= MAX_SAVED_ADDRESSES) {
+          throw new AppError(
+            "CONFLICT",
+            `You can save up to ${MAX_SAVED_ADDRESSES} addresses. Delete one to add another.`
+          )
+        }
 
-      return tx.savedAddress.create({
-        data: { ...data, userId: session.user.id, isDefault: makeDefault },
+        const makeDefault = data.isDefault || count === 0
+        if (makeDefault) {
+          // One default per user: clear the old one and the insert commit (or
+          // roll back) together.
+          await tx.savedAddress.updateMany({
+            where: { userId: session.user.id, isDefault: true },
+            data: { isDefault: false },
+          })
+        }
+
+        return tx.savedAddress.create({
+          data: { ...data, userId: session.user.id, isDefault: makeDefault },
+        })
       })
-    })
+      .catch(throwIfDefaultConflict)
 
     revalidatePath(ADDRESS_BOOK_PATH)
     return created
@@ -78,28 +101,41 @@ export const updateAddress = async (input: UpdateSavedAddressInput) =>
     const session = await requireUser()
     const { id, ...data } = parseInput(UpdateSavedAddressSchema, input)
 
-    const updated = await prisma.$transaction(async (tx) => {
-      const existing = await tx.savedAddress.findFirst({
-        where: { id, userId: session.user.id },
-        select: { id: true },
-      })
-      if (!existing) {
-        throw new AppError("NOT_FOUND", "Address not found.")
-      }
-
-      if (data.isDefault) {
-        await tx.savedAddress.updateMany({
-          where: {
-            userId: session.user.id,
-            isDefault: true,
-            id: { not: id },
-          },
-          data: { isDefault: false },
+    const updated = await prisma
+      .$transaction(async (tx) => {
+        const existing = await tx.savedAddress.findFirst({
+          where: { id, userId: session.user.id },
+          select: { id: true },
         })
-      }
+        if (!existing) {
+          throw new AppError("NOT_FOUND", "Address not found.")
+        }
 
-      return tx.savedAddress.update({ where: { id }, data })
-    })
+        if (data.isDefault) {
+          await tx.savedAddress.updateMany({
+            where: {
+              userId: session.user.id,
+              isDefault: true,
+              id: { not: id },
+            },
+            data: { isDefault: false },
+          })
+        }
+
+        return tx.savedAddress.update({
+          where: { id },
+          // Cleared optional inputs normalize to `undefined`, which Prisma
+          // omits from an update. Map them to null so blanking label/line 2/
+          // landmark actually clears the stored value.
+          data: {
+            ...data,
+            label: data.label ?? null,
+            line2: data.line2 ?? null,
+            landmark: data.landmark ?? null,
+          },
+        })
+      })
+      .catch(throwIfDefaultConflict)
 
     revalidatePath(ADDRESS_BOOK_PATH)
     return updated
@@ -111,25 +147,27 @@ export const setDefaultAddress = async (id: string) =>
     const session = await requireUser()
     const addressId = parseInput(SavedAddressIdSchema, id)
 
-    const updated = await prisma.$transaction(async (tx) => {
-      const existing = await tx.savedAddress.findFirst({
-        where: { id: addressId, userId: session.user.id },
-        select: { id: true },
-      })
-      if (!existing) {
-        throw new AppError("NOT_FOUND", "Address not found.")
-      }
+    const updated = await prisma
+      .$transaction(async (tx) => {
+        const existing = await tx.savedAddress.findFirst({
+          where: { id: addressId, userId: session.user.id },
+          select: { id: true },
+        })
+        if (!existing) {
+          throw new AppError("NOT_FOUND", "Address not found.")
+        }
 
-      await tx.savedAddress.updateMany({
-        where: { userId: session.user.id, isDefault: true, id: { not: addressId } },
-        data: { isDefault: false },
-      })
+        await tx.savedAddress.updateMany({
+          where: { userId: session.user.id, isDefault: true, id: { not: addressId } },
+          data: { isDefault: false },
+        })
 
-      return tx.savedAddress.update({
-        where: { id: addressId },
-        data: { isDefault: true },
+        return tx.savedAddress.update({
+          where: { id: addressId },
+          data: { isDefault: true },
+        })
       })
-    })
+      .catch(throwIfDefaultConflict)
 
     revalidatePath(ADDRESS_BOOK_PATH)
     return updated
