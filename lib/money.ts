@@ -20,6 +20,13 @@ export type OrderTotals = {
   totalPaise: number;
 };
 
+export type DiscountedTotals = OrderTotals & {
+  /** Clamped to [0, subtotalPaise]; never charged as a negative line. */
+  discountPaise: number;
+  /** Subtotal after the discount, before GST. */
+  taxablePaise: number;
+};
+
 /** Decimal-string rupees (for Prisma Decimal filters); paise are integral. */
 export const paiseToRupees = (paise: number): string => (paise / 100).toFixed(2);
 
@@ -31,5 +38,30 @@ export function computeOrderTotals(lines: PricedLine[]): OrderTotals {
     subtotalPaise,
     taxPaise,
     totalPaise: subtotalPaise + taxPaise,
+  };
+}
+
+/**
+ * Coupon totals: GST is charged on the discounted subtotal, not on the listed
+ * price. `computeTotalsWithDiscount(subtotal, 0)` is exactly
+ * `computeOrderTotals` for a single-line cart, so the coupon path cannot drift
+ * from the plain path by a rounding paisa.
+ */
+export function computeTotalsWithDiscount(
+  subtotalPaise: number,
+  discountPaise: number
+): DiscountedTotals {
+  const subtotal = Number.isFinite(subtotalPaise) ? Math.max(0, Math.round(subtotalPaise)) : 0;
+  const requested = Number.isFinite(discountPaise) ? Math.round(discountPaise) : 0;
+  const discount = Math.min(Math.max(0, requested), subtotal);
+  const taxablePaise = subtotal - discount;
+  const taxPaise = Math.round(taxablePaise * GST_RATE);
+
+  return {
+    subtotalPaise: subtotal,
+    discountPaise: discount,
+    taxablePaise,
+    taxPaise,
+    totalPaise: taxablePaise + taxPaise,
   };
 }

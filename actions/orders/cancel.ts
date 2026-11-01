@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth-guards";
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
 import { sendOrderEmail } from "@/lib/mail";
+import { releaseCouponForOrder } from "@/lib/orders/coupon-redemption";
 import { writeOrderEvent } from "@/lib/orders/events";
 import { startOrderRefund } from "@/lib/orders/refund";
 import { invalidateProductCache } from "@/lib/product-cache";
@@ -90,6 +91,10 @@ export const cancelOrder = async (orderId: string) =>
           toStatus: "cancelled",
           actorId: session.user.id,
         });
+
+        // Nothing was charged, so a coupon claimed by this checkout goes back
+        // to the pool. Paid orders never reach this branch and keep theirs.
+        await releaseCouponForOrder(tx, order.id);
         return true;
       });
 

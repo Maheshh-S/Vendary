@@ -13,6 +13,8 @@ export type InvoiceOrderView = {
   paymentMethod: string;
   total: number;
   taxAmount: number;
+  discountAmount: number;
+  couponCode: string | null;
   items: {
     id: string;
     productName: string;
@@ -155,6 +157,14 @@ export default function Invoice({
             <dt className="text-gray-600">Subtotal</dt>
             <dd data-testid="invoice-subtotal">{formatRupees(amounts.subtotalPaise)}</dd>
           </div>
+          {amounts.discountPaise > 0 ? (
+            <div className="flex justify-between">
+              <dt className="text-gray-600">
+                Discount{order.couponCode ? ` (${order.couponCode})` : ""}
+              </dt>
+              <dd data-testid="invoice-discount">−{formatRupees(amounts.discountPaise)}</dd>
+            </div>
+          ) : null}
           <div className="flex justify-between">
             <dt className="text-gray-600">GST</dt>
             <dd data-testid="invoice-tax">{formatRupees(amounts.taxPaise)}</dd>

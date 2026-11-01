@@ -9,11 +9,23 @@ import { CheckoutSession } from "@/modules/products/types/checkout";
 import { quoteLineIssueLabel } from "@/schemas/cart/quote-schema";
 import type { CartQuote, CartQuoteIssue } from "@/schemas/cart/quote-schema";
 import React from "react";
+import CouponForm from "./_coupon-form";
+
+export type CouponFormState = {
+  value: string;
+  appliedCode: string | null;
+  isValidating: boolean;
+  onChange: (value: string) => void;
+  onApply: () => void;
+  onRemove: () => void;
+};
 
 type Props = {
   checkoutSession?: CheckoutSession;
   /** Authoritative server quote; falls back to the stored session snapshot. */
   quote?: CartQuote | null;
+  /** Present on checkout; the cart summary renders without coupon controls. */
+  coupon?: CouponFormState;
 };
 
 type SummaryLine = {
@@ -29,7 +41,7 @@ type SummaryLine = {
 const issueLabel = (line: SummaryLine): string | null =>
   quoteLineIssueLabel({ issue: line.issue, stockQty: line.stockQty ?? 0 });
 
-const ItemsSummary = ({ checkoutSession, quote }: Props) => {
+const ItemsSummary = ({ checkoutSession, quote, coupon }: Props) => {
   const { locale } = useLocale();
   // Default to empty array if line_items is undefined
   const lineItems = checkoutSession?.line_items || [];
@@ -61,14 +73,18 @@ const ItemsSummary = ({ checkoutSession, quote }: Props) => {
         issue: null,
       }));
 
-  const { subtotalPaise, taxPaise, totalPaise } = quote
-    ? quote
-    : computeOrderTotals(
-        lines.map((line) => ({
-          unitPaise: line.unitPaise,
-          quantity: line.quantity,
-        }))
-      );
+  // Authoritative quote first; the localStorage snapshot is only a fallback
+  // while the quote is in flight.
+  const fallbackTotals = computeOrderTotals(
+    lines.map((line) => ({
+      unitPaise: line.unitPaise,
+      quantity: line.quantity,
+    }))
+  );
+  const subtotalPaise = quote?.subtotalPaise ?? fallbackTotals.subtotalPaise;
+  const discountPaise = quote?.discountPaise ?? 0;
+  const taxPaise = quote?.taxPaise ?? fallbackTotals.taxPaise;
+  const totalPaise = quote?.totalPaise ?? fallbackTotals.totalPaise;
 
   // unit_amount values are paise; convert to rupees before formatting.
   const formatCurrency = (amount: number) => {
@@ -143,17 +159,35 @@ const ItemsSummary = ({ checkoutSession, quote }: Props) => {
 
           {/* Order totals */}
           <div className="space-y-3">
+            {coupon ? (
+              <CouponForm
+                value={coupon.value}
+                appliedCode={coupon.appliedCode}
+                error={quote?.couponError ?? null}
+                isValidating={coupon.isValidating}
+                discountPaise={discountPaise}
+                onChange={coupon.onChange}
+                onApply={coupon.onApply}
+                onRemove={coupon.onRemove}
+              />
+            ) : null}
             <div className="flex justify-between">
               <span>Subtotal</span>
-              <span>{formatCurrency(subtotalPaise)}</span>
+              <span data-testid="summary-subtotal">{formatCurrency(subtotalPaise)}</span>
             </div>
+            {discountPaise > 0 ? (
+              <div className="flex justify-between text-green-700 dark:text-green-400">
+                <span>Discount{quote?.couponCode ? ` (${quote.couponCode})` : ""}</span>
+                <span data-testid="summary-discount">−{formatCurrency(discountPaise)}</span>
+              </div>
+            ) : null}
             <div className="flex justify-between">
               <span>Tax ({(GST_RATE * 100).toFixed(0)}% GST)</span>
-              <span>{formatCurrency(taxPaise)}</span>
+              <span data-testid="summary-tax">{formatCurrency(taxPaise)}</span>
             </div>
             <div className="flex justify-between font-medium">
               <span>Total</span>
-              <span>{formatCurrency(totalPaise)}</span>
+              <span data-testid="summary-total">{formatCurrency(totalPaise)}</span>
             </div>
             <Divider />
 

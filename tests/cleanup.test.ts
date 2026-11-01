@@ -10,6 +10,8 @@ const { prismaMock, txMock, invalidateMock } = vi.hoisted(() => {
   const txMock = {
     order: { updateMany: vi.fn() },
     orderEvent: { create: vi.fn() },
+    coupon: { updateMany: vi.fn() },
+    couponRedemption: { findUnique: vi.fn(), deleteMany: vi.fn() },
   };
   return {
     txMock,
@@ -48,6 +50,10 @@ beforeEach(() => {
   );
   txMock.order.updateMany.mockResolvedValue({ count: 1 });
   txMock.orderEvent.create.mockResolvedValue({ id: "event_1" });
+  // Abandoned orders without a coupon have no redemption to release.
+  txMock.couponRedemption.findUnique.mockResolvedValue(null);
+  txMock.couponRedemption.deleteMany.mockResolvedValue({ count: 0 });
+  txMock.coupon.updateMany.mockResolvedValue({ count: 0 });
   invalidateMock.mockResolvedValue(undefined);
   vi.spyOn(console, "info").mockImplementation(() => {});
 });

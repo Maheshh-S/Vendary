@@ -12,15 +12,17 @@ export type CartQuoteLineInput = {
 
 /**
  * Fetches the authoritative cart quote for the current local cart. The query
- * key is a stable serialization of the lines, so quantity changes and
- * additions refetch while untouched carts stay cached.
+ * key is a stable serialization of the lines plus the applied coupon, so
+ * quantity changes, additions and coupon applies refetch while untouched carts
+ * stay cached.
  */
-export function useCartQuote(lineItems: readonly CartQuoteLineInput[]) {
-  const queryKey = lineItems.map((line) => `${line.productId}:${line.quantity}`).join("|");
+export function useCartQuote(lineItems: readonly CartQuoteLineInput[], couponCode?: string | null) {
+  const linesKey = lineItems.map((line) => `${line.productId}:${line.quantity}`).join("|");
+  const queryKey = `${linesKey}::${couponCode ?? ""}`;
 
   const query = useQuery({
     queryKey: ["cart-quote", queryKey],
-    queryFn: () => getCartQuote(lineItems),
+    queryFn: () => getCartQuote(lineItems, couponCode ?? undefined),
     enabled: lineItems.length > 0,
     // Short-lived: stock can change while a shopper is on the page.
     staleTime: 15_000,

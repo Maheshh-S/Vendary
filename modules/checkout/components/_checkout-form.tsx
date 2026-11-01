@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { toast } from "react-hot-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -34,10 +33,16 @@ type RazorpaySuccessResponse = {
   razorpay_signature: string;
 };
 
-// Add Razorpay types
+type RazorpayOptions = Record<string, unknown> & {
+  handler: (response: RazorpaySuccessResponse) => void;
+};
+
+type RazorpayConstructor = new (options: RazorpayOptions) => { open: () => void };
+
+// The checkout.js script attaches the constructor to the window at runtime.
 declare global {
   interface Window {
-    Razorpay: any;
+    Razorpay: RazorpayConstructor;
   }
 }
 
@@ -45,12 +50,15 @@ export default function CheckoutForm({
   checkoutSession,
   blocked = false,
   blockedMessage,
+  couponCode = null,
 }: {
   checkoutSession: CheckoutSession;
   /** True while the server quote is loading, errored, or reports an issue. */
   blocked?: boolean;
   /** Optional explanation rendered under the disabled payment button. */
   blockedMessage?: string;
+  /** Applied coupon code; the server revalidates it before charging. */
+  couponCode?: string | null;
 }) {
   const [, setCountryName] = useState<string>("");
   const [stateName, setStateName] = useState<string>("");
@@ -151,6 +159,9 @@ export default function CheckoutForm({
       const init = await createRazorpayOrder({
         checkoutSession: chargeSession,
         orderData,
+        // Advisory: the server revalidates the coupon from the database and
+        // charges the discounted total only when it is still valid.
+        couponCode: couponCode ?? undefined,
       });
 
       if (!init.ok) {

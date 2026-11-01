@@ -8,9 +8,10 @@ export type InvoiceItemLike = {
 
 export type InvoiceAmounts = {
   subtotalPaise: number;
+  discountPaise: number;
   taxPaise: number;
   totalPaise: number;
-  /** True when the stored total equals the sum of the line snapshots + tax. */
+  /** True when the stored total equals the line snapshots − discount + tax. */
   balanced: boolean;
 };
 
@@ -18,27 +19,31 @@ export const toPaise = (rupees: number | string | { toString(): string }): numbe
   Math.round(Number(rupees) * 100);
 
 /**
- * Subtotal is derived from the immutable item snapshots; tax and total come
- * from the stored order (the amounts that were charged). `balanced` surfaces a
- * drift between them for tests/monitoring without changing what is rendered.
+ * Subtotal is derived from the immutable item snapshots; the discount, tax and
+ * total come from the stored order (the amounts that were charged). `balanced`
+ * surfaces a drift between them for tests/monitoring without changing what is
+ * rendered. Orders without a coupon report zero discount.
  */
 export const computeInvoiceTotals = (order: {
   items: InvoiceItemLike[];
   taxAmount: number | string | { toString(): string };
   total: number | string | { toString(): string };
+  discountAmount?: number | string | { toString(): string } | null;
 }): InvoiceAmounts => {
   const subtotalPaise = order.items.reduce(
     (sum, item) => sum + toPaise(item.price) * item.quantity,
     0
   );
+  const discountPaise = order.discountAmount == null ? 0 : toPaise(order.discountAmount);
   const taxPaise = toPaise(order.taxAmount);
   const totalPaise = toPaise(order.total);
 
   return {
     subtotalPaise,
+    discountPaise,
     taxPaise,
     totalPaise,
-    balanced: subtotalPaise + taxPaise === totalPaise,
+    balanced: subtotalPaise - discountPaise + taxPaise === totalPaise,
   };
 };
 

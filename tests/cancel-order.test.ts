@@ -28,6 +28,8 @@ const {
       updateMany: vi.fn(),
     },
     product: { updateMany: vi.fn() },
+    coupon: { updateMany: vi.fn() },
+    couponRedemption: { findUnique: vi.fn(), deleteMany: vi.fn() },
   };
   const prismaMock = {
     order: { findFirst: vi.fn() },
@@ -144,6 +146,10 @@ beforeEach(() => {
   invalidateMock.mockResolvedValue(undefined);
   revalidateMock.mockReturnValue(undefined);
   txMock.product.updateMany.mockResolvedValue({ count: 1 });
+  // A cancel with no coupon simply finds no redemption to release.
+  txMock.couponRedemption.findUnique.mockResolvedValue(null);
+  txMock.couponRedemption.deleteMany.mockResolvedValue({ count: 0 });
+  txMock.coupon.updateMany.mockResolvedValue({ count: 0 });
 
   prismaMock.order.findFirst.mockImplementation(
     async (args: { where: { id: string; userId: string } }) => {

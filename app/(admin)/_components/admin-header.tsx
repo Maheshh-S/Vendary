@@ -22,10 +22,10 @@ const AdminHeader = async () => {
               </div>
               <div className="flex flex-1 items-center justify-end">
                 <Link
-                  href="#"
+                  href="/admin/coupons"
                   className="hidden text-sm font-medium text-gray-700 hover:text-gray-800 lg:block"
                 >
-                  Search
+                  Coupons
                 </Link>
 
                 <div className="flex items-center lg:ml-8">

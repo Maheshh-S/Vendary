@@ -47,11 +47,35 @@ export type CartQuoteLine = {
 
 export type CartQuote = OrderTotals & {
   lines: CartQuoteLine[];
+  /** Subtotal is pre-discount; `taxPaise`/`totalPaise` are net of it. */
+  discountPaise: number;
+  /** Normalized (uppercase) code echoed back, or null when none was sent. */
+  couponCode: string | null;
+  /** Non-blocking quote warning that must disable payment until corrected. */
+  couponError: string | null;
 };
+
+/** Optional coupon code at the quote boundary; blanks become "no coupon". */
+export const couponCodeSchema = z.preprocess(
+  (value) =>
+    value === null || value === undefined || (typeof value === "string" && value.trim() === "")
+      ? undefined
+      : value,
+  z
+    .string()
+    .trim()
+    .max(64, "Coupon code is too long")
+    .transform((value) => value.toUpperCase())
+    .optional()
+);
 
 /** True when paying now would be refused by the server charge path. */
 export const hasBlockingQuoteIssue = (quote: CartQuote | null | undefined): boolean =>
   quote?.lines.some((line) => line.issue !== null) ?? false;
+
+/** An invalid/expired/over-limit coupon blocks payment just like a bad line. */
+export const hasBlockingCouponIssue = (quote: CartQuote | null | undefined): boolean =>
+  Boolean(quote?.couponError);
 
 /**
  * Checkout gate shared by the cart and checkout pages: a missing quote (still
@@ -67,7 +91,8 @@ export const shouldBlockCheckout = (state: {
   state.isLoading ||
   Boolean(state.errorMessage) ||
   !state.quote ||
-  hasBlockingQuoteIssue(state.quote);
+  hasBlockingQuoteIssue(state.quote) ||
+  hasBlockingCouponIssue(state.quote);
 
 /** Short per-line label for the cart/checkout issue lists. */
 export const quoteLineIssueLabel = (

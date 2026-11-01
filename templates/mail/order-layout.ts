@@ -94,6 +94,14 @@ export const orderEmailLayout = ({ heading, intro, note, view }: LayoutOptions):
             <td style="padding:4px 0;color:#71717a;">Subtotal</td>
             <td style="padding:4px 0;text-align:right;">${escapeHtml(money(view.subtotalPaise))}</td>
           </tr>
+          ${
+            view.discountPaise > 0
+              ? `<tr>
+            <td style="padding:4px 0;color:#71717a;">Discount${view.couponCode ? ` (${escapeHtml(view.couponCode)})` : ""}</td>
+            <td style="padding:4px 0;text-align:right;">−${escapeHtml(money(view.discountPaise))}</td>
+          </tr>`
+              : ""
+          }
           <tr>
             <td style="padding:4px 0;color:#71717a;">Tax (GST)</td>
             <td style="padding:4px 0;text-align:right;">${escapeHtml(money(view.taxPaise))}</td>

@@ -40,6 +40,9 @@ export type OrderEmailView = {
   placedAt: string;
   items: readonly OrderEmailItem[];
   subtotalPaise: number;
+  /** Coupon discount already reflected in `totalPaise`; zero when none. */
+  discountPaise: number;
+  couponCode: string | null;
   taxPaise: number;
   totalPaise: number;
   address: OrderEmailAddress | null;

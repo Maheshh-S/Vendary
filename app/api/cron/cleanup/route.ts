@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db/prisma";
 import { logger } from "@/lib/logger";
+import { releaseCouponForOrder } from "@/lib/orders/coupon-redemption";
 import { writeOrderEvent } from "@/lib/orders/events";
 import { invalidateProductCache } from "@/lib/product-cache";
 
@@ -105,6 +106,9 @@ const cancelStalePendingOrders = async (cutoff: Date): Promise<number> => {
           actorId: null,
           metadata: { source: "cleanup" },
         });
+        // Abandoned checkouts never paid, so any coupon they claimed returns
+        // to the pool with the cancel. Paid orders are not selected here.
+        await releaseCouponForOrder(tx, order.id);
         cancelled += 1;
       }
       return cancelled;

@@ -166,6 +166,8 @@ const toView = (order: OrderWithEmailData): OrderEmailView => {
     }),
     items,
     subtotalPaise,
+    discountPaise: toPaise(order.discountAmount),
+    couponCode: order.couponCode,
     taxPaise: toPaise(order.taxAmount),
     totalPaise: toPaise(order.total),
     address: order.address

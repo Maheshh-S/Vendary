@@ -21,6 +21,7 @@ describe("computeInvoiceTotals", () => {
   it("sums snapshot lines, uses stored tax/total and balances", () => {
     expect(computeInvoiceTotals(ORDER)).toEqual({
       subtotalPaise: 123400 + 9999 * 2,
+      discountPaise: 0,
       taxPaise: 11472,
       totalPaise: 154870,
       balanced: true,
@@ -37,6 +38,7 @@ describe("computeInvoiceTotals", () => {
       })
     ).toEqual({
       subtotalPaise: 9900,
+      discountPaise: 0,
       taxPaise: 792,
       totalPaise: 10692,
       balanced: true,
@@ -45,6 +47,33 @@ describe("computeInvoiceTotals", () => {
 
   it("flags drift between line snapshots and the stored total", () => {
     expect(computeInvoiceTotals({ ...ORDER, total: "1500.00" }).balanced).toBe(false);
+  });
+
+  it("subtracts a stored coupon discount before checking the balance", () => {
+    // ₹1000 - ₹100 coupon = ₹900 taxable, + 8% GST = ₹972.
+    expect(
+      computeInvoiceTotals({
+        items: [{ price: "1000.00", quantity: 1 }],
+        taxAmount: "72.00",
+        total: "972.00",
+        discountAmount: "100.00",
+      })
+    ).toEqual({
+      subtotalPaise: 100_000,
+      discountPaise: 10_000,
+      taxPaise: 7_200,
+      totalPaise: 97_200,
+      balanced: true,
+    });
+
+    // Without the discount the same invoice would look unbalanced.
+    expect(
+      computeInvoiceTotals({
+        items: [{ price: "1000.00", quantity: 1 }],
+        taxAmount: "72.00",
+        total: "972.00",
+      }).balanced
+    ).toBe(false);
   });
 
   it("rounds to the nearest paise", () => {

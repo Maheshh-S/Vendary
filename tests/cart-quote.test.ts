@@ -24,6 +24,7 @@ import { Prisma } from "@prisma/client";
 import { getCartQuote } from "@/actions/cart/quote";
 import type { ActionErrorCode, ActionResult } from "@/lib/action-result";
 import {
+  hasBlockingCouponIssue,
   hasBlockingQuoteIssue,
   hasPriceDrift,
   quoteLineIssueLabel,
@@ -226,8 +227,11 @@ describe("quote helpers", () => {
       },
     ],
     subtotalPaise: 1000,
+    discountPaise: 0,
     taxPaise: 80,
     totalPaise: 1080,
+    couponCode: null,
+    couponError: null,
   };
 
   it("detects price drift against the local cart, ignoring missing lines", () => {
@@ -267,6 +271,20 @@ describe("quote helpers", () => {
       })
     ).toBe(true);
     expect(shouldBlockCheckout({ quote: cleanQuote, isLoading: false })).toBe(false);
+  });
+
+  it("blocks checkout on an invalid coupon just like a bad line", () => {
+    const cleanQuote: CartQuote = { ...quote, lines: [quote.lines[0]] };
+    expect(shouldBlockCheckout({ quote: cleanQuote, isLoading: false })).toBe(false);
+
+    const badCoupon: CartQuote = {
+      ...cleanQuote,
+      couponCode: "BOGUS",
+      couponError: "Invalid coupon code.",
+    };
+    expect(hasBlockingCouponIssue(badCoupon)).toBe(true);
+    expect(shouldBlockCheckout({ quote: badCoupon, isLoading: false })).toBe(true);
+    expect(hasBlockingCouponIssue(cleanQuote)).toBe(false);
   });
 
   it("labels per-line issues for the cart and checkout summaries", () => {

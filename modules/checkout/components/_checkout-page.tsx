@@ -6,6 +6,7 @@ import { PermissionState } from "@/hooks/use-geolocation";
 import { useCartQuote } from "@/hooks/use-cart-quote";
 import { CheckoutSession } from "@/modules/products/types/checkout";
 import { hasBlockingQuoteIssue, shouldBlockCheckout } from "@/schemas/cart/quote-schema";
+import { normalizeCouponCode } from "@/lib/coupons";
 import toast from "react-hot-toast";
 
 const useGeolocation = () => {
@@ -39,21 +40,27 @@ type Props = {
 };
 
 const CheckoutPageComponent = ({ checkoutSession }: Props) => {
-  const { permissionState, requestLocationPermission } = useGeolocation();
-  const [bannerVisible, setBannerVisible] = useState(true);
+  const { permissionState } = useGeolocation();
+  const [bannerVisible] = useState(true);
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
   const showBanner = bannerVisible && permissionState !== PermissionState.GRANTED;
 
   // The quote is the pre-payment truth check: drift and unavailable items are
   // visible here before Razorpay ever opens, and the server re-prices again.
+  // The applied coupon is part of the quote key, so applying/removing refetches.
   const lineItems = checkoutSession?.line_items ?? [];
   const quoteQuery = useCartQuote(
     lineItems.map((item) => ({
       productId: item.productId,
       quantity: item.quantity,
-    }))
+    })),
+    appliedCoupon
   );
   const blockingIssue = hasBlockingQuoteIssue(quoteQuery.quote);
-  // Loading or failed quotes block payment just like an unavailable line.
+  const couponError = quoteQuery.quote?.couponError ?? null;
+  // Loading, failed quotes and a rejected coupon block payment exactly like an
+  // unavailable line. The server revalidates the coupon before charging anyway.
   const blocked = shouldBlockCheckout({
     quote: quoteQuery.quote,
     isLoading: quoteQuery.isLoading,
@@ -63,11 +70,25 @@ const CheckoutPageComponent = ({ checkoutSession }: Props) => {
     ? "Confirming current prices and stock with the server…"
     : quoteQuery.errorMessage
       ? "We couldn't verify current prices. Retry above before paying."
-      : blockingIssue
-        ? "Some items in your cart are unavailable. Go back to the cart to fix them."
-        : !quoteQuery.quote
-          ? "Waiting for the server price check…"
-          : undefined;
+      : couponError
+        ? `${couponError} Remove or correct the coupon to continue.`
+        : blockingIssue
+          ? "Some items in your cart are unavailable. Go back to the cart to fix them."
+          : !quoteQuery.quote
+            ? "Waiting for the server price check…"
+            : undefined;
+
+  const applyCoupon = () => {
+    const code = normalizeCouponCode(couponInput);
+    if (!code) return;
+    setCouponInput(code);
+    setAppliedCoupon(code);
+  };
+
+  const removeCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponInput("");
+  };
 
   useEffect(() => {
     if (!showBanner) return;
@@ -82,10 +103,6 @@ const CheckoutPageComponent = ({ checkoutSession }: Props) => {
         break;
     }
   }, [permissionState, showBanner]);
-
-  const handleDismissBanner = () => {
-    setBannerVisible(false);
-  };
 
   return (
     <div className="min-h-screen bg-transparent w-full">
@@ -108,10 +125,22 @@ const CheckoutPageComponent = ({ checkoutSession }: Props) => {
               checkoutSession={checkoutSession}
               blocked={blocked}
               blockedMessage={blockedMessage}
+              couponCode={appliedCoupon}
             />
           </div>
           <div className="w-full">
-            <ItemsSummary checkoutSession={checkoutSession} quote={quoteQuery.quote} />
+            <ItemsSummary
+              checkoutSession={checkoutSession}
+              quote={quoteQuery.quote}
+              coupon={{
+                value: couponInput,
+                appliedCode: appliedCoupon,
+                isValidating: appliedCoupon !== null && quoteQuery.isLoading,
+                onChange: setCouponInput,
+                onApply: applyCoupon,
+                onRemove: removeCoupon,
+              }}
+            />
           </div>
         </div>
       </div>

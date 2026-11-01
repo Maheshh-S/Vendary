@@ -133,6 +133,8 @@ const makeOrder = (overrides: Record<string, unknown> = {}) => ({
   status: "pending",
   total: "216.00",
   taxAmount: "16.00",
+  discountAmount: "0.00",
+  couponCode: null,
   paymentId: "",
   transactionId: RAZORPAY_ORDER_ID,
   items: [
@@ -153,6 +155,8 @@ const makeOrder = (overrides: Record<string, unknown> = {}) => ({
 // transaction mock can roll back the in-transaction claim on failure.
 let orderState: { status: string; paymentId: string };
 let txState: { status: string; paymentId: string };
+/** Per-test stored-order fields (coupon totals change what was charged). */
+let orderOverrides: Record<string, unknown>;
 
 type RefundRow = {
   id: string;
@@ -178,6 +182,7 @@ beforeEach(() => {
 
   initState();
   refundRows = [];
+  orderOverrides = {};
 
   authMock.mockResolvedValue({ user: { id: USER_ID, role: "USER" } });
   rateLimitMock.enforceRateLimit.mockResolvedValue(undefined);
@@ -188,6 +193,7 @@ beforeEach(() => {
   prismaMock.product.findMany.mockResolvedValue([PRODUCT]);
   prismaMock.order.findUnique.mockImplementation(async () => ({
     ...makeOrder(),
+    ...orderOverrides,
     status: orderState.status,
     paymentId: orderState.paymentId,
   }));
@@ -484,6 +490,24 @@ describe("PlaceOrder (confirm with payment proof only)", () => {
     expect(txMock.product.updateMany).toHaveBeenCalledTimes(2);
     expect(txMock.orderEvent.create).toHaveBeenCalledTimes(1);
     expect(razorpayMock.orders.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("confirms a coupon order without treating the stored discount as a price change", async () => {
+    // ₹200 - ₹20 coupon = ₹180 taxable, + 8% GST = ₹194.40.
+    orderOverrides = {
+      total: "194.40",
+      taxAmount: "14.40",
+      discountAmount: "20.00",
+      couponCode: "SAVE10",
+    };
+    razorpayMock.orders.fetch.mockResolvedValue({ status: "paid", amount: 19440 });
+
+    const result = await PlaceOrder(signedProof());
+
+    expect(result).toEqual({ ok: true, data: { orderId: "order_1" } });
+    expect(orderState).toEqual({ status: "confirmed", paymentId: RAZORPAY_PAYMENT_ID });
+    // The discounted total is what was charged and what the re-price expects.
+    expect(refundMock).not.toHaveBeenCalled();
   });
 
   it("refuses to confirm a pending order whose payment proof is already recorded", async () => {

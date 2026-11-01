@@ -82,6 +82,7 @@ export default async function OrderDetailPage({ params }: Props) {
   );
   // Stored rupee Decimals are the charged amount; render from paise so the
   // customer sees exactly what was charged.
+  const discountPaise = Math.round(Number(order.discountAmount) * 100);
   const taxPaise = Math.round(Number(order.taxAmount) * 100);
   const totalPaise = Math.round(Number(order.total) * 100);
   const maskedPaymentId = maskPaymentId(order.paymentId);
@@ -173,6 +174,16 @@ export default async function OrderDetailPage({ params }: Props) {
                 {formatCurrencyPaise(subtotalPaise)}
               </dd>
             </div>
+            {discountPaise > 0 ? (
+              <div className="flex justify-between">
+                <dt className="text-gray-600 dark:text-gray-400">
+                  Discount{order.couponCode ? ` (${order.couponCode})` : ""}
+                </dt>
+                <dd className="text-gray-900 dark:text-white">
+                  −{formatCurrencyPaise(discountPaise)}
+                </dd>
+              </div>
+            ) : null}
             <div className="flex justify-between">
               <dt className="text-gray-600 dark:text-gray-400">Tax (GST)</dt>
               <dd className="text-gray-900 dark:text-white">{formatCurrencyPaise(taxPaise)}</dd>

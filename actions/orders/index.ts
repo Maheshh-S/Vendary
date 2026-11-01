@@ -2,16 +2,21 @@
 
 import crypto from "node:crypto";
 
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus, type Coupon } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { requireAdmin, requireUser } from "@/lib/auth-guards";
+import {
+  computeCouponDiscount,
+  couponRejectionMessage,
+  INVALID_COUPON_MESSAGE,
+} from "@/lib/coupons";
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { sendOrderEmail } from "@/lib/mail";
-import { computeOrderTotals } from "@/lib/money";
+import { computeTotalsWithDiscount } from "@/lib/money";
 import { confirmOrder } from "@/lib/orders/confirm-order";
 import { writeOrderEvent } from "@/lib/orders/events";
 import { refundLateCapture } from "@/lib/orders/late-capture";
@@ -37,6 +42,26 @@ import type { CheckoutLineItems } from "@/modules/products/types/checkout";
 // Razorpay rejects order amounts below 100 paise (₹1).
 const MIN_RAZORPAY_AMOUNT_PAISE = 100;
 const CREATE_ORDER_BUCKET = "createRazorpayOrder";
+const COUPON_CONFLICT_MESSAGE = "This coupon is no longer available.";
+const COUPON_ALREADY_USED_MESSAGE = "You have already used this coupon.";
+
+/** Optional coupon at the checkout-init boundary; blank means "no coupon". */
+const couponCodeInputSchema = z.preprocess(
+  (value) =>
+    value === null || value === undefined || (typeof value === "string" && value.trim() === "")
+      ? undefined
+      : value,
+  z
+    .string()
+    .trim()
+    .max(64, "Coupon code is too long")
+    .transform((value) => value.toUpperCase())
+    .optional()
+);
+
+/** Prisma unique-constraint violation (one redemption per coupon+user). */
+const isUniqueViolation = (error: unknown): boolean =>
+  typeof error === "object" && error !== null && (error as { code?: unknown }).code === "P2002";
 
 /**
  * Record-only status transitions that email the customer (after commit).
@@ -72,7 +97,7 @@ type VerifiedLine = {
  */
 const verifyAndPriceLines = async (checkoutSession: {
   line_items: { productId: string; quantity: number }[];
-}): Promise<{ lines: VerifiedLine[]; totals: ReturnType<typeof computeOrderTotals> }> => {
+}): Promise<{ lines: VerifiedLine[]; subtotalPaise: number }> => {
   const products = await prisma.product.findMany({
     where: { id: { in: checkoutSession.line_items.map((item) => item.productId) } },
     select: {
@@ -114,17 +139,24 @@ const verifyAndPriceLines = async (checkoutSession: {
     });
   }
 
-  return { lines, totals: computeOrderTotals(lines) };
+  return {
+    lines,
+    subtotalPaise: lines.reduce((sum, line) => sum + line.unitPaise * line.quantity, 0),
+  };
 };
 
 /**
  * Re-prices the durable order's lines at current DB prices. The snapshot name
  * is used only for the user-facing error. A missing product (deleted after
  * init) or a null productId is unfulfillable, so it surfaces as OUT_OF_STOCK.
+ *
+ * The stored discount is re-applied before GST: `order.total` was charged net
+ * of it, so a coupon order must not look "price changed" on confirmation.
  */
 const priceOrderItemsFromDb = async (
-  items: { productId: string | null; productName: string; quantity: number }[]
-): Promise<ReturnType<typeof computeOrderTotals>> => {
+  items: { productId: string | null; productName: string; quantity: number }[],
+  discountAmount: { toString(): string } | number | string
+): Promise<ReturnType<typeof computeTotalsWithDiscount>> => {
   const productIds = items
     .map((item) => item.productId)
     .filter((productId): productId is string => productId !== null);
@@ -134,18 +166,19 @@ const priceOrderItemsFromDb = async (
   });
   const priceById = new Map(products.map((product) => [product.id, product]));
 
-  return computeOrderTotals(
-    items.map((item) => {
-      const product = item.productId ? priceById.get(item.productId) : undefined;
-      if (!product) {
-        throw new AppError(
-          "OUT_OF_STOCK",
-          `"${item.productName}" is no longer available. Your payment will be refunded.`
-        );
-      }
-      return { unitPaise: Math.round(Number(product.price) * 100), quantity: item.quantity };
-    })
-  );
+  let subtotalPaise = 0;
+  for (const item of items) {
+    const product = item.productId ? priceById.get(item.productId) : undefined;
+    if (!product) {
+      throw new AppError(
+        "OUT_OF_STOCK",
+        `"${item.productName}" is no longer available. Your payment will be refunded.`
+      );
+    }
+    subtotalPaise += Math.round(Number(product.price) * 100) * item.quantity;
+  }
+
+  return computeTotalsWithDiscount(subtotalPaise, Math.round(Number(discountAmount) * 100));
 };
 
 const SUPPORT_REFUND_MESSAGE =
@@ -182,14 +215,22 @@ const refundAndCloseForAction = async (
  * Creates the Razorpay order first, then the durable `pending` order + item
  * snapshots that carry its id. The client never sees a payable order without a
  * matching row, so a captured payment can always be reconciled to an order.
+ *
+ * A coupon is revalidated here from the database before Razorpay is called; the
+ * quote the client saw is advisory only. The redemption and the conditional
+ * usage increment commit in the same transaction as the order: if another
+ * checkout consumed the last use in between, the whole init rolls back and the
+ * customer never receives a discounted Razorpay order id.
  */
 export const createRazorpayOrder = async ({
   checkoutSession,
   orderData,
+  couponCode,
 }: {
   // Ids and quantities only: display prices must never reach the charge path.
   checkoutSession: CheckoutLineItems;
   orderData: PlaceOrderSchema;
+  couponCode?: string | null;
 }) =>
   runAction("orders.createRazorpayOrder", async () => {
     const session = await requireUser();
@@ -202,9 +243,27 @@ export const createRazorpayOrder = async ({
 
     const data = parseInput(placeOrderSchema, orderData);
     const cart = parseInput(checkoutSessionSchema, checkoutSession);
+    const code = parseInput(couponCodeInputSchema, couponCode ?? undefined);
 
     // Price from the database, never from the client session.
-    const { lines, totals } = await verifyAndPriceLines(cart);
+    const { lines, subtotalPaise } = await verifyAndPriceLines(cart);
+
+    let coupon: Coupon | null = null;
+    let discountPaise = 0;
+    if (code) {
+      coupon = await prisma.coupon.findUnique({ where: { code } });
+      if (!coupon) {
+        throw new AppError("VALIDATION", INVALID_COUPON_MESSAGE);
+      }
+      const discount = computeCouponDiscount(coupon, subtotalPaise, new Date());
+      if (!discount.ok) {
+        throw new AppError("VALIDATION", couponRejectionMessage(discount.reason));
+      }
+      discountPaise = discount.discountPaise;
+    }
+
+    // GST is charged on the discounted subtotal, never on the listed price.
+    const totals = computeTotalsWithDiscount(subtotalPaise, discountPaise);
     if (totals.totalPaise < MIN_RAZORPAY_AMOUNT_PAISE) {
       throw new AppError("VALIDATION", "Order total must be at least ₹1.");
     }
@@ -238,6 +297,8 @@ export const createRazorpayOrder = async ({
           data: {
             total: toRupees(totals.totalPaise),
             taxAmount: toRupees(totals.taxPaise),
+            discountAmount: toRupees(totals.discountPaise),
+            couponCode: coupon?.code ?? null,
             status: "pending",
             userId: session.user.id,
             addressId: address.id,
@@ -267,10 +328,47 @@ export const createRazorpayOrder = async ({
           actorId: session.user.id,
         });
 
+        if (coupon) {
+          // Compare-and-increment: only a checkout that sees a remaining use
+          // may redeem. A zero count means another customer won the last one.
+          const claimed = await tx.coupon.updateMany({
+            where: {
+              id: coupon.id,
+              ...(coupon.usageLimit !== null ? { usedCount: { lt: coupon.usageLimit } } : {}),
+            },
+            data: { usedCount: { increment: 1 } },
+          });
+          if (claimed.count === 0) {
+            throw new AppError("CONFLICT", COUPON_CONFLICT_MESSAGE);
+          }
+
+          try {
+            await tx.couponRedemption.create({
+              data: {
+                couponId: coupon.id,
+                orderId: created.id,
+                userId: session.user.id,
+                amount: toRupees(totals.discountPaise),
+              },
+            });
+          } catch (error) {
+            // (couponId, userId) is unique: one redemption per customer.
+            if (isUniqueViolation(error)) {
+              throw new AppError("CONFLICT", COUPON_ALREADY_USED_MESSAGE);
+            }
+            throw error;
+          }
+        }
+
         return created;
       });
       orderId = order.id;
     } catch (error) {
+      // Coupon conflicts are expected and already carry user-facing copy; they
+      // must not be masked as an internal failure.
+      if (error instanceof AppError) {
+        throw error;
+      }
       // The customer can never pay this Razorpay order (no client-side id was
       // returned), but it stays in the dashboard — keep its reference for
       // reconciliation. A `razorpay`-named key would be redacted by the
@@ -392,10 +490,11 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
     }
 
     // Re-price from current DB rows: a price change after init means the paid
-    // amount no longer buys this cart, so refund instead of confirming.
-    let currentTotals: ReturnType<typeof computeOrderTotals>;
+    // amount no longer buys this cart, so refund instead of confirming. The
+    // stored coupon discount is re-applied so the comparison stays exact.
+    let currentTotals: ReturnType<typeof computeTotalsWithDiscount>;
     try {
-      currentTotals = await priceOrderItemsFromDb(order.items);
+      currentTotals = await priceOrderItemsFromDb(order.items, order.discountAmount);
     } catch (error) {
       if (error instanceof AppError && error.code === "OUT_OF_STOCK") {
         const refund = await refundAndCloseForAction(

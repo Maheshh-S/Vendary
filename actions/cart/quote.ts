@@ -1,12 +1,18 @@
 "use server";
 
 import type { ActionResult } from "@/lib/action-result";
+import {
+  computeCouponDiscount,
+  couponRejectionMessage,
+  INVALID_COUPON_MESSAGE,
+} from "@/lib/coupons";
 import { prisma } from "@/lib/db/prisma";
-import { computeOrderTotals } from "@/lib/money";
+import { computeTotalsWithDiscount } from "@/lib/money";
 import { runAction } from "@/lib/run-action";
 import { parseInput } from "@/lib/validation";
 import {
   cartQuoteSchema,
+  couponCodeSchema,
   type CartQuote,
   type CartQuoteIssue,
   type CartQuoteLine,
@@ -19,13 +25,22 @@ import {
  * payment on stale or unavailable items; `createRazorpayOrder` still re-prices
  * independently (the quote is advisory, never a charge input).
  *
+ * Coupons are validated here only to make the display honest. An invalid code
+ * yields `couponError` (with zero discount) instead of failing the quote; the
+ * checkout gate treats it as blocking, and the charge path revalidates from
+ * scratch so a stale quote can never buy a discount.
+ *
  * Totals include every line with a known price (unavailable lines keep their
  * listed price; missing lines contribute 0) so the display stays coherent while
  * the blocking issue explains why payment is disabled.
  */
-export const getCartQuote = async (lineItems: unknown): Promise<ActionResult<CartQuote>> =>
+export const getCartQuote = async (
+  lineItems: unknown,
+  couponCode?: unknown
+): Promise<ActionResult<CartQuote>> =>
   runAction("cart.quote", async () => {
     const lines = parseInput(cartQuoteSchema, lineItems);
+    const code = parseInput(couponCodeSchema, couponCode);
 
     const products = await prisma.product.findMany({
       where: { id: { in: lines.map((line) => line.productId) } },
@@ -75,12 +90,33 @@ export const getCartQuote = async (lineItems: unknown): Promise<ActionResult<Car
       };
     });
 
-    const totals = computeOrderTotals(
-      quoteLines.map((line) => ({
-        unitPaise: line.unitPaise,
-        quantity: line.quantity,
-      }))
-    );
+    const subtotalPaise = quoteLines.reduce((acc, line) => acc + line.unitPaise * line.quantity, 0);
 
-    return { lines: quoteLines, ...totals };
+    let discountPaise = 0;
+    let couponError: string | null = null;
+    if (code) {
+      const coupon = await prisma.coupon.findUnique({ where: { code } });
+      if (!coupon) {
+        couponError = INVALID_COUPON_MESSAGE;
+      } else {
+        const result = computeCouponDiscount(coupon, subtotalPaise, new Date());
+        if (result.ok) {
+          discountPaise = result.discountPaise;
+        } else {
+          couponError = couponRejectionMessage(result.reason);
+        }
+      }
+    }
+
+    const totals = computeTotalsWithDiscount(subtotalPaise, discountPaise);
+
+    return {
+      lines: quoteLines,
+      subtotalPaise: totals.subtotalPaise,
+      discountPaise: totals.discountPaise,
+      taxPaise: totals.taxPaise,
+      totalPaise: totals.totalPaise,
+      couponCode: code ?? null,
+      couponError,
+    };
   });
