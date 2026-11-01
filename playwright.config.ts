@@ -37,6 +37,10 @@ export default defineConfig({
       NEXT_PUBLIC_RAZORPAY_KEY_ID: serverEnv("NEXT_PUBLIC_RAZORPAY_KEY_ID"),
       RAZORPAY_WEBHOOK_SECRET: serverEnv("RAZORPAY_WEBHOOK_SECRET"),
       RESEND_API_KEY: serverEnv("RESEND_API_KEY"),
+      // Force-disabled for e2e: a developer's .env must never let a test send
+      // real customer/store email. Blank sender = sends are skipped.
+      EMAIL_FROM: "",
+      ORDER_NOTIFICATION_EMAIL: "",
       // Cache disabled for e2e: deterministic DB reads, no local Redis needed.
       REDIS_URL: "",
       AUTH_GOOGLE_ID: "",

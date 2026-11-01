@@ -8,10 +8,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * sending and swallows delivery failures.
  */
 
-const { prismaMock, sendMock } = vi.hoisted(() => {
+const { prismaMock, sendMock, resendState } = vi.hoisted(() => {
   const sendMock = vi.fn();
   return {
     sendMock,
+    resendState: { throwOnConstruct: false },
     prismaMock: {
       order: { findUnique: vi.fn() },
       orderEvent: { findMany: vi.fn(), create: vi.fn() },
@@ -24,6 +25,11 @@ vi.mock("@/lib/db/prisma", () => ({ prisma: prismaMock }));
 vi.mock("resend", () => ({
   Resend: class {
     emails = { send: sendMock };
+    constructor() {
+      if (resendState.throwOnConstruct) {
+        throw new Error("invalid API key");
+      }
+    }
   },
 }));
 
@@ -67,6 +73,7 @@ const sentPayload = () => {
   return sendMock.mock.calls[0][0] as {
     from: string;
     to: string[];
+    bcc?: string[];
     subject: string;
     html: string;
   };
@@ -74,6 +81,7 @@ const sentPayload = () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resendState.throwOnConstruct = false;
   vi.stubEnv("EMAIL_FROM", FROM_ADDRESS);
   vi.stubEnv("RESEND_API_KEY", "re_test_key");
   vi.stubEnv("ORDER_NOTIFICATION_EMAIL", "");
@@ -118,14 +126,27 @@ describe("sendOrderEmail", () => {
     expect(html).toContain("confirmed");
   });
 
-  it("also sends to ORDER_NOTIFICATION_EMAIL when configured", async () => {
+  it("BCCs ORDER_NOTIFICATION_EMAIL so the internal address stays hidden", async () => {
     vi.stubEnv("ORDER_NOTIFICATION_EMAIL", "store@vendary.test");
 
     await sendOrderEmail(ORDER_ID, "shipped");
 
     const payload = sentPayload();
-    expect(payload.to).toEqual([USER_EMAIL, "store@vendary.test"]);
+    expect(payload.to).toEqual([USER_EMAIL]);
+    expect(payload.bcc).toEqual(["store@vendary.test"]);
     expect(payload.subject).toMatch(/shipped/i);
+  });
+
+  it("uses ORDER_NOTIFICATION_EMAIL as the sole recipient when the customer has no email", async () => {
+    vi.stubEnv("ORDER_NOTIFICATION_EMAIL", "store@vendary.test");
+    prismaMock.order.findUnique.mockResolvedValue(makeOrder({ user: { email: null } }));
+
+    const result = await sendOrderEmail(ORDER_ID, "cancelled");
+
+    expect(result).toEqual({ status: "sent" });
+    const payload = sentPayload();
+    expect(payload.to).toEqual(["store@vendary.test"]);
+    expect(payload.bcc).toBeUndefined();
   });
 
   it("deduplicates a notification address equal to the customer's email", async () => {
@@ -133,7 +154,9 @@ describe("sendOrderEmail", () => {
 
     await sendOrderEmail(ORDER_ID, "delivered");
 
-    expect(sentPayload().to).toEqual([USER_EMAIL]);
+    const payload = sentPayload();
+    expect(payload.to).toEqual([USER_EMAIL]);
+    expect(payload.bcc).toBeUndefined();
   });
 
   it("writes the idempotency event before the send and skips a second email", async () => {
@@ -198,6 +221,18 @@ describe("sendOrderEmail", () => {
 
     expect(result).toEqual({ status: "failed", error: "network down" });
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("never throws when building the mail transport config fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    resendState.throwOnConstruct = true;
+
+    const result = await sendOrderEmail(ORDER_ID, "confirmation");
+
+    expect(result).toEqual({ status: "failed", error: "invalid API key" });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(prismaMock.order.findUnique).not.toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
   });
 
   it("skips without touching the database when EMAIL_FROM is absent", async () => {

@@ -17,8 +17,8 @@ test.describe("admin dashboard", () => {
     await expect(products).toBeVisible();
     await expect(orders).toBeVisible();
 
-    // At least one product row and a creator email cell.
-    await expect(products.locator("tbody tr")).not.toHaveCount(0);
+    // A seeded product row and its creator's email are both rendered.
+    await expect(products).toContainText("Jaipur Blue Pottery Vase");
     await expect(page.getByTestId("product-creator").first()).toContainText("@");
     await expect(page.getByTestId("admin-search-input")).toBeVisible();
   });

@@ -35,8 +35,6 @@ const EVENT_LABELS: Record<string, string> = {
   refund_initiated: "Refund initiated",
   refund_processed: "Refund processed",
   refund_failed: "Refund failed",
-  confirmation_sent: "Confirmation email sent",
-  shipped_sent: "Shipping email sent",
 };
 
 const humanize = (value: string): string =>

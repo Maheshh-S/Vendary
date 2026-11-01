@@ -9,28 +9,38 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
  * are `AppError`s, so nothing may reach `console.error`.
  */
 
-const { authMock, prismaMock, txMock, invalidateMock, revalidateMock, refundPaymentMock, rateLimitMock } =
-  vi.hoisted(() => {
-    const txMock = {
-      order: { findUnique: vi.fn(), updateMany: vi.fn() },
-      orderEvent: { create: vi.fn() },
-      product: { updateMany: vi.fn() },
-    };
-    const prismaMock = { $transaction: vi.fn() };
-    return {
-      authMock: vi.fn(),
-      prismaMock,
-      txMock,
-      invalidateMock: vi.fn(),
-      revalidateMock: vi.fn(),
-      refundPaymentMock: vi.fn(),
-      rateLimitMock: vi.fn(),
-    };
-  });
+const {
+  authMock,
+  prismaMock,
+  txMock,
+  invalidateMock,
+  revalidateMock,
+  refundPaymentMock,
+  rateLimitMock,
+  mailMock,
+} = vi.hoisted(() => {
+  const txMock = {
+    order: { findUnique: vi.fn(), updateMany: vi.fn() },
+    orderEvent: { create: vi.fn() },
+    product: { updateMany: vi.fn() },
+  };
+  const prismaMock = { $transaction: vi.fn() };
+  return {
+    authMock: vi.fn(),
+    prismaMock,
+    txMock,
+    invalidateMock: vi.fn(),
+    revalidateMock: vi.fn(),
+    refundPaymentMock: vi.fn(),
+    rateLimitMock: vi.fn(),
+    mailMock: vi.fn(),
+  };
+});
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/auth", () => ({ auth: authMock }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: prismaMock }));
+vi.mock("@/lib/mail", () => ({ sendOrderEmail: mailMock }));
 vi.mock("@/lib/product-cache", () => ({ invalidateProductCache: invalidateMock }));
 vi.mock("next/cache", () => ({ revalidatePath: revalidateMock }));
 vi.mock("@/lib/razorpay-client", () => ({
@@ -485,6 +495,54 @@ describe("updateOrderStatus transition guards", () => {
       expect(txMock.product.updateMany).not.toHaveBeenCalled();
     }
   );
+});
+
+describe("updateOrderStatus customer email", () => {
+  it("sends exactly one shipped email for confirmed -> shipped", async () => {
+    const result = await updateOrderStatus(ORDER_ID, "shipped");
+
+    expect(result).toEqual({
+      ok: true,
+      data: { orderId: ORDER_ID, from: "confirmed", to: "shipped" },
+    });
+    expect(mailMock).toHaveBeenCalledTimes(1);
+    expect(mailMock).toHaveBeenCalledWith(ORDER_ID, "shipped");
+  });
+
+  it("sends exactly one delivered email for shipped -> delivered", async () => {
+    orderRow = makeOrder("shipped");
+
+    const result = await updateOrderStatus(ORDER_ID, "delivered");
+
+    expect(result).toEqual({
+      ok: true,
+      data: { orderId: ORDER_ID, from: "shipped", to: "delivered" },
+    });
+    expect(mailMock).toHaveBeenCalledTimes(1);
+    expect(mailMock).toHaveBeenCalledWith(ORDER_ID, "delivered");
+  });
+
+  it.each(["cancelled", "refunded"] as OrderStatus[])(
+    "sends no email for the record-only confirmed -> %s transition",
+    async (to) => {
+      const result = await updateOrderStatus(ORDER_ID, to);
+
+      expect(result).toEqual({
+        ok: true,
+        data: { orderId: ORDER_ID, from: "confirmed", to },
+      });
+      // Cancelling or refunding from the dropdown moves no money, so claiming
+      // "your refund was processed" would be a lie. The money paths email.
+      expect(mailMock).not.toHaveBeenCalled();
+    }
+  );
+
+  it("sends no email when the transition fails", async () => {
+    orderRow = makeOrder("pending");
+
+    expectFailure(await updateOrderStatus(ORDER_ID, "cancelled"), "CONFLICT");
+    expect(mailMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("updateOrderStatus stock restoration", () => {

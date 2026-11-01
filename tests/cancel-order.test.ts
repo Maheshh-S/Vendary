@@ -16,6 +16,7 @@ const {
   refundPaymentMock,
   invalidateMock,
   revalidateMock,
+  mailMock,
 } = vi.hoisted(() => {
   const txMock = {
     order: { findUnique: vi.fn(), updateMany: vi.fn() },
@@ -39,12 +40,14 @@ const {
     refundPaymentMock: vi.fn(),
     invalidateMock: vi.fn(),
     revalidateMock: vi.fn(),
+    mailMock: vi.fn(),
   };
 });
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/auth", () => ({ auth: authMock }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: prismaMock }));
+vi.mock("@/lib/mail", () => ({ sendOrderEmail: mailMock }));
 vi.mock("@/lib/razorpay-client", () => ({
   getRazorpayClient: vi.fn(),
   refundPayment: refundPaymentMock,
@@ -333,6 +336,9 @@ describe("cancelOrder pending orders", () => {
     ]);
     expect(revalidateMock).toHaveBeenCalledWith(`/my-orders/${ORDER_ID}`);
     expect(invalidateMock).not.toHaveBeenCalled();
+    // The money-free pending cancel still notifies the customer exactly once.
+    expect(mailMock).toHaveBeenCalledTimes(1);
+    expect(mailMock).toHaveBeenCalledWith(ORDER_ID, "cancelled");
   });
 
   it("returns PAYMENT_FAILED with a precise reason once a payment proof is recorded", async () => {
@@ -447,6 +453,9 @@ describe("cancelOrder confirmed orders (full refund)", () => {
       toStatus: "cancelled",
       actorId: USER_ID,
     });
+    // The money-moving cancel keeps its own customer email.
+    expect(mailMock).toHaveBeenCalledTimes(1);
+    expect(mailMock).toHaveBeenCalledWith(ORDER_ID, "cancelled");
   });
 
   it("returns CONFLICT without refunding when a refund is already in progress", async () => {

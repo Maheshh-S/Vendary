@@ -34,14 +34,16 @@ import type { CheckoutLineItems } from "@/modules/products/types/checkout";
 const MIN_RAZORPAY_AMOUNT_PAISE = 100;
 const CREATE_ORDER_BUCKET = "createRazorpayOrder";
 
-/** Status transitions that trigger a customer email (after commit). */
-const STATUS_EMAIL_KINDS: Partial<
-  Record<OrderStatus, "shipped" | "delivered" | "cancelled" | "refunded">
-> = {
+/**
+ * Record-only status transitions that email the customer (after commit).
+ * `cancelled` and `refunded` are deliberately absent: the paths that actually
+ * move money (customer cancel, admin refund, automatic refunds and the
+ * webhook) send those emails themselves, so a record-only override must never
+ * tell the customer a refund was processed.
+ */
+const STATUS_EMAIL_KINDS: Partial<Record<OrderStatus, "shipped" | "delivered">> = {
   shipped: "shipped",
   delivered: "delivered",
-  cancelled: "cancelled",
-  refunded: "refunded",
 };
 
 const toRupees = (paise: number): string => (paise / 100).toFixed(2);

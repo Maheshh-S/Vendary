@@ -227,3 +227,71 @@ described above and re-run green. No application rate limit was weakened.
    theoretical conflict; a second distinct refund would need partial-refund
    support first.
 9. `.qoder/settings.local.json` remains untracked and was not committed.
+
+---
+
+## Fix round 1
+
+Addresses Phase 1C review finding "record-only status changes send a false
+refund email" (Concerns #3/#4) plus cheap minors.
+
+### Important — record-only status changes no longer email
+
+`STATUS_EMAIL_KINDS` in `actions/orders/index.ts` now maps only `shipped` and
+`delivered`. The admin dropdown's record-only `cancelled`/`refunded`
+transitions (which issue no Razorpay refund) send nothing, so the customer is
+never told "your refund was processed" when no money moved. The money-moving
+paths are untouched and still send their own emails:
+
+- customer cancel → `actions/orders/cancel.ts` (`cancelled`, pending and
+  refund paths);
+- admin refund → `actions/(admin)/orders/refund.ts` (`refunded`);
+- automatic refunds → `lib/orders/refund.ts` (`refunded`);
+- refund webhook → `app/api/razorpay/webhook/route.ts` (`refunded`).
+
+Tests added:
+- `tests/order-status.test.ts` (now mocks `@/lib/mail`): exactly one `shipped`
+  email for `confirmed → shipped`, exactly one `delivered` for
+  `shipped → delivered`, **zero** emails for record-only
+  `confirmed → cancelled` and `confirmed → refunded`, and zero on a failed
+  transition.
+- `tests/cancel-order.test.ts`: pending cancel and confirmed refund cancel each
+  send exactly one `cancelled` email.
+- `tests/refund.test.ts`: admin refund sends exactly one `refunded` email.
+
+### Minors
+
+1. `lib/mail.ts`: `getOrderMailConfig()` now sits inside `sendOrderEmail`'s
+   try/catch, so even a transport-construction failure returns
+   `{ status: "failed" }` instead of throwing on the checkout/refund response
+   path. Covered by a test that makes the Resend constructor throw.
+2. `lib/mail.ts`: with both addresses present, the customer is `to:` and
+   `ORDER_NOTIFICATION_EMAIL` is `bcc:` (internal address no longer exposed to
+   reply-all). A store-only order uses the store address as `to:`; an address
+   equal to the customer's is deduplicated. Tests updated/added.
+3. `playwright.config.ts`: `webServer.env` forces `EMAIL_FROM: ""` and
+   `ORDER_NOTIFICATION_EMAIL: ""`, so e2e never sends real email regardless of
+   the developer's `.env`.
+4. `modules/orders/components/order-timeline.tsx`: removed the dead
+   `confirmation_sent` / `shipped_sent` labels (only `order_email_sent` exists).
+5. `e2e/admin.spec.ts`: the vacuous `not.toHaveCount(0)` was replaced with a
+   seeded-product assertion ("Jaipur Blue Pottery Vase"), alongside the
+   existing creator-email cell assertion.
+
+### Verification
+
+| Command | Result |
+| --- | --- |
+| `npx vitest run` | **23 files, 570 tests passed** |
+| `npx tsc --noEmit` | clean |
+| `npm run lint` | no warnings or errors |
+| `DATABASE_URL=…local… npm run e2e -- --grep-invert @payment` | **18 passed** (27.6s) |
+| `next build` with placeholder secrets | exit 0 |
+
+### Files changed
+
+`actions/orders/index.ts`, `lib/mail.ts`, `playwright.config.ts`,
+`modules/orders/components/order-timeline.tsx`, `e2e/admin.spec.ts`,
+`tests/order-status.test.ts`, `tests/order-emails.test.ts`,
+`tests/cancel-order.test.ts`, `tests/refund.test.ts`,
+`.superpowers/sdd/phase-1c-report.md`.

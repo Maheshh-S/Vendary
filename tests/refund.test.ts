@@ -16,6 +16,7 @@ const {
   invalidateMock,
   revalidateMock,
   rateLimitMock,
+  mailMock,
 } = vi.hoisted(() => {
   const txMock = {
     order: { findUnique: vi.fn(), updateMany: vi.fn() },
@@ -40,12 +41,14 @@ const {
     invalidateMock: vi.fn(),
     revalidateMock: vi.fn(),
     rateLimitMock: vi.fn(),
+    mailMock: vi.fn(),
   };
 });
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/auth", () => ({ auth: authMock }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: prismaMock }));
+vi.mock("@/lib/mail", () => ({ sendOrderEmail: mailMock }));
 vi.mock("@/lib/razorpay-client", () => ({
   getRazorpayClient: vi.fn(),
   refundPayment: refundPaymentMock,
@@ -335,6 +338,9 @@ describe("refundOrder success", () => {
       toStatus: "refunded",
       actorId: ADMIN_ID,
     });
+    // The money-moving admin refund keeps its own customer email.
+    expect(mailMock).toHaveBeenCalledTimes(1);
+    expect(mailMock).toHaveBeenCalledWith(ORDER_ID, "refunded");
   });
 
   it.each(["shipped", "delivered"])(

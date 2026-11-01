@@ -161,12 +161,18 @@ const subjectFor = (kind: OrderEmailKind, orderId: string): string => {
 const renderOrderEmail = (kind: OrderEmailKind, view: OrderEmailView): string =>
   kind === "confirmation" ? orderConfirmationEmail(view) : orderStatusEmail(kind, view);
 
-const recipientsFor = (order: OrderWithEmailData): string[] => {
-  const candidates = [
-    order.user?.email?.trim(),
-    process.env.ORDER_NOTIFICATION_EMAIL?.trim(),
-  ];
-  return [...new Set(candidates.filter((email): email is string => Boolean(email)))];
+const recipientsFor = (order: OrderWithEmailData): { to: string[]; bcc?: string[] } => {
+  const customer = order.user?.email?.trim() || undefined;
+  const store = process.env.ORDER_NOTIFICATION_EMAIL?.trim() || undefined;
+
+  // The store inbox is a hidden copy: putting it in `to` would expose the
+  // internal address to the customer on a reply-all.
+  if (customer) {
+    return store && store !== customer
+      ? { to: [customer], bcc: [store] }
+      : { to: [customer] };
+  }
+  return store ? { to: [store] } : { to: [] };
 };
 
 /**
@@ -179,17 +185,19 @@ const recipientsFor = (order: OrderWithEmailData): string[] => {
  *
  * Never throws: a missing mail config, missing recipients, Resend outage or
  * DB hiccup is logged (or silently skipped) so the order flow always survives.
+ * Even building the transport config sits inside the guard, because it runs on
+ * the checkout/refund response path where nothing may escape.
  */
 export const sendOrderEmail = async (
   orderId: string,
   kind: OrderEmailKind
 ): Promise<OrderEmailResult> => {
-  const config = getOrderMailConfig();
-  if (!config) {
-    return { status: "skipped", reason: "not_configured" };
-  }
-
   try {
+    const config = getOrderMailConfig();
+    if (!config) {
+      return { status: "skipped", reason: "not_configured" };
+    }
+
     const existing = await prisma.orderEvent.findMany({
       where: { orderId, type: ORDER_EMAIL_EVENT_TYPE },
       select: { metadata: true },
@@ -211,7 +219,7 @@ export const sendOrderEmail = async (
     }
 
     const recipients = recipientsFor(order);
-    if (recipients.length === 0) {
+    if (recipients.to.length === 0) {
       return { status: "skipped", reason: "no_recipients" };
     }
 
@@ -228,7 +236,8 @@ export const sendOrderEmail = async (
 
     const { error } = await config.resend.emails.send({
       from: config.from,
-      to: recipients,
+      to: recipients.to,
+      ...(recipients.bcc ? { bcc: recipients.bcc } : {}),
       subject: subjectFor(kind, order.id),
       html: renderOrderEmail(kind, toView(order)),
     });
