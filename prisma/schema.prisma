@@ -102,6 +102,9 @@ model Product {
   reviews          Review[]
   userId           String
   user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([availability, createdAt])
+  @@index([categoryId, price])
 }
 
 enum Availability {
@@ -170,6 +173,9 @@ model Order {
   transactionId String      @unique
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
 }
 
 model Address {
@@ -200,6 +206,9 @@ model OrderItem {
   price        Decimal  @db.Decimal(10, 2)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([productId])
 }
 
 model Review {
@@ -215,4 +224,5 @@ model Review {
   updatedAt        DateTime @updatedAt
 
   @@unique([userId, productId])
+  @@index([productId, createdAt])
 }

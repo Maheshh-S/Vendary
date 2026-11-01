@@ -5,27 +5,56 @@ export const PRODUCT_SORTS = ["newest", "price_asc", "price_desc", "name_asc"] a
 export type ProductSort = (typeof PRODUCT_SORTS)[number]
 
 /**
- * Public catalog query boundary. Numbers arrive as URL strings, so they are
- * coerced; every field carries a default so an empty query is valid.
+ * Price bounds arrive as paise (integer) from the action boundary. An empty
+ * URL parameter (`?min=`) means "no filter", not zero, so it is normalized to
+ * undefined before coercion.
  */
-export const productsQuerySchema = z.object({
-  page: z.coerce
+const optionalPaise = z.preprocess(
+  (value) => (value === "" || value === null ? undefined : value),
+  z.coerce
     .number()
-    .int("Page must be a whole number")
-    .min(1, "Page must be at least 1")
-    .default(1),
-  pageSize: z.coerce
-    .number()
-    .int("Page size must be a whole number")
-    .min(1, "Page size must be at least 1")
-    .max(48, "Page size cannot exceed 48")
-    .default(24),
-  category: z
-    .string()
-    .trim()
-    .max(60, "Category cannot exceed 60 characters")
-    .optional(),
-  sort: z.enum(PRODUCT_SORTS).default("newest"),
-})
+    .int("Price bounds must be whole paise")
+    .min(0, "Price cannot be negative")
+    .optional()
+)
+
+/**
+ * Public catalog query boundary. Numbers arrive as URL strings, so they are
+ * coerced; every field carries a default (or is optional) so an empty query is
+ * valid. `minPricePaise <= maxPricePaise` is enforced here so the action and
+ * the page agree on what a valid filter looks like.
+ */
+export const productsQuerySchema = z
+  .object({
+    page: z.coerce
+      .number()
+      .int("Page must be a whole number")
+      .min(1, "Page must be at least 1")
+      .default(1),
+    pageSize: z.coerce
+      .number()
+      .int("Page size must be a whole number")
+      .min(1, "Page size must be at least 1")
+      .max(48, "Page size cannot exceed 48")
+      .default(24),
+    category: z
+      .string()
+      .trim()
+      .max(60, "Category cannot exceed 60 characters")
+      .optional(),
+    sort: z.enum(PRODUCT_SORTS).default("newest"),
+    minPricePaise: optionalPaise,
+    maxPricePaise: optionalPaise,
+  })
+  .refine(
+    (query) =>
+      query.minPricePaise === undefined ||
+      query.maxPricePaise === undefined ||
+      query.minPricePaise <= query.maxPricePaise,
+    {
+      message: "Minimum price cannot exceed maximum price",
+      path: ["maxPricePaise"],
+    }
+  )
 
 export type ProductsQuery = z.infer<typeof productsQuerySchema>

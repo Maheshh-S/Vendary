@@ -285,6 +285,45 @@ describe("GetProducts", () => {
     expect(findArgs.orderBy).toEqual({ createdAt: "desc" });
   });
 
+  it("converts paise price bounds to rupee Decimal filters shared by list and count", async () => {
+    prismaMock.product.count.mockResolvedValue(5);
+
+    expectSuccess(
+      await GetProducts({ minPricePaise: 200000, maxPricePaise: 300050 })
+    );
+
+    const [findArgs] = prismaMock.product.findMany.mock.calls[0];
+    const [countArgs] = prismaMock.product.count.mock.calls[0];
+    const expectedWhere = {
+      availability: "IN_STOCK",
+      price: { gte: "2000.00", lte: "3000.50" },
+    };
+
+    expect(findArgs.where).toEqual(expectedWhere);
+    expect(countArgs.where).toEqual(expectedWhere);
+  });
+
+  it("applies an open-ended lower bound (zero is a real filter)", async () => {
+    prismaMock.product.count.mockResolvedValue(5);
+
+    expectSuccess(await GetProducts({ minPricePaise: 0 }));
+
+    const [findArgs] = prismaMock.product.findMany.mock.calls[0];
+    expect(findArgs.where).toEqual({
+      availability: "IN_STOCK",
+      price: { gte: "0.00" },
+    });
+  });
+
+  it("rejects inverted price bounds before querying", async () => {
+    expectFailure(
+      await GetProducts({ minPricePaise: 300000, maxPricePaise: 200000 }),
+      "VALIDATION"
+    );
+    expect(prismaMock.product.findMany).not.toHaveBeenCalled();
+    expect(prismaMock.product.count).not.toHaveBeenCalled();
+  });
+
   it("coerces URL strings and computes skip from the page", async () => {
     prismaMock.product.count.mockResolvedValue(25);
 

@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client"
 
 import type { ActionResult } from "@/lib/action-result"
 import { prisma } from "@/lib/db/prisma"
+import { paiseToRupees } from "@/lib/money"
 import { runAction } from "@/lib/run-action"
 import { parseInput } from "@/lib/validation"
 import {
@@ -16,6 +17,8 @@ export type GetProductsParams = {
     pageSize?: number | string
     category?: string
     sort?: string
+    minPricePaise?: number | string
+    maxPricePaise?: number | string
 }
 
 export type ProductSummary = {
@@ -50,8 +53,11 @@ export const GetProducts = async (
     params: GetProductsParams = {}
 ): Promise<ActionResult<ProductsPage>> =>
     runAction("products.list", async () => {
-        const { page, pageSize, category, sort } = parseInput(productsQuerySchema, params)
+        const { page, pageSize, category, sort, minPricePaise, maxPricePaise } =
+            parseInput(productsQuerySchema, params)
 
+        // Built once and shared by findMany and count, so `total` always
+        // describes exactly the pages being returned.
         const where: Prisma.ProductWhereInput = {
             availability: "IN_STOCK",
             ...(category
@@ -61,6 +67,19 @@ export const GetProducts = async (
                             equals: category,
                             mode: "insensitive",
                         },
+                    },
+                }
+                : {}),
+            ...(minPricePaise !== undefined || maxPricePaise !== undefined
+                ? {
+                    price: {
+                        // Paise on the wire, rupee Decimal in the database.
+                        ...(minPricePaise !== undefined
+                            ? { gte: paiseToRupees(minPricePaise) }
+                            : {}),
+                        ...(maxPricePaise !== undefined
+                            ? { lte: paiseToRupees(maxPricePaise) }
+                            : {}),
                     },
                 }
                 : {}),
