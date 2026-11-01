@@ -6,3 +6,11 @@ node_modules
 .env.production
 Dockerfile
 README.md
+
+# Local/tooling artifacts that must never enter the build context.
+.qoder
+.superpowers
+coverage
+playwright-report
+test-results
+
