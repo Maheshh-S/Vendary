@@ -32,6 +32,14 @@ export type CouponDiscountResult =
 
 export const INVALID_COUPON_MESSAGE = "Invalid coupon code.";
 
+/**
+ * Razorpay rejects order amounts below ₹1 (100 paise). The cart quote reports
+ * this as a coupon error so checkout disables payment before the charge path
+ * would refuse the same cart.
+ */
+export const MIN_PAYABLE_AMOUNT_PAISE = 100;
+export const MIN_PAYABLE_AMOUNT_MESSAGE = "Order total must be at least ₹1 after the discount.";
+
 /** Codes are stored uppercase; this is the only normalization applied. */
 export const normalizeCouponCode = (code: string): string => code.trim().toUpperCase();
 

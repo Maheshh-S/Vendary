@@ -13,7 +13,7 @@ const { authMock, prismaMock, txMock, razorpayMock, rateLimitMock, revalidateMoc
   vi.hoisted(() => {
     const txMock = {
       address: { create: vi.fn() },
-      order: { create: vi.fn(), updateMany: vi.fn() },
+      order: { create: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
       orderItem: { createMany: vi.fn() },
       orderEvent: { create: vi.fn() },
       coupon: { updateMany: vi.fn() },
@@ -59,7 +59,7 @@ vi.mock("@/lib/product-cache", () => ({ invalidateProductCache: vi.fn() }));
 vi.mock("@/lib/mail", () => ({ sendOrderEmail: mailMock }));
 vi.mock("next/cache", () => ({ revalidatePath: revalidateMock }));
 
-import { createCoupon, deactivateCoupon } from "@/actions/(admin)/coupons";
+import { createCoupon, deactivateCoupon, updateCoupon } from "@/actions/(admin)/coupons";
 import { getCartQuote } from "@/actions/cart/quote";
 import { createRazorpayOrder } from "@/actions/orders";
 import { cancelOrder } from "@/actions/orders/cancel";
@@ -67,6 +67,7 @@ import type { ActionErrorCode, ActionResult } from "@/lib/action-result";
 import {
   computeCouponDiscount,
   couponRejectionMessage,
+  MIN_PAYABLE_AMOUNT_MESSAGE,
   normalizeCouponCode,
   rupeesToPaise,
   type CouponLike,
@@ -172,6 +173,7 @@ beforeEach(() => {
 
   txMock.address.create.mockResolvedValue({ id: "addr_1" });
   txMock.order.create.mockResolvedValue({ id: "order_1" });
+  txMock.order.findUnique.mockResolvedValue(null);
   txMock.order.updateMany.mockResolvedValue({ count: 1 });
   txMock.orderItem.createMany.mockResolvedValue({ count: 1 });
   txMock.orderEvent.create.mockResolvedValue({ id: "event_1" });
@@ -334,6 +336,34 @@ describe("getCartQuote with a coupon", () => {
     expect(data.couponError).toBe("This coupon has expired.");
   });
 
+  it("blocks a coupon that discounts the total below the ₹1 Razorpay floor", async () => {
+    // ₹200 fixed off a ₹200 cart: the discounted total is 0p, below Razorpay's
+    // 100p minimum. The quote must report it as a blocking coupon error.
+    prismaMock.coupon.findUnique.mockResolvedValue(
+      couponRow({ type: "FIXED", value: "200.00", usageLimit: null })
+    );
+
+    const data = expectSuccess(
+      await getCartQuote([{ productId: PRODUCT.id, quantity: 1 }], "SAVE10")
+    );
+
+    expect(data.totalPaise).toBe(0);
+    expect(data.couponError).toBe(MIN_PAYABLE_AMOUNT_MESSAGE);
+    expect(MIN_PAYABLE_AMOUNT_MESSAGE).toBe("Order total must be at least ₹1 after the discount.");
+
+    // The charge path refuses the same cart with the same message.
+    expectFailure(
+      await createRazorpayOrder({
+        checkoutSession: CHECKOUT,
+        orderData: ADDRESS,
+        couponCode: "SAVE10",
+      }),
+      "VALIDATION",
+      MIN_PAYABLE_AMOUNT_MESSAGE
+    );
+    expect(razorpayMock.orders.create).not.toHaveBeenCalled();
+  });
+
   it("does not query coupons when no code was supplied", async () => {
     const data = expectSuccess(await getCartQuote([{ productId: PRODUCT.id, quantity: 1 }]));
 
@@ -456,6 +486,101 @@ describe("createRazorpayOrder coupon redemption", () => {
 
     expectFailure(second, "CONFLICT", "You have already used this coupon.");
     expect(txMock.couponRedemption.create).toHaveBeenCalledTimes(2);
+  });
+
+  it("releases an abandoned pending checkout and redeems the coupon again", async () => {
+    // Attempt 1 created the redemption; the shopper closed the Razorpay modal.
+    // Attempt 2 finds that redemption, its order is still pending and unpaid,
+    // so the transaction cancels it, releases the usage, and redeems anew.
+    txMock.couponRedemption.findUnique
+      .mockResolvedValueOnce({ orderId: "order_old" }) // reuse lookup (coupon+user)
+      .mockResolvedValueOnce({ id: "redemption_old", couponId: "coupon_1" }); // release helper
+    txMock.order.findUnique.mockResolvedValue({ status: "pending", paymentId: "" });
+
+    const result = await createRazorpayOrder({
+      checkoutSession: CHECKOUT,
+      orderData: ADDRESS,
+      couponCode: "SAVE10",
+    });
+
+    expectSuccess(result);
+    expect(txMock.order.updateMany).toHaveBeenCalledWith({
+      where: { id: "order_old", status: "pending", paymentId: "" },
+      data: { status: "cancelled" },
+    });
+    expect(txMock.orderEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        orderId: "order_old",
+        type: "order_cancelled",
+        fromStatus: "pending",
+        toStatus: "cancelled",
+        metadata: { source: "coupon_reuse" },
+      }),
+    });
+    expect(txMock.coupon.updateMany).toHaveBeenCalledWith({
+      where: { id: "coupon_1", usedCount: { gt: 0 } },
+      data: { usedCount: { decrement: 1 } },
+    });
+    expect(txMock.couponRedemption.deleteMany).toHaveBeenCalledWith({
+      where: { id: "redemption_old" },
+    });
+    // The new checkout still claims its own use and redemption.
+    expect(txMock.coupon.updateMany).toHaveBeenCalledWith({
+      where: { id: "coupon_1", usedCount: { lt: 5 } },
+      data: { usedCount: { increment: 1 } },
+    });
+    expect(txMock.couponRedemption.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ couponId: "coupon_1", orderId: "order_1" }),
+    });
+  });
+
+  it("keeps CONFLICT for a paid redemption instead of releasing it", async () => {
+    txMock.couponRedemption.findUnique.mockResolvedValueOnce({ orderId: "order_paid" });
+    txMock.order.findUnique.mockResolvedValue({ status: "confirmed", paymentId: "pay_123" });
+
+    const result = await createRazorpayOrder({
+      checkoutSession: CHECKOUT,
+      orderData: ADDRESS,
+      couponCode: "SAVE10",
+    });
+
+    expectFailure(result, "CONFLICT", "You have already used this coupon.");
+    expect(txMock.order.updateMany).not.toHaveBeenCalled();
+    expect(txMock.couponRedemption.deleteMany).not.toHaveBeenCalled();
+    expect(txMock.couponRedemption.create).not.toHaveBeenCalled();
+  });
+
+  it("keeps CONFLICT when a pending order already carries a payment proof", async () => {
+    txMock.couponRedemption.findUnique.mockResolvedValueOnce({ orderId: "order_proof" });
+    txMock.order.findUnique.mockResolvedValue({ status: "pending", paymentId: "pay_proof" });
+
+    expectFailure(
+      await createRazorpayOrder({
+        checkoutSession: CHECKOUT,
+        orderData: ADDRESS,
+        couponCode: "SAVE10",
+      }),
+      "CONFLICT",
+      "You have already used this coupon."
+    );
+    expect(txMock.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("keeps CONFLICT when the guarded cancel loses the race", async () => {
+    txMock.couponRedemption.findUnique.mockResolvedValueOnce({ orderId: "order_old" });
+    txMock.order.findUnique.mockResolvedValue({ status: "pending", paymentId: "" });
+    txMock.order.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    expectFailure(
+      await createRazorpayOrder({
+        checkoutSession: CHECKOUT,
+        orderData: ADDRESS,
+        couponCode: "SAVE10",
+      }),
+      "CONFLICT",
+      "You have already used this coupon."
+    );
+    expect(txMock.couponRedemption.deleteMany).not.toHaveBeenCalled();
   });
 
   it("keeps the plain path untouched when no coupon is sent", async () => {
@@ -603,6 +728,29 @@ describe("admin coupon validation", () => {
     prismaMock.coupon.create.mockRejectedValueOnce({ code: "P2002" });
 
     expectFailure(await createCoupon(VALID_INPUT), "CONFLICT");
+  });
+
+  it("updates (reactivates) a coupon only for ADMIN", async () => {
+    const updateInput = { ...VALID_INPUT, id: "coupon_1", isActive: true };
+
+    authMock.mockResolvedValueOnce({ user: { id: USER_ID, role: "USER" } });
+    expectFailure(await updateCoupon(updateInput), "FORBIDDEN");
+    expect(prismaMock.coupon.updateMany).not.toHaveBeenCalled();
+
+    authMock.mockResolvedValueOnce({ user: { id: "admin_1", role: "ADMIN" } });
+    expect(expectSuccess(await updateCoupon(updateInput))).toEqual({
+      id: "coupon_1",
+      code: "SAVE20",
+    });
+    expect(prismaMock.coupon.updateMany).toHaveBeenCalledWith({
+      where: { id: "coupon_1" },
+      data: expect.objectContaining({
+        code: "SAVE20",
+        startsAt: new Date("2026-01-01T00:00:00.000Z"),
+        endsAt: new Date("2026-02-01T00:00:00.000Z"),
+        isActive: true,
+      }),
+    });
   });
 
   it("deactivates a coupon and reports a missing one", async () => {

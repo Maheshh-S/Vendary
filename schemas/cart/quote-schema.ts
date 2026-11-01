@@ -55,19 +55,8 @@ export type CartQuote = OrderTotals & {
   couponError: string | null;
 };
 
-/** Optional coupon code at the quote boundary; blanks become "no coupon". */
-export const couponCodeSchema = z.preprocess(
-  (value) =>
-    value === null || value === undefined || (typeof value === "string" && value.trim() === "")
-      ? undefined
-      : value,
-  z
-    .string()
-    .trim()
-    .max(64, "Coupon code is too long")
-    .transform((value) => value.toUpperCase())
-    .optional()
-);
+// The coupon-code boundary schema is shared with the charge path:
+// `schemas/checkout/coupon-code-schema.ts`.
 
 /** True when paying now would be refused by the server charge path. */
 export const hasBlockingQuoteIssue = (quote: CartQuote | null | undefined): boolean =>

@@ -8,27 +8,32 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * and the Zod boundary run for real.
  */
 
-const { authMock, prismaMock, revalidateMock } = vi.hoisted(() => ({
+const { authMock, prismaMock, revalidateMock, rateLimitMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
   prismaMock: {
     product: { findUnique: vi.fn() },
     wishlistItem: {
       findMany: vi.fn(),
-      findUnique: vi.fn(),
       deleteMany: vi.fn(),
       create: vi.fn(),
     },
   },
   revalidateMock: vi.fn(),
+  rateLimitMock: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/auth", () => ({ auth: authMock }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: prismaMock }));
 vi.mock("next/cache", () => ({ revalidatePath: revalidateMock }));
+vi.mock("@/lib/rate-limit", () => ({
+  enforceRateLimit: rateLimitMock,
+  RATE_LIMITS: { wishlistToggle: { limit: 60, windowMs: 60_000 } },
+}));
 
-import { getWishlist, isWishlisted, toggleWishlist } from "@/actions/wishlist";
+import { getWishlist, toggleWishlist } from "@/actions/wishlist";
 import type { ActionErrorCode, ActionResult } from "@/lib/action-result";
+import { AppError } from "@/lib/errors";
 
 const USER_ID = "user_1";
 const OTHER_USER_ID = "user_2";
@@ -53,11 +58,11 @@ const expectFailure = (result: ActionResult<unknown>, code: ActionErrorCode): vo
 beforeEach(() => {
   vi.clearAllMocks();
   authMock.mockResolvedValue({ user: { id: USER_ID, role: "USER" } });
+  rateLimitMock.mockResolvedValue(undefined);
   revalidateMock.mockReturnValue(undefined);
 
   prismaMock.product.findUnique.mockResolvedValue({ id: PRODUCT_ID });
   prismaMock.wishlistItem.findMany.mockResolvedValue([]);
-  prismaMock.wishlistItem.findUnique.mockResolvedValue(null);
   prismaMock.wishlistItem.deleteMany.mockResolvedValue({ count: 0 });
   prismaMock.wishlistItem.create.mockResolvedValue({ id: "wishlist_1" });
 });
@@ -118,6 +123,23 @@ describe("toggleWishlist", () => {
     expectFailure(await toggleWishlist(""), "VALIDATION");
     expect(prismaMock.product.findUnique).not.toHaveBeenCalled();
   });
+
+  it("rate-limits the toggle and touches nothing when rejected", async () => {
+    rateLimitMock.mockRejectedValueOnce(
+      new AppError("RATE_LIMITED", "Too many attempts. Please try again in 60s.")
+    );
+
+    expectFailure(await toggleWishlist(PRODUCT_ID), "RATE_LIMITED");
+    expect(rateLimitMock).toHaveBeenCalledWith({
+      bucket: "wishlistToggle",
+      subject: USER_ID,
+      limit: 60,
+      windowMs: 60_000,
+    });
+    expect(prismaMock.product.findUnique).not.toHaveBeenCalled();
+    expect(prismaMock.wishlistItem.deleteMany).not.toHaveBeenCalled();
+    expect(prismaMock.wishlistItem.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("getWishlist", () => {
@@ -161,25 +183,5 @@ describe("getWishlist", () => {
 
     expectFailure(await getWishlist(), "UNAUTHORIZED");
     expect(prismaMock.wishlistItem.findMany).not.toHaveBeenCalled();
-  });
-});
-
-describe("isWishlisted", () => {
-  it("looks up the compound user+product key", async () => {
-    expect(expectSuccess(await isWishlisted(PRODUCT_ID))).toEqual({ wishlisted: false });
-    expect(prismaMock.wishlistItem.findUnique).toHaveBeenCalledWith({
-      where: { userId_productId: { userId: USER_ID, productId: PRODUCT_ID } },
-      select: { id: true },
-    });
-
-    prismaMock.wishlistItem.findUnique.mockResolvedValueOnce({ id: "wishlist_1" });
-    expect(expectSuccess(await isWishlisted(PRODUCT_ID))).toEqual({ wishlisted: true });
-  });
-
-  it("requires a session", async () => {
-    authMock.mockResolvedValue(null);
-
-    expectFailure(await isWishlisted(PRODUCT_ID), "UNAUTHORIZED");
-    expect(prismaMock.wishlistItem.findUnique).not.toHaveBeenCalled();
   });
 });

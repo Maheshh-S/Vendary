@@ -148,6 +148,28 @@ describe("stale pending orders", () => {
     expect(invalidateMock).toHaveBeenCalledTimes(1);
   });
 
+  it("releases the coupon redemption of a cancelled abandoned checkout", async () => {
+    prismaMock.order.findMany.mockResolvedValue([{ id: "order_old_1" }]);
+    txMock.couponRedemption.findUnique.mockResolvedValue({
+      id: "redemption_1",
+      couponId: "coupon_1",
+    });
+    txMock.coupon.updateMany.mockResolvedValue({ count: 1 });
+    txMock.couponRedemption.deleteMany.mockResolvedValue({ count: 1 });
+
+    const response = await POST(authorizedRequest());
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ cancelledOrders: 1, deletedAddresses: 0 });
+    expect(txMock.coupon.updateMany).toHaveBeenCalledWith({
+      where: { id: "coupon_1", usedCount: { gt: 0 } },
+      data: { usedCount: { decrement: 1 } },
+    });
+    expect(txMock.couponRedemption.deleteMany).toHaveBeenCalledWith({
+      where: { id: "redemption_1" },
+    });
+  });
+
   it("never touches orders with a recorded payment proof", async () => {
     await POST(authorizedRequest());
 

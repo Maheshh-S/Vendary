@@ -5,6 +5,8 @@ import {
   computeCouponDiscount,
   couponRejectionMessage,
   INVALID_COUPON_MESSAGE,
+  MIN_PAYABLE_AMOUNT_MESSAGE,
+  MIN_PAYABLE_AMOUNT_PAISE,
 } from "@/lib/coupons";
 import { prisma } from "@/lib/db/prisma";
 import { computeTotalsWithDiscount } from "@/lib/money";
@@ -12,11 +14,11 @@ import { runAction } from "@/lib/run-action";
 import { parseInput } from "@/lib/validation";
 import {
   cartQuoteSchema,
-  couponCodeSchema,
   type CartQuote,
   type CartQuoteIssue,
   type CartQuoteLine,
 } from "@/schemas/cart/quote-schema";
+import { couponCodeSchema } from "@/schemas/checkout/coupon-code-schema";
 
 /**
  * Authoritative cart quote. Given only product ids and quantities, it re-prices
@@ -109,6 +111,12 @@ export const getCartQuote = async (
     }
 
     const totals = computeTotalsWithDiscount(subtotalPaise, discountPaise);
+    // Razorpay refuses amounts below ₹1. Surface the same refusal on the quote
+    // (while the coupon is still valid) so payment is disabled before checkout
+    // rather than failing after the address form is filled in.
+    if (code && !couponError && totals.totalPaise < MIN_PAYABLE_AMOUNT_PAISE) {
+      couponError = MIN_PAYABLE_AMOUNT_MESSAGE;
+    }
 
     return {
       lines: quoteLines,

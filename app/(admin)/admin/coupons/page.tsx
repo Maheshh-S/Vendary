@@ -3,17 +3,10 @@ import { redirect } from "next/navigation";
 
 import { listCoupons } from "@/actions/(admin)/coupons";
 import { auth } from "@/auth";
-import CouponDeactivateButton from "@/modules/admin/components/coupon-deactivate-button";
 import CouponForm from "@/modules/admin/components/coupon-form";
-import { formatINR } from "@/lib/format-inr";
+import CouponRow from "@/modules/admin/components/coupon-row";
 
 export const metadata = { title: "Coupons | Vendary" };
-
-const formatDate = (iso: string): string =>
-  new Date(iso).toLocaleDateString("en-IN", {
-    dateStyle: "medium",
-    timeZone: "Asia/Kolkata",
-  });
 
 export default async function AdminCouponsPage() {
   const session = await auth();
@@ -95,44 +88,7 @@ export default async function AdminCouponsPage() {
                   </td>
                 </tr>
               ) : (
-                coupons.map((coupon) => (
-                  <tr key={coupon.id} className="border-b border-gray-100 dark:border-gray-900">
-                    <td className="py-3 pr-3 text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {coupon.code}
-                    </td>
-                    <td className="px-3 py-3 text-sm text-gray-700 dark:text-gray-300">
-                      {coupon.type === "PERCENT" ? `${coupon.value}%` : formatINR(coupon.value)}
-                      {coupon.maxDiscount !== null ? ` · max ${formatINR(coupon.maxDiscount)}` : ""}
-                    </td>
-                    <td className="px-3 py-3 text-sm text-gray-700 dark:text-gray-300">
-                      {formatDate(coupon.startsAt)} → {formatDate(coupon.endsAt)}
-                    </td>
-                    <td className="px-3 py-3 text-sm text-gray-700 dark:text-gray-300">
-                      {formatINR(coupon.minSubtotal)}
-                    </td>
-                    <td className="px-3 py-3 text-sm text-gray-700 dark:text-gray-300">
-                      {coupon.usedCount} / {coupon.usageLimit ?? "∞"}
-                    </td>
-                    <td className="px-3 py-3 text-sm">
-                      <span
-                        className={
-                          coupon.isActive
-                            ? "rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/50 dark:text-green-200"
-                            : "rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                        }
-                      >
-                        {coupon.isActive ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 text-right text-sm">
-                      {coupon.isActive ? (
-                        <CouponDeactivateButton couponId={coupon.id} />
-                      ) : (
-                        <span className="text-xs text-gray-400">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
+                coupons.map((coupon) => <CouponRow key={coupon.id} coupon={coupon} />)
               )}
             </tbody>
           </table>

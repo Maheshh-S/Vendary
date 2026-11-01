@@ -24,7 +24,7 @@ export const signOutUser = async () => {
   }
 };
 
-export const signInProvider = async (provider: "google") => {
+export const signInProvider = async (provider: "google", callbackUrl?: string | null) => {
   if (!process.env.AUTH_GOOGLE_ID || !process.env.AUTH_GOOGLE_SECRET) {
     return {
       error: "Google sign-in is not configured.",
@@ -32,7 +32,9 @@ export const signInProvider = async (provider: "google") => {
     };
   }
   try {
-    await signIn(provider, { redirectTo: DEFAULT_LOGIN_REDIRECT });
+    // Same internal-only gate as credentials login: a guest who chose Google
+    // returns to where they were (e.g. the product page), never off-site.
+    await signIn(provider, { redirectTo: safeInternalPath(callbackUrl) ?? DEFAULT_LOGIN_REDIRECT });
   } catch (error) {
     if (error instanceof AuthError) {
       switch (error.type) {

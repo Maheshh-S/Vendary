@@ -7,15 +7,17 @@ import { signInProvider } from "@/actions/auth";
 
 type Props = {
   disabled?: boolean;
+  /** Internal path to return to after OAuth (validated server-side). */
+  callbackUrl?: string;
 };
 
-export default function GoogleSignInButton({ disabled }: Props) {
+export default function GoogleSignInButton({ disabled, callbackUrl }: Props) {
   const [isPending, setIsPending] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setIsPending(true);
     try {
-      const result = await signInProvider("google");
+      const result = await signInProvider("google", callbackUrl);
       if (result && "error" in result) {
         toast.error(result.error);
       }

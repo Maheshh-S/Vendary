@@ -23,6 +23,8 @@ const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 
   .toUpperCase()
   .replace(/[^A-Z0-9]/g, "");
 const COUPON_CODE = `E2E${suffix}`;
+/** 100% off drives the total to ₹0, below Razorpay's ₹1 minimum. */
+const FREE_COUPON_CODE = `FREE${suffix}`;
 
 /** Rupee display text (possibly an en dash plus ₹) to integer paise. */
 const paiseFrom = (text: string): number => Math.round(Number(text.replace(/[^\d.]/g, "")) * 100);
@@ -41,23 +43,35 @@ test.describe("coupons at checkout", () => {
 
   test.beforeAll(async () => {
     if (!canSeed) return;
-    await prisma.coupon.create({
-      data: {
-        code: COUPON_CODE,
-        type: "PERCENT",
-        value: "10.00",
-        minSubtotal: "0.00",
-        startsAt: new Date(Date.now() - 60 * 60 * 1000),
-        endsAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-        usageLimit: null,
-        isActive: true,
-      },
+    await prisma.coupon.createMany({
+      data: [
+        {
+          code: COUPON_CODE,
+          type: "PERCENT",
+          value: "10.00",
+          minSubtotal: "0.00",
+          startsAt: new Date(Date.now() - 60 * 60 * 1000),
+          endsAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          usageLimit: null,
+          isActive: true,
+        },
+        {
+          code: FREE_COUPON_CODE,
+          type: "PERCENT",
+          value: "100.00",
+          minSubtotal: "0.00",
+          startsAt: new Date(Date.now() - 60 * 60 * 1000),
+          endsAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          usageLimit: null,
+          isActive: true,
+        },
+      ],
     });
   });
 
   test.afterAll(async () => {
     if (canSeed) {
-      await prisma.coupon.deleteMany({ where: { code: COUPON_CODE } });
+      await prisma.coupon.deleteMany({ where: { code: { in: [COUPON_CODE, FREE_COUPON_CODE] } } });
     }
     await prisma.$disconnect();
   });
@@ -81,6 +95,21 @@ test.describe("coupons at checkout", () => {
     expect(discountPaise).toBe(Math.round(subtotalPaise * 0.1));
     const taxablePaise = subtotalPaise - discountPaise;
     expect(totalPaise).toBe(taxablePaise + Math.round(taxablePaise * 0.08));
+  });
+
+  test("a coupon that drops the total below ₹1 blocks payment with the floor message", async ({
+    page,
+  }) => {
+    await login(page);
+    await openCheckout(page);
+
+    await page.getByLabel("Coupon code").fill(FREE_COUPON_CODE);
+    await page.getByRole("button", { name: "Apply" }).click();
+
+    await expect(
+      page.getByText("Order total must be at least ₹1 after the discount.", { exact: true })
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Proceed to Payment" })).toBeDisabled();
   });
 
   test("an invalid coupon is surfaced and blocks payment until removed", async ({ page }) => {

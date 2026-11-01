@@ -6,10 +6,12 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth-guards";
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
+import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { runAction } from "@/lib/run-action";
 import { parseInput } from "@/lib/validation";
 
 const WISHLIST_PATH = "/wishlist";
+const WISHLIST_TOGGLE_BUCKET = "wishlistToggle";
 
 // NOTE: kept module-private (not exported) — "use server" modules may only
 // export async functions.
@@ -45,6 +47,13 @@ export type WishlistItemView = {
 export const toggleWishlist = async (productId: string) =>
   runAction("wishlist.toggle", async () => {
     const session = await requireUser();
+
+    await enforceRateLimit({
+      bucket: WISHLIST_TOGGLE_BUCKET,
+      subject: session.user.id,
+      ...RATE_LIMITS.wishlistToggle,
+    });
+
     const input = parseInput(WISHLIST_INPUT, { productId });
 
     const product = await prisma.product.findUnique({
@@ -112,19 +121,4 @@ export const getWishlist = async () =>
       stockQty: row.product.stockQty,
       addedAt: row.createdAt.toISOString(),
     }));
-  });
-
-/** Current state for a product, scoped to the caller. */
-export const isWishlisted = async (productId: string) =>
-  runAction("wishlist.isWishlisted", async () => {
-    const session = await requireUser();
-    const input = parseInput(WISHLIST_INPUT, { productId });
-
-    const row = await prisma.wishlistItem.findUnique({
-      where: {
-        userId_productId: { userId: session.user.id, productId: input.productId },
-      },
-      select: { id: true },
-    });
-    return { wishlisted: row !== null };
   });

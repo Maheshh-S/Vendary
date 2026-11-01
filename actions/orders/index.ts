@@ -11,6 +11,8 @@ import {
   computeCouponDiscount,
   couponRejectionMessage,
   INVALID_COUPON_MESSAGE,
+  MIN_PAYABLE_AMOUNT_MESSAGE,
+  MIN_PAYABLE_AMOUNT_PAISE,
 } from "@/lib/coupons";
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
@@ -18,6 +20,7 @@ import { logger } from "@/lib/logger";
 import { sendOrderEmail } from "@/lib/mail";
 import { computeTotalsWithDiscount } from "@/lib/money";
 import { confirmOrder } from "@/lib/orders/confirm-order";
+import { releaseCouponForOrder } from "@/lib/orders/coupon-redemption";
 import { writeOrderEvent } from "@/lib/orders/events";
 import { refundLateCapture } from "@/lib/orders/late-capture";
 import { refundAndClose, restoreOrderStock, type RefundOutcome } from "@/lib/orders/refund";
@@ -37,27 +40,12 @@ import {
   placeOrderSchema,
   type PlaceOrderSchema,
 } from "@/schemas/checkout/place-order-schema";
+import { couponCodeSchema } from "@/schemas/checkout/coupon-code-schema";
 import type { CheckoutLineItems } from "@/modules/products/types/checkout";
 
-// Razorpay rejects order amounts below 100 paise (₹1).
-const MIN_RAZORPAY_AMOUNT_PAISE = 100;
 const CREATE_ORDER_BUCKET = "createRazorpayOrder";
 const COUPON_CONFLICT_MESSAGE = "This coupon is no longer available.";
 const COUPON_ALREADY_USED_MESSAGE = "You have already used this coupon.";
-
-/** Optional coupon at the checkout-init boundary; blank means "no coupon". */
-const couponCodeInputSchema = z.preprocess(
-  (value) =>
-    value === null || value === undefined || (typeof value === "string" && value.trim() === "")
-      ? undefined
-      : value,
-  z
-    .string()
-    .trim()
-    .max(64, "Coupon code is too long")
-    .transform((value) => value.toUpperCase())
-    .optional()
-);
 
 /** Prisma unique-constraint violation (one redemption per coupon+user). */
 const isUniqueViolation = (error: unknown): boolean =>
@@ -243,7 +231,7 @@ export const createRazorpayOrder = async ({
 
     const data = parseInput(placeOrderSchema, orderData);
     const cart = parseInput(checkoutSessionSchema, checkoutSession);
-    const code = parseInput(couponCodeInputSchema, couponCode ?? undefined);
+    const code = parseInput(couponCodeSchema, couponCode ?? undefined);
 
     // Price from the database, never from the client session.
     const { lines, subtotalPaise } = await verifyAndPriceLines(cart);
@@ -264,8 +252,8 @@ export const createRazorpayOrder = async ({
 
     // GST is charged on the discounted subtotal, never on the listed price.
     const totals = computeTotalsWithDiscount(subtotalPaise, discountPaise);
-    if (totals.totalPaise < MIN_RAZORPAY_AMOUNT_PAISE) {
-      throw new AppError("VALIDATION", "Order total must be at least ₹1.");
+    if (totals.totalPaise < MIN_PAYABLE_AMOUNT_PAISE) {
+      throw new AppError("VALIDATION", MIN_PAYABLE_AMOUNT_MESSAGE);
     }
 
     const razorpay = getRazorpayClient();
@@ -329,6 +317,50 @@ export const createRazorpayOrder = async ({
         });
 
         if (coupon) {
+          // Initializing a checkout already claimed one redemption for this
+          // (coupon, user). If that previous checkout was abandoned — the
+          // Razorpay modal was closed and nothing was captured — release it
+          // exactly like a customer cancel/cleanup would, so retrying is not
+          // a permanent lockout. A paid/confirmed order, or one with a
+          // recorded payment proof, keeps the one-per-customer redemption.
+          const previous = await tx.couponRedemption.findUnique({
+            where: { couponId_userId: { couponId: coupon.id, userId: session.user.id } },
+            select: { orderId: true },
+          });
+          if (previous) {
+            const previousOrder = await tx.order.findUnique({
+              where: { id: previous.orderId },
+              select: { status: true, paymentId: true },
+            });
+            if (
+              !previousOrder ||
+              previousOrder.status !== "pending" ||
+              previousOrder.paymentId !== ""
+            ) {
+              throw new AppError("CONFLICT", COUPON_ALREADY_USED_MESSAGE);
+            }
+
+            // Guarded on the same condition just read: if a capture or cancel
+            // moved the order in between, this attempt must not release it.
+            const released = await tx.order.updateMany({
+              where: { id: previous.orderId, status: "pending", paymentId: "" },
+              data: { status: "cancelled" },
+            });
+            if (released.count === 0) {
+              throw new AppError("CONFLICT", COUPON_ALREADY_USED_MESSAGE);
+            }
+
+            await writeOrderEvent(tx, {
+              orderId: previous.orderId,
+              type: "order_cancelled",
+              fromStatus: "pending",
+              toStatus: "cancelled",
+              actorId: session.user.id,
+              metadata: { source: "coupon_reuse" },
+            });
+            await releaseCouponForOrder(tx, previous.orderId);
+          }
+
           // Compare-and-increment: only a checkout that sees a remaining use
           // may redeem. A zero count means another customer won the last one.
           const claimed = await tx.coupon.updateMany({

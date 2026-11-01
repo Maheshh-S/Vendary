@@ -42,6 +42,8 @@ export const RATE_LIMITS = {
   search: { limit: 60, windowMs: 60_000 },
   addReview: { limit: 5, windowMs: 60 * 60_000 },
   adminMutation: { limit: 60, windowMs: 60_000 },
+  /** Heart toggle: 60 adds/removes per user per minute. */
+  wishlistToggle: { limit: 60, windowMs: 60_000 },
   /** Three reset-mail requests per address per hour (fixed window). */
   passwordResetEmail: { limit: 3, windowMs: 60 * 60_000 },
   /** A single IP can try ten different addresses per hour. */
