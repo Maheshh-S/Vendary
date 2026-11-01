@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth-guards";
 import { prisma } from "@/lib/db/prisma";
 import { formatINR } from "@/lib/format-inr";
 import { isAllowedImageUrl } from "@/lib/images";
+import { ORDER_EMAIL_EVENT_TYPE } from "@/lib/orders/events";
 import { refundReasonLabel } from "@/lib/orders/refund-labels";
 import CancelOrderButton from "@/modules/orders/components/cancel-order-button";
 import OrderTimeline from "@/modules/orders/components/order-timeline";
@@ -60,7 +61,12 @@ export default async function OrderDetailPage({ params }: Props) {
       address: true,
       // `id` breaks same-millisecond ties: one finalize transaction can write
       // several events at the same instant, and the timeline must be stable.
-      events: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+      // Email delivery markers are internal idempotency keys, not customer
+      // events, so they are excluded from the timeline.
+      events: {
+        where: { type: { not: ORDER_EMAIL_EVENT_TYPE } },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      },
       refunds: { orderBy: { createdAt: "desc" } },
     },
   });

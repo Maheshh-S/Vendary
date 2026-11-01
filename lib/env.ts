@@ -27,6 +27,10 @@ export const serverEnvSchema = z
     RAZORPAY_KEY_SECRET: z.string().min(1),
     RAZORPAY_WEBHOOK_SECRET: z.string().min(1),
     RESEND_API_KEY: optionalString,
+    /** Sender for transactional order email; required to enable sending. */
+    EMAIL_FROM: optionalString,
+    /** Optional store inbox that receives a copy of every order email. */
+    ORDER_NOTIFICATION_EMAIL: optionalString,
     REDIS_URL: z.string().url().optional().or(z.literal("")),
     NEXT_PUBLIC_SITE_URL: z.string().url().default("http://localhost:3000"),
   })

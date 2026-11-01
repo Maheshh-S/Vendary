@@ -9,6 +9,7 @@ import { z } from "zod";
 import { requireAdmin, requireUser } from "@/lib/auth-guards";
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
+import { sendOrderEmail } from "@/lib/mail";
 import { computeOrderTotals } from "@/lib/money";
 import { confirmOrder } from "@/lib/orders/confirm-order";
 import { writeOrderEvent } from "@/lib/orders/events";
@@ -32,6 +33,16 @@ import type { CheckoutLineItems } from "@/modules/products/types/checkout";
 // Razorpay rejects order amounts below 100 paise (₹1).
 const MIN_RAZORPAY_AMOUNT_PAISE = 100;
 const CREATE_ORDER_BUCKET = "createRazorpayOrder";
+
+/** Status transitions that trigger a customer email (after commit). */
+const STATUS_EMAIL_KINDS: Partial<
+  Record<OrderStatus, "shipped" | "delivered" | "cancelled" | "refunded">
+> = {
+  shipped: "shipped",
+  delivered: "delivered",
+  cancelled: "cancelled",
+  refunded: "refunded",
+};
 
 const toRupees = (paise: number): string => (paise / 100).toFixed(2);
 
@@ -439,6 +450,10 @@ export const PlaceOrder = async (input: ConfirmPaymentSchema) =>
     revalidatePath("/my-orders");
     revalidatePath("/admin");
 
+    // Post-commit only: the email helper writes its idempotency event and
+    // never throws, so a mail outage cannot fail a paid order.
+    await sendOrderEmail(order.id, "confirmation");
+
     return { orderId: order.id };
   });
 
@@ -560,6 +575,13 @@ export const updateOrderStatus = async (orderId: string, status: string) =>
 
     revalidatePath("/admin");
     revalidatePath("/my-orders");
+
+    // Post-commit notification. The helper's event marker makes a duplicate
+    // send impossible when the refund action also notified the customer.
+    const emailKind = STATUS_EMAIL_KINDS[outcome.to];
+    if (emailKind) {
+      await sendOrderEmail(outcome.orderId, emailKind);
+    }
 
     return { orderId: outcome.orderId, from: outcome.from, to: outcome.to };
   });

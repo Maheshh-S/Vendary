@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth-guards";
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
+import { sendOrderEmail } from "@/lib/mail";
 import { writeOrderEvent } from "@/lib/orders/events";
 import { startOrderRefund } from "@/lib/orders/refund";
 import { invalidateProductCache } from "@/lib/product-cache";
@@ -100,6 +101,7 @@ export const cancelOrder = async (orderId: string) =>
       }
 
       revalidateOrderViews(order.id);
+      await sendOrderEmail(order.id, "cancelled");
       return { orderId: order.id, status: "cancelled" as const };
     }
 
@@ -122,6 +124,7 @@ export const cancelOrder = async (orderId: string) =>
       await invalidateProductCache(productId);
     }
     revalidateOrderViews(order.id);
+    await sendOrderEmail(order.id, "cancelled");
 
     return {
       orderId: order.id,

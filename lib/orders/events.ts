@@ -16,9 +16,16 @@ export const ORDER_EVENT_TYPES = [
   "refund_requested",
   "refund_processed",
   "refund_failed",
+  "order_email_sent",
 ] as const;
 
 export type OrderEventType = (typeof ORDER_EVENT_TYPES)[number];
+
+/**
+ * Idempotency marker for transactional order email. A single type keeps the
+ * allowlist small; `metadata.kind` distinguishes confirmation/shipped/etc.
+ */
+export const ORDER_EMAIL_EVENT_TYPE = "order_email_sent";
 
 /** Boundary validator for event kinds that ever arrive as untrusted input. */
 export const orderEventTypeSchema = z.enum(ORDER_EVENT_TYPES);

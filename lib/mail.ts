@@ -1,41 +1,252 @@
-import { BASE_URL, PROJECT_NAME } from '@/metadata';
-import { onboardingmail } from '@/templates/mail/onboarding-mail';
-import { Resend } from 'resend';
+import "server-only";
 
-// const resend = new Resend(process.env.RESEND_API_KEY);
-const resend = new Resend(process.env.RESEND_API_KEY!);
+import type { Prisma } from "@prisma/client";
+import { Resend } from "resend";
 
-export const sendVerificationEmail = async (
-    email: string,
-    token: string
-) => {
-    const confirmLink = `${process.env.BASE_URL || BASE_URL}/new-verification?token=${token}`
+import { prisma } from "@/lib/db/prisma";
+import { ORDER_EMAIL_EVENT_TYPE } from "@/lib/orders/events";
+import { BASE_URL, PROJECT_NAME } from "@/metadata";
+import { orderConfirmationEmail } from "@/templates/mail/order-confirmation";
+import { orderStatusEmail } from "@/templates/mail/order-status";
+import { onboardingmail } from "@/templates/mail/onboarding-mail";
+import type { OrderEmailKind, OrderEmailView } from "@/templates/mail/types";
 
-    await resend.emails.send({
-        from: 'Acme <onboarding@resend.dev>',
-        to: [email],
-        subject: `Confirm Your Email for ${PROJECT_NAME}`,
-        html: onboardingmail(confirmLink)
-    });
-}
+/**
+ * Mail transport. The Resend client is created lazily because
+ * `new Resend(undefined)` throws in environments without a key (unit tests,
+ * builds with placeholder env); callers skip when it returns null.
+ */
+const getResendClient = (): Resend | null => {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  return apiKey ? new Resend(apiKey) : null;
+};
 
-export const sendPasswordResetEmail = async (
-    email: string,
-    token: string
-) => {
-    const confirmLink = `${BASE_URL}/password/reset?token=${token}`
+/**
+ * Sender address. `EMAIL_FROM` is required in production; in local development
+ * Resend's shared test sender is used so the flow is exercisable without a
+ * verified domain. E2E runs `next start` (NODE_ENV=production) without
+ * `EMAIL_FROM`, so sends are skipped there by design.
+ */
+const DEVELOPMENT_SENDER = "onboarding@resend.dev";
 
-    await resend.emails.send({
-        from: 'Acme <onboarding@resend.dev>',
-        to: [email],
-        subject: `Reset Password for ${PROJECT_NAME}`,
-        html: `
+type MailConfig = { from: string; resend: Resend };
+
+export const getOrderMailConfig = (): MailConfig | null => {
+  const configuredFrom = process.env.EMAIL_FROM?.trim();
+  const from =
+    configuredFrom || (process.env.NODE_ENV === "development" ? DEVELOPMENT_SENDER : "");
+  const resend = getResendClient();
+  return from && resend ? { from, resend } : null;
+};
+
+const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+export const sendVerificationEmail = async (email: string, token: string): Promise<void> => {
+  const resend = getResendClient();
+  if (!resend) return;
+
+  const confirmLink = `${process.env.BASE_URL || BASE_URL}/new-verification?token=${token}`;
+
+  await resend.emails.send({
+    from: "Acme <onboarding@resend.dev>",
+    to: [email],
+    subject: `Confirm Your Email for ${PROJECT_NAME}`,
+    html: onboardingmail(confirmLink),
+  });
+};
+
+export const sendPasswordResetEmail = async (email: string, token: string): Promise<void> => {
+  const resend = getResendClient();
+  if (!resend) return;
+
+  const confirmLink = `${BASE_URL}/password/reset?token=${token}`;
+
+  await resend.emails.send({
+    from: "Acme <onboarding@resend.dev>",
+    to: [email],
+    subject: `Reset Password for ${PROJECT_NAME}`,
+    html: `
             <p>Thank you for signing up for your account at, ${PROJECT_NAME}!</p>
             <p>Please confirm your email address by clicking the link below:</p>
             <p><a href="${confirmLink}">Confirm Email</a></p>
             <p>If you did not sign up for ${PROJECT_NAME}, please ignore this email.</p>
             <p>Best regards,</p>
             <p>The ${PROJECT_NAME} Team</p>
-        `
+        `,
+  });
+};
+
+/** One idempotency marker per (order, email kind). */
+export type OrderEmailResult =
+  | { status: "sent" }
+  | {
+      status: "skipped";
+      reason: "not_configured" | "already_sent" | "no_recipients" | "order_not_found";
+    }
+  | { status: "failed"; error: string };
+
+type OrderWithEmailData = Prisma.OrderGetPayload<{
+  include: {
+    items: true;
+    address: true;
+    user: { select: { email: true } };
+  };
+}>;
+
+const emailKindFromMetadata = (metadata: Prisma.JsonValue | null): string | null => {
+  if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) {
+    return null;
+  }
+  const kind = (metadata as Record<string, unknown>).kind;
+  return typeof kind === "string" ? kind : null;
+};
+
+const toPaise = (rupees: Prisma.Decimal | number | string): number =>
+  Math.round(Number(rupees) * 100);
+
+const toView = (order: OrderWithEmailData): OrderEmailView => {
+  const items = order.items.map((item) => ({
+    name: item.productName,
+    quantity: item.quantity,
+    unitPaise: toPaise(item.price),
+  }));
+  const subtotalPaise = items.reduce(
+    (total, item) => total + item.unitPaise * item.quantity,
+    0
+  );
+
+  return {
+    orderId: order.id,
+    status: order.status,
+    placedAt: order.createdAt.toLocaleString("en-IN", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }),
+    items,
+    subtotalPaise,
+    taxPaise: toPaise(order.taxAmount),
+    totalPaise: toPaise(order.total),
+    address: order.address
+      ? {
+          name: [order.address.firstName, order.address.lastName].filter(Boolean).join(" "),
+          address: order.address.address,
+          area: order.address.area,
+          landmark: order.address.landmark,
+          state: order.address.state,
+          postalCode: order.address.postalCode,
+          country: order.address.country,
+          phone: order.address.phone,
+        }
+      : null,
+  };
+};
+
+const subjectFor = (kind: OrderEmailKind, orderId: string): string => {
+  const shortId = orderId.slice(0, 8);
+  switch (kind) {
+    case "confirmation":
+      return `Order confirmed — #${shortId} | ${PROJECT_NAME}`;
+    case "shipped":
+      return `Your order has shipped — #${shortId} | ${PROJECT_NAME}`;
+    case "delivered":
+      return `Your order was delivered — #${shortId} | ${PROJECT_NAME}`;
+    case "cancelled":
+      return `Your order was cancelled — #${shortId} | ${PROJECT_NAME}`;
+    case "refunded":
+      return `Your refund was processed — #${shortId} | ${PROJECT_NAME}`;
+  }
+};
+
+const renderOrderEmail = (kind: OrderEmailKind, view: OrderEmailView): string =>
+  kind === "confirmation" ? orderConfirmationEmail(view) : orderStatusEmail(kind, view);
+
+const recipientsFor = (order: OrderWithEmailData): string[] => {
+  const candidates = [
+    order.user?.email?.trim(),
+    process.env.ORDER_NOTIFICATION_EMAIL?.trim(),
+  ];
+  return [...new Set(candidates.filter((email): email is string => Boolean(email)))];
+};
+
+/**
+ * Sends one transactional order email (confirmation or a status change).
+ *
+ * Idempotency: an `order_email_sent` OrderEvent carrying `{kind}` is written
+ * *before* the Resend call and a second call for the same kind is skipped. A
+ * send failure therefore leaves the marker behind — orders are never retried
+ * automatically, and support can re-send from the dashboard if needed.
+ *
+ * Never throws: a missing mail config, missing recipients, Resend outage or
+ * DB hiccup is logged (or silently skipped) so the order flow always survives.
+ */
+export const sendOrderEmail = async (
+  orderId: string,
+  kind: OrderEmailKind
+): Promise<OrderEmailResult> => {
+  const config = getOrderMailConfig();
+  if (!config) {
+    return { status: "skipped", reason: "not_configured" };
+  }
+
+  try {
+    const existing = await prisma.orderEvent.findMany({
+      where: { orderId, type: ORDER_EMAIL_EVENT_TYPE },
+      select: { metadata: true },
     });
-}
+    if (existing.some((event) => emailKindFromMetadata(event.metadata) === kind)) {
+      return { status: "skipped", reason: "already_sent" };
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: true,
+        address: true,
+        user: { select: { email: true } },
+      },
+    });
+    if (!order) {
+      return { status: "skipped", reason: "order_not_found" };
+    }
+
+    const recipients = recipientsFor(order);
+    if (recipients.length === 0) {
+      return { status: "skipped", reason: "no_recipients" };
+    }
+
+    // Written before the send, so a retry of the same transition cannot send a
+    // duplicate; the metadata distinguishes the five kinds on one order.
+    await prisma.orderEvent.create({
+      data: {
+        orderId,
+        type: ORDER_EMAIL_EVENT_TYPE,
+        toStatus: order.status,
+        metadata: { kind },
+      },
+    });
+
+    const { error } = await config.resend.emails.send({
+      from: config.from,
+      to: recipients,
+      subject: subjectFor(kind, order.id),
+      html: renderOrderEmail(kind, toView(order)),
+    });
+    if (error) {
+      throw new Error(error.message ?? error.name ?? "Resend rejected the email");
+    }
+
+    return { status: "sent" };
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        level: "warn",
+        event: "order_email_failed",
+        orderId,
+        kind,
+        error: errorMessage(error),
+      })
+    );
+    return { status: "failed", error: errorMessage(error) };
+  }
+};

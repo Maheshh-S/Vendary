@@ -5,6 +5,7 @@ import type { OrderStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
+import { sendOrderEmail } from "@/lib/mail";
 import { confirmOrder } from "@/lib/orders/confirm-order";
 import { writeOrderEvent } from "@/lib/orders/events";
 import { refundLateCapture } from "@/lib/orders/late-capture";
@@ -216,6 +217,9 @@ const handlePaymentCaptured = async (payment: PaymentWebhookEntity): Promise<Nex
       order.items.flatMap((item) => (item.productId ? [item.productId] : []))
     );
     revalidateOrderViews();
+    // Post-commit, idempotent: a confirm already emailed by the client
+    // callback is skipped via its `order_email_sent` marker.
+    await sendOrderEmail(order.id, "confirmation");
     return acknowledgment();
   } catch (error) {
     if (error instanceof AppError && error.code === "OUT_OF_STOCK") {
@@ -387,6 +391,9 @@ const handleRefundProcessed = async (refund: RefundWebhookEntity): Promise<NextR
       // pages. Replays, partials and racers never reach this branch.
       await invalidateProductCaches(transition.productIds);
       revalidateOrderViews();
+      // Refunds issued outside our actions (e.g. the Razorpay dashboard) still
+      // notify the customer; our own flows already wrote the marker.
+      await sendOrderEmail(transition.orderId, "refunded");
       return acknowledgment();
   }
 };

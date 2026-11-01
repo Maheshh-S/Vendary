@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth-guards";
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors";
+import { sendOrderEmail } from "@/lib/mail";
 import { startOrderRefund } from "@/lib/orders/refund";
 import { invalidateProductCache } from "@/lib/product-cache";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
@@ -77,6 +78,9 @@ export const refundOrder = async (orderId: string) =>
     revalidatePath("/admin");
     revalidatePath("/my-orders");
     revalidatePath(`/my-orders/${order.id}`);
+
+    // Post-commit, idempotent: the webhook path may have sent this already.
+    await sendOrderEmail(order.id, "refunded");
 
     return {
       orderId: order.id,
