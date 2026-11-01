@@ -94,4 +94,16 @@ test.describe("catalog", () => {
     // The first price cell is a real ₹ amount (guards the parser above).
     expect(await priceFrom(grid.locator("p").first())).toBeGreaterThan(0);
   });
+
+  test("product detail falls back to in-stock recommendations", async ({ page }) => {
+    await page.goto("/products");
+    await page.locator('a[href^="/products/"]').first().click();
+    await expect(page).toHaveURL(/\/products\//);
+
+    // A seeded catalog without co-purchases still renders the featured/in-stock
+    // fallback (Task 4.5), capped at four cards.
+    const strip = page.getByTestId("also-bought");
+    await expect(strip.getByRole("heading", { name: "Customers also bought" })).toBeVisible();
+    await expect(strip.locator('a[href^="/products/"]')).toHaveCount(4);
+  });
 });

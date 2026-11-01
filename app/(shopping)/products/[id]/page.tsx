@@ -2,7 +2,9 @@ import { getBasicProductDetails } from "@/actions/products/product/get-basic-det
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db/prisma";
 import { serializePrismaObject } from "@/lib/db/serializer";
+import { getAlsoBought } from "@/lib/recommendations";
 import { getRatingSummary } from "@/lib/reviews/summary";
+import AlsoBought from "@/modules/products/components/also-bought";
 import Reviews from "@/modules/products/components/reviews/reviews";
 import ProductDescription from "@/modules/products/sections/product-description";
 import { notFound } from "next/navigation";
@@ -51,7 +53,7 @@ const ProductPage = async ({ params }: Props) => {
 
   // The average and star distribution cover every review; `product.reviews`
   // is only the newest ten rendered in the list.
-  const [ratingSummary, myReview, wishlistedRow] = await Promise.all([
+  const [ratingSummary, myReview, wishlistedRow, alsoBought] = await Promise.all([
     getRatingSummary(product.id),
     session?.user?.id
       ? prisma.review.findUnique({
@@ -83,6 +85,9 @@ const ProductPage = async ({ params }: Props) => {
           select: { id: true },
         })
       : Promise.resolve(null),
+    // Co-purchase recommendations degrade to featured/in-stock products and
+    // never throw, so they cannot block the product page.
+    getAlsoBought(product.id),
   ]);
 
   const serializedProduct = serializePrismaObject(product);
@@ -106,6 +111,7 @@ const ProductPage = async ({ params }: Props) => {
         myReview={serializePrismaObject(myReview)}
         ratingSummary={ratingSummary}
       />
+      <AlsoBought products={alsoBought} />
     </div>
   );
 };
