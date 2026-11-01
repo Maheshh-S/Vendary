@@ -25,35 +25,35 @@ Status markers: `[ ]` planned · `[~]` in progress · `[x]` shipped.
 | # | Feature | Priority | Effort | ★ | Outcome |
 |---|---------|----------|--------|---|---------|
 | [x] 8 | GitHub Actions CI | P1 | S | ★★★ | Lint + typecheck + build + tests on every push/PR; badge in README. |
-| [~] 9 | Test suite | P1 | M–L | ★★★ | Vitest units shipped for the money paths (27 tests: totals, schemas, signature verification, webhook handler) and wired into CI; Playwright e2e still pending. |
-| [~] 10 | Env validation | P1 | S | ★★ | Zod env schema, fail-fast at boot; `.env.example` matches reality. *Partial: fail-fast checks live in the money paths (Razorpay client, webhook) and `.env.example` is complete; a dedicated zod env layer is still pending.* |
+| [x] 9 | Test suite | P1 | M–L | ★★★ | Vitest units for the money paths, coupons, refunds, analytics, search and webhook, plus Playwright e2e for the browse → cart → checkout → order loop; both wired into CI. |
+| [x] 10 | Env validation | P1 | S | ★★ | Zod env schema with a production fail-fast in `instrumentation.ts` (names only, never values), and a complete `.env.example`. |
 | [x] 11 | Hardened Docker + compose | P2 | M | ★★ | Standalone output, non-root user, pruned deps, HEALTHCHECK; docker-compose for Postgres + Redis local dev. |
-| [~] 12 | Security posture | P1 | M | ★★★ | *Partial: security headers shipped (X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy, HSTS); rate limiting and CSP still pending.* |
-| 13 | Observability | P2 | M | ★★ | Sentry, structured logging, deep `/api/status` (DB + Redis checks); resolve dead `Analytics` model. |
+| [x] 12 | Security posture | P1 | M | ★★★ | Security headers, enforcing CSP with a rate-limited report collector, and Redis-backed rate limiting with a memory fallback. CSP nonce/strict-dynamic remains deferred. |
+| [x] 13 | Observability | P2 | M | ★★ | Structured redacted logger, optional Sentry initialization, deep `/api/status` (DB + Redis), dead `Analytics` model dropped. |
 | [x] 14 | Seed + db scripts | P1 | S | ★★ | `prisma/seed.ts` with a realistic artisan catalog; `db:seed` / `db:migrate` scripts. Clone → run → demo. |
-| 15 | Repo polish | P2 | S | ★ | README overhaul (architecture diagram, setup, screenshots, badges), Prettier + husky pre-commit, `engines`/`.nvmrc`, `.mailmap`. |
+| [~] 15 | Repo polish | P2 | S | ★ | README overhaul (architecture diagram, setup, tests, deployment runbooks), Prettier + husky pre-commit shipped; `engines`/`.nvmrc`/`.mailmap` still pending. |
 
 ## Phase 3 — Product depth (P1; what users feel)
 
 | # | Feature | Priority | Effort | ★ | Outcome |
 |---|---------|----------|--------|---|---------|
-| 16 | Password reset | P1 | S | ★ | Finish the half-built flow (token model + email helper exist; add page, action, forgot-password link). |
-| 17 | Profile & address book | P1 | M | ★★ | Account page (name, avatar, password change) + saved addresses selectable at checkout. |
-| 18 | Order lifecycle emails | P1 | S | ★★ | Branded order confirmation + status-update emails via Resend (needs verified sender domain). |
-| 19 | Order detail + cancel/refund | P1 | M | ★★ | `/my-orders/[id]` status timeline; customer cancel while pending/confirmed triggers Razorpay refund API. |
-| 20 | Catalog UX | P1 | M | ★★ | Pagination, sorting, price filter, category landing pages; catalog beyond 24 items becomes reachable. |
-| 21 | Real coupons | P2 | M | ★★ | `Coupon` model + admin CRUD + checkout validation (replaces the always-failing promo input). |
-| 22 | Wishlist | P2 | S–M | ★★ | Model + heart toggle + `/wishlist` page. |
+| [x] 16 | Password reset | P1 | S | ★ | Token model + email helper, forgot-password page/action, single-use rotation, rate limiting. |
+| [x] 17 | Profile & address book | P1 | M | ★★ | Account page (name, avatar, password change) + saved addresses selectable at checkout, with a default-address guard. |
+| [x] 18 | Order lifecycle emails | P1 | S | ★★ | Branded order confirmation/status/refund emails via Resend; skipped when Resend is unconfigured, marker-based idempotency. |
+| [x] 19 | Order detail + cancel/refund | P1 | M | ★★ | `/my-orders/[id]` status timeline; customer cancel while pending/confirmed triggers a Razorpay refund; `Refund` ledger + events. |
+| [x] 20 | Catalog UX | P1 | M | ★★ | Pagination, sorting, price filter, category landing pages and the indexes that keep them bounded. |
+| [x] 21 | Real coupons | P2 | M | ★★ | `Coupon` model + admin CRUD + checkout validation; transactional redemptions released on abandoned/cancelled orders. |
+| [x] 22 | Wishlist | P2 | S–M | ★★ | User-scoped model + heart toggle + `/wishlist` page with add-to-cart. |
 
 ## Phase 4 — Differentiators (P2; the "wow" tier)
 
 | # | Feature | Priority | Effort | ★ | Outcome |
 |---|---------|----------|--------|---|---------|
-| 23 | Deploy live | P1 | M | ★★★ | Vercel + Neon Postgres + Upstash Redis + verified Resend domain → public demo URL with preview deploys. The single strongest recruiter artifact. |
-| 24 | Admin analytics | P2 | M | ★★ | Revenue / orders / top-products charts (Recharts) over real data. |
-| 25 | Invoice PDF | P2 | M | ★★ | Downloadable invoice per order from the order detail page. |
-| 26 | Review integrity | P2 | S | ★ | Verified-purchase badge; one review per user per product. |
-| 27 | Stretch | P3 | — | ★ | AI product-description generator for admins; real i18n (next-intl); locale selector visible on mobile. |
+| [~] 23 | Deploy live | P1 | M | ★★★ | Deploy + incident runbooks and a signed smoke script are shipped; the public demo URL (Vercel + Neon + Upstash + verified Resend + Razorpay webhook) is still pending. |
+| [x] 24 | Admin analytics | P2 | M | ★★ | Revenue / paid orders / AOV / top products / low stock with Recharts over real data; cancelled and refunded orders excluded, UTC day buckets. |
+| [~] 25 | Invoice PDF | P2 | M | ★★ | Printable, owner-gated GST invoice shipped (browser print-to-PDF); server-generated PDF file is deferred. |
+| [x] 26 | Review integrity | P2 | S | ★ | Verified-purchase badge; one review per user per product enforced by a unique index. |
+| [ ] 27 | Stretch | P3 | — | ★ | AI product-description generator for admins; real i18n (next-intl); locale selector visible on mobile. |
 
 ---
 

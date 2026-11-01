@@ -7,7 +7,7 @@ paintings, Channapatna toys, Jaipur blue pottery, pashmina weaves, Bidriware
 jewelry. Built as a single Next.js (App Router) application with Prisma,
 Razorpay payments, and a hardened, tamper-proof checkout.
 
-Live: [vendary.vercel.app](https://vendary.vercel.app) · [Roadmap](docs/ROADMAP.md) · [Design specs](docs/superpowers/specs/)
+Live demo: _placeholder — add the deployment URL after following the [deploy runbook](docs/runbooks/deploy.md)._ · [Roadmap](docs/ROADMAP.md) · [Design specs](docs/superpowers/specs/)
 
 ## Highlights
 
@@ -23,10 +23,13 @@ Live: [vendary.vercel.app](https://vendary.vercel.app) · [Roadmap](docs/ROADMAP
 - **Honest money.** Cart, checkout summary, and the charge agree on
   subtotal + 8% GST, persisted on the order. INR formatting everywhere, with
   a display-only currency selector for international visitors.
-- **Tested money paths.** 30+ Vitest units over totals, schemas, signature
-  verification and the webhook handler, plus Playwright e2e for the full
-  browse → cart → checkout → order loop (paid flow included, mocked
-  checkout.js).
+- **Relevant discovery.** Trigram-ranked catalog search with an ILIKE fallback,
+  co-purchase "Customers also bought" recommendations with a featured cold-start
+  fallback, wishlists and coupons.
+- **Tested money paths.** 800+ Vitest units over totals, schemas, signature
+  verification, coupons, refunds, analytics and the webhook handler, plus
+  Playwright e2e for the full browse → cart → checkout → order loop (paid flow
+  included, mocked checkout.js).
 - **Auth that respects the basics.** Email verification, timing-safe login
   with dummy-hash equalization, email de-enumeration, per-IP rate limiting on
   auth endpoints, security headers.
@@ -115,15 +118,35 @@ Redis URL. In production, register the webhook endpoint
 - **CI (GitHub Actions)** — Prisma generate → typecheck → unit tests → lint →
   build on every push/PR.
 
+## Live demo
+
+_Placeholder — no public deployment is committed to this repository._ The
+managed deployment path is Vercel + Neon Postgres + Upstash Redis + a verified
+Resend domain + a Razorpay webhook; follow
+[docs/runbooks/deploy.md](docs/runbooks/deploy.md), then verify the deployment
+with `scripts/smoke.sh --base-url https://<your-domain>`. Replace this section
+with the URL (and screenshots) once it is live.
+
 ## Deployment
 
-Docker: `docker build -t vendary .` — standalone Next output, non-root user,
-schema + Prisma bundled so the container can run `migrate deploy`, and a
-`/api/status` HEALTHCHECK. On Vercel, add the env vars from
-[.env.example](.env.example) and deploy.
+- **Managed (Vercel/Neon/Upstash):** [deploy runbook](docs/runbooks/deploy.md) —
+  environment matrix, migration order (`prisma migrate deploy` before deploy),
+  smoke checklist and rollback (previous deployment, forward-only database).
+- **Operations:** [incident runbook](docs/runbooks/incident.md) — payment
+  captured/no order, refund failures, stock mismatches, Redis down, webhook
+  signature failures and the cleanup cron.
+- **Smoke test:** `scripts/smoke.sh --base-url https://<your-domain>` checks
+  `/`, `/products` and `/api/status`; a signed webhook probe runs only when
+  `RAZORPAY_WEBHOOK_SECRET` is supplied. It exits non-zero on failure.
+- **Docker:** `docker build -t vendary .` — standalone Next output, non-root
+  user, schema + Prisma bundled so the container can run `migrate deploy`, and a
+  `/api/status` HEALTHCHECK. On Vercel, add the env vars from
+  [.env.example](.env.example) and deploy.
 
 ## Status
 
-Under active development — password reset, saved addresses, order emails,
-catalog pagination and admin analytics are next. See the
-[roadmap](docs/ROADMAP.md) for the full prioritized backlog.
+Phases 0–4 are shipped: server-authoritative money and stock, refunds, order
+lifecycle emails, accounts and addresses, admin analytics, coupons, wishlist and
+trigram search. The public demo is the remaining step — see the
+[deploy runbook](docs/runbooks/deploy.md) and the
+[roadmap](docs/ROADMAP.md) for what is genuinely deferred.
