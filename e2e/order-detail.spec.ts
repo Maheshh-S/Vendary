@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 
 import { DEMO_ADMIN, login } from "./helpers";
-import { serverEnv } from "./env";
+import { isLocalOrCiDatabase, serverEnv } from "./env";
 
 /**
  * Task 1.3 — customer order detail. Fixtures are written directly through
@@ -12,6 +12,9 @@ import { serverEnv } from "./env";
  */
 
 const connectionString = serverEnv("DATABASE_URL");
+// Fixtures write to the same database the app uses: never touch anything that
+// is not a disposable local/CI database.
+const fixtureDbSafe = isLocalOrCiDatabase(connectionString);
 const prisma = new PrismaClient({
   datasources: {
     db: {
@@ -28,7 +31,10 @@ const addressIds: string[] = [];
 
 test.describe("customer order detail", () => {
   test.beforeAll(async () => {
-    test.skip(!connectionString, "DATABASE_URL is required for order-detail fixtures");
+    test.skip(
+      !connectionString || !fixtureDbSafe,
+      "Prisma fixtures only run against a local or CI database"
+    );
 
     const admin = await prisma.user.findUnique({ where: { email: DEMO_ADMIN.email } });
     test.skip(!admin, "Seeded demo admin is missing (run `bunx prisma db seed`)");
@@ -127,7 +133,7 @@ test.describe("customer order detail", () => {
   });
 
   test.afterAll(async () => {
-    if (!connectionString) return;
+    if (!connectionString || !fixtureDbSafe) return;
 
     await prisma.order.deleteMany({
       where: { id: { in: [ownOrderId, foreignOrderId].filter(Boolean) } },

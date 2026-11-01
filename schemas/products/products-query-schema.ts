@@ -5,6 +5,12 @@ export const PRODUCT_SORTS = ["newest", "price_asc", "price_desc", "name_asc"] a
 export type ProductSort = (typeof PRODUCT_SORTS)[number]
 
 /**
+ * Defensive upper bound for the URL page number: `skip` grows linearly, so an
+ * arbitrarily large page must never reach Prisma.
+ */
+export const MAX_PRODUCTS_PAGE = 10_000
+
+/**
  * Price bounds arrive as paise (integer) from the action boundary. An empty
  * URL parameter (`?min=`) means "no filter", not zero, so it is normalized to
  * undefined before coercion.
@@ -30,6 +36,7 @@ export const productsQuerySchema = z
       .number()
       .int("Page must be a whole number")
       .min(1, "Page must be at least 1")
+      .max(MAX_PRODUCTS_PAGE, `Page cannot exceed ${MAX_PRODUCTS_PAGE}`)
       .default(1),
     pageSize: z.coerce
       .number()

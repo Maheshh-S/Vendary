@@ -10,6 +10,7 @@ import {
 import ProductCard from "@/modules/products/components/product-card";
 import CatalogFilters from "@/modules/products/components/catalog-filters";
 import {
+  MAX_PRODUCTS_PAGE,
   PRODUCT_SORTS,
   type ProductSort,
 } from "@/schemas/products/products-query-schema";
@@ -39,7 +40,9 @@ const firstValue = (value: string | string[] | undefined): string | undefined =>
 /** Invalid URL values fall back to defaults instead of failing the page. */
 const parsePage = (value: string | undefined): number => {
   const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed >= 1 ? parsed : 1;
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= MAX_PRODUCTS_PAGE
+    ? parsed
+    : 1;
 };
 
 const parseCategory = (value: string | undefined): string | undefined => {
@@ -150,15 +153,15 @@ export default async function ProductsPage({ searchParams }: Props) {
     );
   }
 
-  const { items, total, totalPages } = result.data;
+  const { items, total, totalPages, page: currentPage, pageSize } = result.data;
   const filters: CatalogFiltersState = {
     category,
     sort,
     min: minPricePaise,
     max: maxPricePaise,
   };
-  const start = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const end = Math.min(page * PAGE_SIZE, total);
+  const start = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const end = Math.min(currentPage * pageSize, total);
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 lg:max-w-7xl">
@@ -199,17 +202,17 @@ export default async function ProductsPage({ searchParams }: Props) {
       {totalPages > 1 && (
         <Pagination className="mt-10">
           <PaginationPrevious
-            href={page > 1 ? productsHref(page - 1, filters) : null}
+            href={currentPage > 1 ? productsHref(currentPage - 1, filters) : null}
           />
           <PaginationList>
-            {pageWindow(page, totalPages).map((item, index) =>
+            {pageWindow(currentPage, totalPages).map((item, index) =>
               item === "gap" ? (
                 <PaginationGap key={`gap-${index}`} />
               ) : (
                 <PaginationPage
                   key={item}
                   href={productsHref(item, filters)}
-                  current={item === page}
+                  current={item === currentPage}
                 >
                   {item}
                 </PaginationPage>
@@ -217,7 +220,7 @@ export default async function ProductsPage({ searchParams }: Props) {
             )}
           </PaginationList>
           <PaginationNext
-            href={page < totalPages ? productsHref(page + 1, filters) : null}
+            href={currentPage < totalPages ? productsHref(currentPage + 1, filters) : null}
           />
         </Pagination>
       )}

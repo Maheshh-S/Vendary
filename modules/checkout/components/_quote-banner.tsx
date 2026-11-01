@@ -11,6 +11,10 @@ type Props = {
   localLines: readonly { productId: string; unitPaise: number }[];
   /** Set when the quote request itself failed (validation/network). */
   errorMessage?: string | null;
+  /** True while the server quote is in flight. */
+  isLoading?: boolean;
+  /** Re-runs the quote request; shown with the error banner. */
+  onRetry?: () => void;
 };
 
 const issueMessage = (line: CartQuoteLine): string | null => {
@@ -31,24 +35,53 @@ const issueMessage = (line: CartQuoteLine): string | null => {
  * Renders nothing when the quote agrees with the local cart and every line is
  * purchasable, so the happy path stays visually quiet.
  */
-export default function QuoteBanner({ quote, localLines, errorMessage }: Props) {
+export default function QuoteBanner({
+  quote,
+  localLines,
+  errorMessage,
+  isLoading = false,
+  onRetry,
+}: Props) {
   if (errorMessage) {
     return (
       <div
         role="status"
-        className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+        className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
       >
-        We couldn&apos;t verify current prices. Please refresh the page before
-        paying.
+        <p>
+          We couldn&apos;t verify current prices. Please retry before paying.
+        </p>
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="rounded-md border border-amber-300 px-3 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-100 dark:hover:bg-amber-900/40"
+          >
+            Retry
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div
+        role="status"
+        className="mb-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
+      >
+        Checking current prices…
       </div>
     );
   }
 
   if (!quote) return null;
 
-  const issues = quote.lines
-    .map(issueMessage)
-    .filter((message): message is string => message !== null);
+  // Key by line, not message: two lines can produce identical copy.
+  const issues = quote.lines.flatMap((line, index) => {
+    const message = issueMessage(line);
+    return message ? [{ key: `${line.productId}-${index}`, message }] : [];
+  });
   const blocking = hasBlockingQuoteIssue(quote);
   const drifted = hasPriceDrift(quote, localLines);
 
@@ -70,8 +103,8 @@ export default function QuoteBanner({ quote, localLines, errorMessage }: Props) 
       )}
       {issues.length > 0 && (
         <ul className="mt-1 list-disc space-y-1 pl-5">
-          {issues.map((message) => (
-            <li key={message}>{message}</li>
+          {issues.map((issue) => (
+            <li key={issue.key}>{issue.message}</li>
           ))}
         </ul>
       )}

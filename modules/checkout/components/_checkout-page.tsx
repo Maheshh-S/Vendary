@@ -5,7 +5,7 @@ import QuoteBanner from './_quote-banner';
 import { PermissionState } from '@/hooks/use-geolocation';
 import { useCartQuote } from '@/hooks/use-cart-quote';
 import { CheckoutSession } from '@/modules/products/types/checkout';
-import { hasBlockingQuoteIssue } from '@/schemas/cart/quote-schema';
+import { hasBlockingQuoteIssue, shouldBlockCheckout } from '@/schemas/cart/quote-schema';
 import toast from 'react-hot-toast';
 
 const useGeolocation = () => {
@@ -53,6 +53,21 @@ const CheckoutPageComponent = ({ checkoutSession }: Props) => {
     }))
   );
   const blockingIssue = hasBlockingQuoteIssue(quoteQuery.quote);
+  // Loading or failed quotes block payment just like an unavailable line.
+  const blocked = shouldBlockCheckout({
+    quote: quoteQuery.quote,
+    isLoading: quoteQuery.isLoading,
+    errorMessage: quoteQuery.errorMessage,
+  });
+  const blockedMessage = quoteQuery.isLoading
+    ? "Confirming current prices and stock with the server…"
+    : quoteQuery.errorMessage
+      ? "We couldn't verify current prices. Retry above before paying."
+      : blockingIssue
+        ? "Some items in your cart are unavailable. Go back to the cart to fix them."
+        : !quoteQuery.quote
+          ? "Waiting for the server price check…"
+          : undefined;
 
   useEffect(() => {
     if (!showBanner) return;
@@ -82,10 +97,18 @@ const CheckoutPageComponent = ({ checkoutSession }: Props) => {
             unitPaise: Math.round(item.price_data.unit_amount),
           }))}
           errorMessage={quoteQuery.errorMessage}
+          isLoading={quoteQuery.isLoading}
+          onRetry={() => {
+            void quoteQuery.refetch();
+          }}
         />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="w-full">
-            <CheckoutForm checkoutSession={checkoutSession} blocked={blockingIssue} />
+            <CheckoutForm
+              checkoutSession={checkoutSession}
+              blocked={blocked}
+              blockedMessage={blockedMessage}
+            />
           </div>
           <div className="w-full">
             <ItemsSummary checkoutSession={checkoutSession} quote={quoteQuery.quote} />

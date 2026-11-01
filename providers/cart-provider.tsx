@@ -5,6 +5,7 @@ import {
   CART_STORAGE_KEY,
   cartTotalPaise,
   clampCartQuantity,
+  mergeCartItem,
   normalizeCartItems,
   type CartItem,
 } from '@/lib/cart';
@@ -74,21 +75,7 @@ const CartProvider = ({ children }: Props) => {
     const [normalized] = normalizeCartItems([item]);
     if (!normalized) return;
 
-    setItems((prevItems) => {
-      const existingItem = prevItems.find((prevItem) => normalized.id === prevItem.id);
-      if (existingItem) {
-        return prevItems.map((prevItem) =>
-          prevItem.id === normalized.id
-            ? {
-                ...prevItem,
-                quantity: clampCartQuantity(prevItem.quantity + normalized.quantity),
-              }
-            : prevItem
-        );
-      } else {
-        return [...prevItems, normalized];
-      }
-    });
+    setItems((prevItems) => mergeCartItem(prevItems, normalized));
     setIsOpen(true);
   }, [setItems, setIsOpen]);
   

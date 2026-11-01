@@ -28,7 +28,7 @@ import { formatPrice } from "@/lib/locales";
 import { useLocale } from "@/providers/locale-provider";
 import { computeOrderTotals, GST_RATE } from "@/lib/money";
 import { MAX_CART_QUANTITY } from "@/lib/cart";
-import { hasBlockingQuoteIssue } from "@/schemas/cart/quote-schema";
+import { hasBlockingQuoteIssue, quoteLineIssueLabel, shouldBlockCheckout } from "@/schemas/cart/quote-schema";
 import QuoteBanner from "@/modules/checkout/components/_quote-banner";
 
 export default function CartPage() {
@@ -43,6 +43,13 @@ export default function CartPage() {
   );
   const quote = quoteQuery.quote;
   const blocking = hasBlockingQuoteIssue(quote);
+  // Loading/errored quotes are blocking too: never open checkout on prices the
+  // server has not confirmed.
+  const checkoutBlocked = shouldBlockCheckout({
+    quote,
+    isLoading: quoteQuery.isLoading,
+    errorMessage: quoteQuery.errorMessage,
+  });
   const quoteByProductId = new Map(
     (quote?.lines ?? []).map((line) => [line.productId, line])
   );
@@ -141,6 +148,10 @@ export default function CartPage() {
                 unitPaise: item.unitPaise,
               }))}
               errorMessage={quoteQuery.errorMessage}
+              isLoading={quoteQuery.isLoading}
+              onRetry={() => {
+                void quoteQuery.refetch();
+              }}
             />
 
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
@@ -181,6 +192,11 @@ export default function CartPage() {
                           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
                             {fmtPaise(unitPaise)} each
                           </p>
+                          {quoteLine?.issue && (
+                            <p className="mt-1 text-xs font-medium text-red-600 dark:text-red-400">
+                              {quoteLineIssueLabel(quoteLine)}
+                            </p>
+                          )}
                         </div>
                         <div className="flex flex-1 items-end justify-between text-sm">
                           <div className="flex items-center space-x-2">
@@ -267,16 +283,25 @@ export default function CartPage() {
                 <Button
                   className="mt-6 w-full py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
                   color="sky"
-                  disabled={blocking}
+                  disabled={checkoutBlocked}
                   onClick={() => setCheckoutConfirm(true)}
                 >
-                  Proceed to Checkout
+                  {quoteQuery.isLoading ? "Checking prices…" : "Proceed to Checkout"}
                 </Button>
-                {blocking && (
+                {quoteQuery.errorMessage ? (
+                  <p className="mt-2 text-center text-xs text-amber-700 dark:text-amber-400">
+                    We couldn&apos;t verify current prices. Retry above before
+                    checking out.
+                  </p>
+                ) : blocking ? (
                   <p className="mt-2 text-center text-xs text-red-600 dark:text-red-400">
                     Fix the items above to continue.
                   </p>
-                )}
+                ) : quoteQuery.isLoading ? (
+                  <p className="mt-2 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                    Confirming prices and stock with the server…
+                  </p>
+                ) : null}
 
                 <div className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
                   <p>Payments powered by Razorpay — UPI, cards and netbanking</p>

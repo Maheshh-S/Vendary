@@ -13,6 +13,13 @@ export const CART_STORAGE_KEY = "cart-items";
 /** Mirrors the per-line quantity bound enforced by the server cart quote. */
 export const MAX_CART_QUANTITY = 99;
 
+/**
+ * One distinct-line cap shared by the cart provider, the checkout session
+ * schema and the server cart quote, so the client can never build a cart the
+ * charge path rejects.
+ */
+export const MAX_CART_LINES = 50;
+
 export type CartImage = { src: string };
 
 export type CartItem = {
@@ -106,6 +113,35 @@ export function normalizeCartItems(value: unknown): CartItem[] {
 export function clampCartQuantity(quantity: number): number {
   if (!Number.isFinite(quantity)) return 1;
   return Math.min(MAX_CART_QUANTITY, Math.max(1, Math.floor(quantity)));
+}
+
+/**
+ * Adds a normalized item to the cart, merging duplicate ids and clamping the
+ * quantity. A cart already at `MAX_CART_LINES` rejects a 51st distinct line
+ * (returns the existing list unchanged); quantity updates for an existing
+ * line are always allowed.
+ */
+export function mergeCartItem(
+  items: readonly CartItem[],
+  item: CartItem
+): CartItem[] {
+  const existing = items.find((candidate) => candidate.id === item.id);
+  if (existing) {
+    return items.map((candidate) =>
+      candidate.id === item.id
+        ? {
+            ...candidate,
+            quantity: clampCartQuantity(candidate.quantity + item.quantity),
+          }
+        : candidate
+    );
+  }
+
+  if (items.length >= MAX_CART_LINES) {
+    return [...items];
+  }
+
+  return [...items, item];
 }
 
 /** Sum of every line in paise — the same unit the server quote returns. */

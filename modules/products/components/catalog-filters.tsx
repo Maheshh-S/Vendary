@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,14 @@ export default function CatalogFilters({
   const [sortValue, setSortValue] = useState<ProductSort>(sort);
   const [min, setMin] = useState(minRupees ?? "");
   const [max, setMax] = useState(maxRupees ?? "");
+
+  // Back/forward navigation re-renders this server page with new props; keep
+  // the controlled inputs in sync instead of showing the previous URL's state.
+  useEffect(() => {
+    setSortValue(sort);
+    setMin(minRupees ?? "");
+    setMax(maxRupees ?? "");
+  }, [sort, minRupees, maxRupees]);
 
   const navigate = (next: { sort?: ProductSort; min?: string; max?: string }) => {
     const params = new URLSearchParams();

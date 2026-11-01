@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { MAX_CART_LINES } from "@/lib/cart";
+
 /**
  * Bounds are finite: every field ends up in a database row or a Razorpay
  * request, so unbounded strings are a cheap way to bloat storage and logs.
@@ -12,7 +14,7 @@ export const checkoutLineItemSchema = z.object({
 });
 
 export const checkoutSessionSchema = z.object({
-    line_items: z.array(checkoutLineItemSchema).min(1, "Cart is empty").max(100, "Too many items in cart"),
+    line_items: z.array(checkoutLineItemSchema).min(1, "Cart is empty").max(MAX_CART_LINES, "Too many items in cart"),
 });
 
 export const placeOrderSchema = z.object({

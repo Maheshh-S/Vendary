@@ -42,10 +42,13 @@ declare global {
 export default function CheckoutForm({
   checkoutSession,
   blocked = false,
+  blockedMessage,
 }: {
   checkoutSession: CheckoutSession;
-  /** True when the server quote reports an unavailable/under-stocked line. */
+  /** True while the server quote is loading, errored, or reports an issue. */
   blocked?: boolean;
+  /** Optional explanation rendered under the disabled payment button. */
+  blockedMessage?: string;
 }) {
   const [, setCountryName] = useState<string>('');
   const [stateName, setStateName] = useState<string>('');
@@ -118,7 +121,7 @@ export default function CheckoutForm({
       // Create the Razorpay order and the durable pending order on the server.
       // Prices are deliberately dropped: the charge path re-prices from the DB.
       const chargeSession: CheckoutLineItems = {
-        line_items: checkoutSession.line_items.map(({ productId, quantity }) => ({
+        line_items: (checkoutSession.line_items ?? []).map(({ productId, quantity }) => ({
           productId,
           quantity,
         })),
@@ -182,7 +185,10 @@ export default function CheckoutForm({
 
   function onSubmit(values: PlaceOrderSchema) {
     if (blocked) {
-      toast.error("Please fix the items in your cart before paying.", { id: "checkout-blocked" });
+      toast.error(
+        blockedMessage ?? "Please fix the items in your cart before paying.",
+        { id: "checkout-blocked" }
+      );
       return;
     }
     // Instead of directly placing order, initialize Razorpay payment
@@ -357,7 +363,8 @@ export default function CheckoutForm({
         </Button>
         {blocked && (
           <p className="mt-2 text-center text-xs text-red-600 dark:text-red-400">
-            Some items in your cart are unavailable. Go back to the cart to fix them.
+            {blockedMessage ??
+              "Some items in your cart are unavailable. Go back to the cart to fix them."}
           </p>
         )}
       </form>

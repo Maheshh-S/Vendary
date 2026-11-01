@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MAX_CART_LINES } from "@/lib/cart";
 import {
   checkoutSessionSchema,
   placeOrderSchema,
@@ -58,10 +59,14 @@ describe("checkoutSessionSchema (client cart boundary)", () => {
   it("bounds line count and product id length", () => {
     const line = { productId: "p", quantity: 1 };
     expect(() =>
-      checkoutSessionSchema.parse({ line_items: Array.from({ length: 101 }, () => line) })
+      checkoutSessionSchema.parse({
+        line_items: Array.from({ length: MAX_CART_LINES + 1 }, () => line),
+      })
     ).toThrow();
     expect(() =>
-      checkoutSessionSchema.parse({ line_items: Array.from({ length: 100 }, () => line) })
+      checkoutSessionSchema.parse({
+        line_items: Array.from({ length: MAX_CART_LINES }, () => line),
+      })
     ).not.toThrow();
     expect(() =>
       checkoutSessionSchema.parse({ line_items: [{ productId: "x".repeat(65), quantity: 1 }] })

@@ -6,6 +6,7 @@ import { formatPrice } from '@/lib/locales';
 import { useLocale } from '@/providers/locale-provider';
 import { computeOrderTotals, GST_RATE } from '@/lib/money';
 import { CheckoutSession } from '@/modules/products/types/checkout';
+import { quoteLineIssueLabel } from '@/schemas/cart/quote-schema';
 import type { CartQuote, CartQuoteIssue } from '@/schemas/cart/quote-schema';
 import React from 'react';
 
@@ -25,20 +26,8 @@ type SummaryLine = {
   issue: CartQuoteIssue;
 };
 
-const issueLabel = (line: SummaryLine): string | null => {
-  switch (line.issue) {
-    case "MISSING":
-      return "No longer available";
-    case "OUT_OF_STOCK":
-      return "Out of stock";
-    case "INSUFFICIENT_STOCK":
-      return line.stockQty === null
-        ? "Not enough stock"
-        : `Only ${line.stockQty} left`;
-    default:
-      return null;
-  }
-};
+const issueLabel = (line: SummaryLine): string | null =>
+  quoteLineIssueLabel({ issue: line.issue, stockQty: line.stockQty ?? 0 });
 
 const ItemsSummary = ({ checkoutSession, quote }: Props) => {
   const { locale } = useLocale();

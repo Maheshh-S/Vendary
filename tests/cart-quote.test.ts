@@ -26,6 +26,8 @@ import type { ActionErrorCode, ActionResult } from "@/lib/action-result";
 import {
   hasBlockingQuoteIssue,
   hasPriceDrift,
+  quoteLineIssueLabel,
+  shouldBlockCheckout,
   type CartQuote,
 } from "@/schemas/cart/quote-schema";
 
@@ -262,5 +264,43 @@ describe("quote helpers", () => {
       })
     ).toBe(false);
     expect(hasBlockingQuoteIssue(null)).toBe(false);
+  });
+
+  it("blocks checkout while the quote is loading, errored or missing", () => {
+    const cleanQuote: CartQuote = { ...quote, lines: [quote.lines[0]] };
+
+    expect(shouldBlockCheckout({ quote: null, isLoading: true })).toBe(true);
+    expect(
+      shouldBlockCheckout({ quote: null, isLoading: false, errorMessage: "quote failed" })
+    ).toBe(true);
+    expect(shouldBlockCheckout({ quote: null, isLoading: false })).toBe(true);
+    expect(shouldBlockCheckout({ quote, isLoading: false })).toBe(true);
+    expect(
+      shouldBlockCheckout({ quote: cleanQuote, isLoading: true })
+    ).toBe(true);
+    expect(
+      shouldBlockCheckout({
+        quote: cleanQuote,
+        isLoading: false,
+        errorMessage: "quote failed",
+      })
+    ).toBe(true);
+    expect(shouldBlockCheckout({ quote: cleanQuote, isLoading: false })).toBe(false);
+  });
+
+  it("labels per-line issues for the cart and checkout summaries", () => {
+    expect(quoteLineIssueLabel({ issue: "MISSING", stockQty: 0 })).toBe(
+      "No longer available"
+    );
+    expect(quoteLineIssueLabel({ issue: "OUT_OF_STOCK", stockQty: 0 })).toBe(
+      "Out of stock"
+    );
+    expect(quoteLineIssueLabel({ issue: "INSUFFICIENT_STOCK", stockQty: 3 })).toBe(
+      "Only 3 left"
+    );
+    expect(quoteLineIssueLabel({ issue: "INSUFFICIENT_STOCK", stockQty: 0 })).toBe(
+      "Not enough stock"
+    );
+    expect(quoteLineIssueLabel({ issue: null, stockQty: 5 })).toBeNull();
   });
 });

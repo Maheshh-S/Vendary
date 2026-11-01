@@ -1,10 +1,14 @@
 import { z } from "zod";
 
+import { MAX_CART_LINES } from "@/lib/cart";
 import type { OrderTotals } from "@/lib/money";
 import { checkoutLineItemSchema } from "@/schemas/checkout/place-order-schema";
 
-/** Upper bound mirrors the checkout boundary so quote and charge agree. */
-export const CART_MAX_LINES = 50;
+/**
+ * Upper bound shared with the checkout session schema and the cart provider;
+ * re-exported under the historical name for the quote tests.
+ */
+export const CART_MAX_LINES = MAX_CART_LINES;
 
 /**
  * Server cart-quote input: product ids and quantities only. Prices are always
@@ -53,6 +57,38 @@ export type CartQuote = OrderTotals & {
 export const hasBlockingQuoteIssue = (
   quote: CartQuote | null | undefined
 ): boolean => quote?.lines.some((line) => line.issue !== null) ?? false;
+
+/**
+ * Checkout gate shared by the cart and checkout pages: a missing quote (still
+ * loading, failed, or never fetched) is as blocking as an unavailable line.
+ * Never let the payment button look ready while the server has not confirmed
+ * the cart's current prices and stock.
+ */
+export const shouldBlockCheckout = (state: {
+  quote: CartQuote | null | undefined;
+  isLoading: boolean;
+  errorMessage?: string | null;
+}): boolean =>
+  state.isLoading ||
+  Boolean(state.errorMessage) ||
+  !state.quote ||
+  hasBlockingQuoteIssue(state.quote);
+
+/** Short per-line label for the cart/checkout issue lists. */
+export const quoteLineIssueLabel = (
+  line: Pick<CartQuoteLine, "issue" | "stockQty">
+): string | null => {
+  switch (line.issue) {
+    case "MISSING":
+      return "No longer available";
+    case "OUT_OF_STOCK":
+      return "Out of stock";
+    case "INSUFFICIENT_STOCK":
+      return line.stockQty > 0 ? `Only ${line.stockQty} left` : "Not enough stock";
+    default:
+      return null;
+  }
+};
 
 /**
  * True when at least one authoritative line price differs from what the cart

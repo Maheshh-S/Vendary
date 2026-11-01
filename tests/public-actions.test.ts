@@ -355,6 +355,7 @@ describe("GetProducts", () => {
   it.each([
     { label: "zero page", input: { page: 0 } },
     { label: "fractional page", input: { page: 1.5 } },
+    { label: "oversized page", input: { page: 10_001 } },
     { label: "oversized pageSize", input: { pageSize: 49 } },
     { label: "zero pageSize", input: { pageSize: 0 } },
     { label: "unknown sort", input: { sort: "cheapest" } },

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MAX_CART_LINES,
   MAX_CART_QUANTITY,
   cartTotalPaise,
   clampCartQuantity,
+  mergeCartItem,
   normalizeCartItems,
   type CartItem,
 } from "@/lib/cart";
@@ -121,5 +123,44 @@ describe("clampCartQuantity", () => {
     [Number.NaN, 1],
   ])("clamps %j to %i", (input, expected) => {
     expect(clampCartQuantity(input)).toBe(expected);
+  });
+});
+
+const cartItem = (id: string, quantity = 1): CartItem => ({
+  id,
+  name: id,
+  unitPaise: 100,
+  quantity,
+  images: [],
+});
+
+describe("mergeCartItem (distinct-line cap)", () => {
+  it("merges a duplicate id and clamps the quantity", () => {
+    const items = [cartItem("a", 98), cartItem("b")];
+
+    expect(mergeCartItem(items, cartItem("a", 5))).toEqual([
+      cartItem("a", MAX_CART_QUANTITY),
+      cartItem("b"),
+    ]);
+  });
+
+  it("appends a new line below the cap", () => {
+    const items = [cartItem("a")];
+
+    expect(mergeCartItem(items, cartItem("b"))).toEqual([
+      cartItem("a"),
+      cartItem("b"),
+    ]);
+  });
+
+  it("rejects the 51st distinct line but still allows quantity updates", () => {
+    const full = Array.from({ length: MAX_CART_LINES }, (_, index) =>
+      cartItem(`p_${index}`)
+    );
+
+    expect(mergeCartItem(full, cartItem("overflow"))).toEqual(full);
+    expect(mergeCartItem(full, cartItem("overflow"))).toHaveLength(MAX_CART_LINES);
+    // An existing line can still be updated at the cap.
+    expect(mergeCartItem(full, cartItem("p_0", 2))[0].quantity).toBe(3);
   });
 });
