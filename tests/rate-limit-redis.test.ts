@@ -10,6 +10,12 @@ const redisMock = vi.hoisted(() => ({
   pexpire: vi.fn(async (): Promise<number> => 1),
 }));
 
+/**
+ * vitest v5 infers a zero-argument mock's `calls` as `[]`; the limiter always
+ * passes a string key, so this view restores the tuple the assertions read.
+ */
+const incrCalls = (): string[][] => redisMock.incr.mock.calls as unknown as string[][];
+
 vi.mock("@/lib/redis", () => ({
   isRedisEnabled: true,
   redis: {
@@ -123,8 +129,8 @@ describe("checkRateLimit (redis)", () => {
     await rateLimit.checkRateLimit(opts);
 
     // Same window: the same key is incremented twice.
-    expect(redisMock.incr.mock.calls[0][0]).toBe(expectedKey("login", "203.0.113.13"));
-    expect(redisMock.incr.mock.calls[1][0]).toBe(expectedKey("login", "203.0.113.13"));
+    expect(incrCalls()[0][0]).toBe(expectedKey("login", "203.0.113.13"));
+    expect(incrCalls()[1][0]).toBe(expectedKey("login", "203.0.113.13"));
 
     vi.advanceTimersByTime(30_000);
     await rateLimit.checkRateLimit(opts);
@@ -134,10 +140,10 @@ describe("checkRateLimit (redis)", () => {
       windowMs: 15 * 60_000,
     });
 
-    const nextWindowKey = redisMock.incr.mock.calls[2][0];
-    const otherBucketKey = redisMock.incr.mock.calls[3][0];
+    const nextWindowKey = incrCalls()[2][0];
+    const otherBucketKey = incrCalls()[3][0];
     expect(nextWindowKey).toBe(expectedKey("login", "203.0.113.13"));
-    expect(nextWindowKey).not.toBe(redisMock.incr.mock.calls[0][0]);
+    expect(nextWindowKey).not.toBe(incrCalls()[0][0]);
     expect(otherBucketKey).toBe(expectedKey("register", "203.0.113.13", 15 * 60_000));
   });
 
